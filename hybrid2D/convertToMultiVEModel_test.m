@@ -15,6 +15,9 @@ function [model_ve, model_coarse] = convertToMultiVEModel_test(model, varargin)
 %   sealingFaces - List of sealing faces impermeable to flow. These divide
 %                  VE regions. If your model has multiple layers you really
 %                  should specify this to get good results.
+%   
+%   sealingCells - List of sealing cells, the (almost) impermeable layer
+%                  delimited by sealing faces.
 %
 %   multiplier   - Weighting applied to sealing faces (default: zero)
 %
@@ -67,7 +70,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     else
         isFine = [];
     end
-    opt = struct('sealingFaces', [], 'multiplier', 0, 'sumTrans', true, 'transThreshold', 0);
+    opt = struct('sealingFaces', [], 'sealingCells', [], 'multiplier', 0, 'sumTrans', true, 'transThreshold', 0);
     opt = merge_options(opt, varargin{:});
 
     G = model.G;
@@ -115,10 +118,10 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     disp(min(model_coarse.operators.T_all))
     % Grab rock from coarse model
     rock_c = model_coarse.rock;
-    
+     
     % Copy operators over and create a new VE model
     if isa(model, 'TwoPhaseWaterGasModel')
-        model_ve = WaterGasMultiVEModel(CG, rock_c, fluid);
+        model_ve = WaterGasMultiVEModel_test(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, 'sealingCells', opt.sealingCells);
     elseif isa(model, 'OverallCompositionCompositionalModel')
         model_ve = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'NaturalVariablesCompositionalModel')

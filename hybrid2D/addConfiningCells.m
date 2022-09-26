@@ -58,14 +58,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                     & all(kk(N) <= zk(ii(N), delta_z/2), 2);
                 
         N1 = N(:,1);
-        N2 = N(:,2);
-        n_idx = ii(N1) ~= min(ii(N1)) & ii(N2) ~= min(ii(N2));                
-        n1 = N1(n_idx);
-        n2 = N2(n_idx);
-        
-        kkk = kk;
-        kkk(N1(~n_idx)) = kkk(N2(~n_idx));
-        %n12 = ismember(N1, n1) & ismember(N2, n2);
+        N2 = N(:,2);       
+                
         mask = mask & kk(N1) ~= kk(N2); % omit faces in horizontal direction
         
     elseif strcmp(opt.type, 'horizontal')

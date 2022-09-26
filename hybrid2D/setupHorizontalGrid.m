@@ -35,9 +35,9 @@ lx = gridSizes(1); ly = gridSizes(2); lz = gridSizes(3);
 % perm = perm.*200*milli*darcy;
 perm = repmat(100*milli*darcy, G.cells.num, 1);
 
-x_range = [0, lx]; % cover entire domain
+x_range = [0, lx/2]; % cover entire domain
 setZeroTrans = zeros(G.faces.num, 1);
-sealingCellsPerm = 0.01*milli*darcy;
+sealingCellsPerm = 0.1*milli*darcy;
 
 if faceConstraint    
     k_range = [fix(nz/2), fix(nz/2+1)]; % single cell  
@@ -70,7 +70,7 @@ fluid = initSimpleADIFluid('phases', 'WG', ...
                            'mu', [8e-4 3e-5]*Pascal*second,...
                            'rho', [1100 700].* kilogram/meter^3, ... % simulate supercritical CO2
                            'n', [2,2], ...
-                           'smin', [0.15, 0.2], ...
+                           'smin', [0, 0], ...
                            'pRef', 100*barsa);
 
 tot_time = 1000*year;
@@ -110,8 +110,10 @@ if ~isempty(bc)
 end
    
 nsteps_after_inj = 150;
-dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/100, 10);
-dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
+dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/200, 10);
+dt_after_inj = rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/nsteps_after_inj, 8);
+%dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
+dt = [dt; dt_after_inj];
 
 times = cumsum(dt)/year();
 n_steps = numel(dt);

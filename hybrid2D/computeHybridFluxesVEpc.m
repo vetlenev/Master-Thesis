@@ -119,8 +119,7 @@ function [pW, sG, h, H, rhow, rhog, muW, muG, isFine] = getTransitionValuesVE_co
                                 pW(c), g, rhow(c), rhog(c), model, c);
 end
 
-function [pW, sG, h, H, rhow, rhog, muW, muG, isFine] = getTransitionValuesVE_fine(model, pW, h_global, index, subs, rhoW, rhoG, muW, muG)    
-    all_c = model.G.cells.num;
+function [pW, sG, h, H, rhow, rhog, muW, muG, isFine] = getTransitionValuesVE_fine(model, pW, h_global, index, subs, rhoW, rhoG, muW, muG)      
     c = model.operators.N(subs, index);
     % Initialize variables for full domain
 %     t = UtilFunctions.initNanADI(h_global); T = UtilFunctions.initNanADI(h_global);

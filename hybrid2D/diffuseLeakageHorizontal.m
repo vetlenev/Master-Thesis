@@ -11,7 +11,7 @@ rootdir = strrep(ROOTDIR, '\', '/');
 data_dir = strcat(rootdir, '../master_thesis/hybrid2D/data');
 mkdir(data_dir);
 
-my_seed = 9967;
+my_seed = 5577;
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
@@ -21,17 +21,18 @@ rng(seed)
 useFaceConstraint = false;
 
 if useFaceConstraint
-    plot_dir = strcat(rootdir, '../master_thesis/hybrid2D/figs/face_constraint_pc/');   
+    plot_dir = strcat(rootdir, '../Master-Thesis/hybrid2D/figs/face_constraint_pc/');   
 else
-    plot_dir = strcat(rootdir, '../master_thesis/hybrid2D/figs/cell_constraint_pc/');
+    plot_dir = strcat(rootdir, '../Master-Thesis/hybrid2D/figs/cell_constraint_pc/');
 end
 mkdir(plot_dir);
 
 nx = 200; ny = 1; nz = 50;
 lx = 800; ly = 1; lz = 250;
 trans_mult = useFaceConstraint*1e-4 + ~useFaceConstraint; % 1e-5
-p_e = 2.5*barsa; 
-p_cap = 10*barsa;
+pe_sealing = 1*barsa; 
+pe_rest = 0.05*barsa;
+p_cap = 5*barsa;
 
 %% Setup original fine-scale case
 % The setupHorizontalGrid function generates the fine-scale grid and
@@ -52,7 +53,7 @@ snr = model_fine.fluid.krPts.g(1); % residual CO2 sat
 dummy_s = linspace(0, 1, 1000)';
 
 sealingCellsFine = model_fine.G.cells.indexMap(sealingCells);
-model_fine.fluid.pcWG = @(s) Capillary.runStandardPc(s, dummy_s, swr, snr, p_e, p_cap, ...
+model_fine.fluid.pcWG = @(s) Capillary.runStandardPc(s, dummy_s, swr, snr, pe_sealing, pe_rest, p_cap, ...
                                             sealingCellsFine, model_fine.G);
 
 G = model_fine.G;
@@ -94,7 +95,7 @@ ylabel('Depth [m]');
 title('Permeability field')
 
 %% Nonlinear solver
-nls = NonLinearSolver('maxIterations', 50);
+nls = NonLinearSolver('maxIterations', 70);
 
 %% Pack and simulate problem
 problem = packSimulationProblem(state0, model_fine, schedule, ...
@@ -122,14 +123,14 @@ states_ve_fs = convertMultiVEStates(model_ve, states_ve); % retrieve fine-scale 
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
 [model_hybrid, model_coarse] = convertToMultiVEModel_test(model, fineCells, ...
                                             'sealingFaces', find(facesZeroTrans), ... % same as find(model.operators.T_all == 0)
+                                            'sealingCells', sealingCells, ...
                                             'multiplier', trans_mult, ...
                                             'sumTrans', true);
                                         
-sealingCellsHybrid = model_hybrid.G.partition(sealingCells);
+%sealingCellsHybrid = model_hybrid.G.partition(sealingCells);
+sealingCellsHybrid = model_hybrid.G.sealingCells;
 
-dummy_s = linspace(0,1,model_hybrid.G.cells.num)';
-model_hybrid.fluid.pcWG = @(s, nn_fine) Capillary.runHybridPc(s, dummy_s, swr, snr, p_e, p_cap, ...
-                                                sealingCellsHybrid, model_hybrid.G, nn_fine);                                      
+model_hybrid.fluid.pcWG = @(s, n_sealing, isVE) Capillary.runHybridPc(s, swr, snr, pe_sealing, pe_rest, p_cap, n_sealing, isVE);                                      
                                         
 schedule_hybrid = upscaleSchedule(model_hybrid, schedule);
 state0_hybrid = upscaleState(model_hybrid, model, state0);
@@ -168,6 +169,20 @@ xlabel('Lateral position [m]');
 ylabel('Depth [m]');
 title('Partition of hybrid VE model')
 
+figure(5)
+vtc = model_hybrid.operators.connections.veTransitionHorizontalConn;
+vtc_c1 = model_hybrid.operators.N(vtc, 1);
+vtc_c2 = model_hybrid.operators.N(vtc, 2);
+plotGrid(model_hybrid.G, 'edgealpha', 0.2, 'facecolor', 'none')
+all_coarse_cells = zeros(model_hybrid.G.cells.num, 1);
+all_coarse_cells(vtc_c1) = 1;
+all_coarse_cells(vtc_c2) = 1;
+plotCellData(model_hybrid.G, all_coarse_cells)
+view(0, 0)
+axis equal tight
+daspect([1, 1, 0.5])
+title('VE to Fine transition regions')
+
 %% Simulate Hybrid model
 nls.useRelaxation = true;
 
@@ -183,7 +198,7 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 states_hybrid_fs = convertMultiVEStates(model_hybrid, states_hybrid);
 
 %% Separate simulateSchedule
-[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid);
+%[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid);
 
 %% Plot CO2 saturation for each model
 fafa = find(facesZeroTrans);

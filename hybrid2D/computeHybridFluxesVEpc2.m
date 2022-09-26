@@ -26,9 +26,11 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     
     H = G.cells.height;    
     h = H.*sG;
-    isFine = G.cells.discretization  == 1;    
+    isFine = G.cells.discretization == 1; 
+    all_coarse_cells = (1:G.cells.num)';
     
-    [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, isFine);
+    %[pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, isFine);
+    [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, all_coarse_cells);
     if isa(model, 'ThreePhaseCompositionalModel')
         sW = 1-sG;
         rhoWf = op.faceAvg(rhoW.*sW)./max(op.faceAvg(sW), 1e-8);
@@ -44,12 +46,10 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     vIc = op.connections.veInternalConn;
     n1 = op.N(vIc, 1);
     n2 = op.N(vIc, 2);
-    
-    
+     
     [gdz_g, gdz_w] = deal(gdz);
     gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
-    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));
-    
+    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
     
     dpG   = op.Grad(pG) - rhoGf .* gdz_g;
     upcg  = (value(dpG)<=0);
@@ -61,7 +61,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     % Treat transition between different discretizations
     transition_ve = model.operators.connections.veTransitionHorizontalConn & ~model.operators.connections.veToFineConn;
-
+     
     if any(transition_ve)
         [vW(transition_ve), vG(transition_ve),...
          upcw(transition_ve), upcg(transition_ve)] = computeTransitionFluxVE(model, pW, h, rhoW, rhoG, muW, muG, transition_ve, true);
@@ -80,12 +80,11 @@ end
 
 function [pW, sG, h, H, rhow, rhog, muw, mug, isFine] = getTransitionValuesVE_coarse(model, pW, h_global, index, subs, rhoW, rhoG, muW, muG)    
     c = model.operators.N(subs, index);
-    t = model.G.cells.topDepth(c);
     
     isFine = model.G.cells.discretization(c) == 1;
 
+    t = model.G.cells.topDepth(c);
     T = model.operators.connections.faceTopDepth(subs, index);
-
     b = model.G.cells.bottomDepth(c);
     B = model.operators.connections.faceBottomDepth(subs, index);
 
@@ -172,7 +171,7 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, rhoW, rhoG
 
         [pW_l, sG_l, h_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l] = getTransitionValuesVE_coarse(model, pW, h, 1, vtc, rhoW, rhoG, muW, muG);
         [pW_r, sG_r, h_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r] = getTransitionValuesVE_coarse(model, pW, h, 2, vtc, rhoW, rhoG, muW, muG);
-
+      
         isFine_l = false;
         isFine_r = false;
         gdz_g = g*grad(t1, t2);
@@ -190,11 +189,11 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, rhoW, rhoG
         gdz_w = gdz_g;
     end
     
-    nn = model.operators.N(vtc, :);   
-    nn_fine = model.G.cells.discretization(nn) == 1;  
+    nn = model.operators.N(vtc, :);
+    n1 = nn(:,1); n2 = nn(:,2);     
 
-    [pW_l, pG_l, mobW_l, mobG_l] = evaluatePropertiesVE(model, pW_l, sG_l, h_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l, isFine_l, nn(:,1));
-    [pW_r, pG_r, mobW_r, mobG_r] = evaluatePropertiesVE(model, pW_r, sG_r, h_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r, isFine_r, nn(:,2));    
+    [pW_l, pG_l, mobW_l, mobG_l] = evaluatePropertiesVE(model, pW_l, sG_l, h_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l, isFine_l, n1, vtc);
+    [pW_r, pG_r, mobW_r, mobG_r] = evaluatePropertiesVE(model, pW_r, sG_r, h_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r, isFine_r, n2, vtc);    
 
 
     dpG   = grad(pG_l, pG_r) - rhoGf .* gdz_g;
@@ -208,17 +207,61 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, rhoW, rhoG
 end
 
 
-function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, nn_fine)
+function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, n_cells, varargin)
+    % INPUTS:
+    %   model: model of type WaterGasMultiVEModel
+    %   pW: water pressure
+    %   sG: gas saturation
+    %   h: thickness of gas plume in coarse cell
+    %   H: thickness of coarse cell
+    %   rho[WG]: density for water/gas phase
+    %   mu[WG]: mobility for water/gas phase
+    %   isFine: boolean indicating if block is fine cell or VE cell
+    %   n_cells: coarse cells to evaluate properties for
     g = norm(model.gravity);
     f = model.fluid;
     sW = 1 - sG;
     isVE = ~isFine;
+    % -----
+    n_sealing = ismember(n_cells, model.G.sealingCells);   
+    % -----
     if isfield(f, 'pcWG')        
-        pcWG = f.pcWG(sG, nn_fine);
+        pcWG = f.pcWG(sG, n_sealing, isVE); % should work for both face and cell constraints
     else
         pcWG = 0;
     end
+       
+    % Upscaled pc for VE columns
     pcWG = pcWG + isVE.*(h.*(rhoW - rhoG) - H.*rhoW).*g;
+    
+    if ~isempty(varargin)
+       vtc = varargin{1};
+       %index = varargin{2};       
+       index = 1;
+       t = model.G.cells.topDepth(n_cells);    
+       T = model.operators.connections.faceTopDepth(vtc, index);
+       b = model.G.cells.bottomDepth(n_cells);
+       B = model.operators.connections.faceBottomDepth(vtc, index);       
+    
+        if vtc == (model.operators.connections.veToFineConn | ...
+                    model.operators.connections.veTransitionVerticalConn)
+            % neighbors that are VE cells need to have reconstructed pc, fine
+            % cells remain as they are.
+            % VE cell in transition zone treated as isFine -> reconstruct pc
+            z = (T+B)/2; % midpoint of each virtual fine cell
+            
+%             pcWG = pcWG + (h.*(rhoW - rhoG) - H.*rhoW).*g ...
+%                     - (rhoW - rhoG).*g.*min(z-t, h) ...
+%                     + rhoW.*g.*(b - t).*(z >= t+h);
+        elseif vtc == (model.operators.connections.veTransitionHorizontalConn & ...        
+                        ~model.operators.connections.veToFineConn)
+            % The VE cell that has virtual cells added must have upscaled
+            % capillary pressures defined at top of each virtual cell.
+            % For VE cell with no virtual cell, upscaled capillary pressure
+            % remains unchanged.
+            % This upscaling is done automatically by knowledge of h and H.
+        end      
+    end
     % Gas pressure
     pG = pW + pcWG;
     % Mobility

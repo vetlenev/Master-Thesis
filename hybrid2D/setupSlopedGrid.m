@@ -29,10 +29,10 @@ m = tand(4); % aquifer slope
 
 
 %m = (k_range(2) - k_range(1)) / (i_range(2) - i_range(1));
-G.nodes.coords(:,3) = G.nodes.coords(:,3) + m*G.nodes.coords(:,1) ...
-                        + (nz/10)*sin(4*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
-                        + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
-                                    (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))); % linear slope of aquifer
+% G.nodes.coords(:,3) = G.nodes.coords(:,3) + m*G.nodes.coords(:,1) ...
+%                         + (nz/10)*sin(4*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
+%                         + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
+%                                     (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))); % linear slope of aquifer
 
 G = computeGeometry(G);
 
@@ -44,24 +44,28 @@ G = computeGeometry(G);
 perm = repmat(100*milli*darcy, G.cells.num, 1);
 
 setZeroTrans = zeros(G.faces.num, 1);
-sealingCellsPerm = 0.01*milli*darcy;
+sealingCellsPerm = 0.1*milli*darcy;
 
-k_pos = [nz/6, nz/4, nz/2, 2*nz/3];
-i_range = [0, nx/2; ...
-           3*nx/4, nx; ...
-           nx/3, 2*nx/3; ...
-           0, nx];  
+%k_pos = [nz/6, nz/4, nz/2, 2*nz/3];
+k_pos = [nz/4];
+% i_range = [0, nx/2; ...
+%            3*nx/4, nx; ...
+%            nx/3, 2*nx/3; ...
+%            0, nx];  
+i_range = [3*nx/4, nx]; %...
+            %3*nx/4, nx];
        
 all_sealing_faces = [];
-all_sealing_cells = zeros(G.cells.num, 1);
+%all_sealing_cells = zeros(G.cells.num, 1);
+all_sealing_cells = {};
        
 if faceConstraint
     %k_range = [fix(nz/2), fix(nz/2)+1];
     for i=1:numel(k_pos)
-        k_range = [fix(k_pos(i)), fix(k_pos(i))+1];
+        k_range = [fix(k_pos(i)), fix(k_pos(i))+i]; % +1
         [sealing_faces, sealingCells] = addConfiningLayers(G0, 'type', 'faces', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);                    
         all_sealing_faces = [all_sealing_faces; sealing_faces];
-        all_sealing_cells = all_sealing_cells | sealingCells;
+        all_sealing_cells = all_sealing_cells | sealingCells;       
     end
    
 else % cell constraints
@@ -71,7 +75,8 @@ else % cell constraints
         [sealing_faces, sealingCells] = addConfiningLayers(G0, 'type', 'cells', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);       
         
         all_sealing_faces = [all_sealing_faces; sealing_faces];
-        all_sealing_cells = all_sealing_cells | sealingCells;
+        %all_sealing_cells = all_sealing_cells | sealingCells;
+        all_sealing_cells = cat(2, all_sealing_cells, sealingCells);
         
         % assign low permeability to sealing layer
         nxi = numel(unique(ii(sealingCells)));
@@ -95,9 +100,9 @@ fluid = initSimpleADIFluid('phases', 'WG', ...
                            'rho', [1100 700].* kilogram/meter^3, ... % simulate supercritical CO2
                            'pRef', 100*barsa);
 
-tot_time = 1000*year;
-inj_stop = 0.05;
-pv_rate = 0.2;
+tot_time = 500*year;
+inj_stop = 0.1;
+pv_rate = 0.05;
 
 pv = poreVolume(G, rock);
 inj_rate = pv_rate*sum(pv)/(inj_stop*tot_time); % inject pv_rate of total pore volume over injection time
@@ -137,8 +142,8 @@ if ~isempty(bc)
     nearWell(sum(G.faces.neighbors(bc.face, :), 2)) = true;
 end
    
-nsteps_after_inj = 150;
-dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/100, 10);
+nsteps_after_inj = 300;
+dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/200, 10);
 dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
 
 times = cumsum(dt)/year();
