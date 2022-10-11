@@ -96,27 +96,28 @@ G = computeGeometry(G);
 [x, z] = deal(G.cells.centroids(:,1), G.cells.centroids(:,3));
 
 rock = makeRock(G, perm, 0.3);
-swr = 0.1;
-snr = 0.1;
 % add compressibility ??
 fluid = initSimpleADIFluid('phases', 'WG', ...
                            'mu', [8e-4 3e-5]*Pascal*second,...
                            'rho', [1100 700].* kilogram/meter^3, ... % simulate supercritical CO2
                            'n', [2, 2], ...
-                           'smin', [swr, snr], ...
+                           'smin', [0.1, 0.1], ...
                            'pRef', 100*barsa);
                        
 fluid_primary = initSimpleADIFluid('phases', 'WG', ...
                            'mu', [8e-4 3e-5]*Pascal*second,...
                            'rho', [1100 700].* kilogram/meter^3, ... % simulate supercritical CO2
                            'n', [2, 2], ...
-                           'smin', [swr, 0], ... % NB: no residual gas sat -> it starts from zero
+                           'smin', [0.1, 0], ... % NB: no residual gas sat -> it starts from zero
                            'pRef', 100*barsa);                     
 
-krn_PD =  @(s) fluid_primary.krG(s); % primary drainage
-krn_PI = @(s) fluid.krG(s); % primary imbibition
+swr = fluid.krPts.w(1);
+snr = fluid.krPts.g(1);
+krn_PD =  @(s) f_primary.krO(s); % primary drainage
+krn_PI = @(s) f.krO(s); % primary imbibition
 
-fluid.krG = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
+f_hys.krO = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
+
                        
 tot_time = 500*year;
 inj_stop = 0.1; % 0.1

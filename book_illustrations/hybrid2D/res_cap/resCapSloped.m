@@ -25,9 +25,9 @@ p_cap = 5*pe_sealing;
 useFaceConstraint = false;
 
 if useFaceConstraint
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/face_nopc/');   
+    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/face_nopc_smax/');   
 else
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_nopc/');
+    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_nopc_smax/');
 end
 mkdir(plot_dir);
 

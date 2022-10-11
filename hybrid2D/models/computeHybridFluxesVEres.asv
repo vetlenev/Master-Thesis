@@ -337,7 +337,7 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
             if strcmp(opt.ve_model, 'sharp_interface')
                 % NB: This analytical formula only valid for sharp
                 % interface. For other models it will depend on sG and
-                % require table computations.
+                % require 
                 %pcWG = (opt.p_entry - min((rhoW-rhoG).*g.*(z-h_plume), 0)).*anyCO2;
             end     
             % OR USE CAPILLARY PRESSURE FUNC ON RECONSTRUCTED SAT ??            

@@ -27,7 +27,7 @@ useFaceConstraint = false;
 if useFaceConstraint
     plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/face_nopc/');   
 else
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_nopc/');
+    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_/');
 end
 mkdir(plot_dir);
 
@@ -42,7 +42,8 @@ sealingCells = any(cell2mat(sealingCells), 2);
 wellCells = isFineCells.well;
 fineCells = sealingCells | wellCells;
 
-% Split into two models: only fine model hsas
+% Split into two models: only fine model has transmissibility multiplier
+% applied
 model = models.original; % used as input to VE models
 model_fine = models.fine;
 
