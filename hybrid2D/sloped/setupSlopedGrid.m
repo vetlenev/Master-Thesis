@@ -116,7 +116,7 @@ fluid_primary = initSimpleADIFluid('phases', 'WG', ...
 krn_PD =  @(s) fluid_primary.krG(s); % primary drainage
 krn_PI = @(s) fluid.krG(s); % primary imbibition
 
-fluid.krG = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
+%fluid.krG = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
                        
 tot_time = 500*year;
 inj_stop = 0.1; % 0.1

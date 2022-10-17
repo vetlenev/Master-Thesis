@@ -108,7 +108,7 @@ saveas(fig3, strcat(plot_dir, '/cap_pres'), 'png');
 hold off
 
 %% Nonlinear solver
-nls = NonLinearSolver('maxIterations', 50);
+nls = NonLinearSolver('maxIterations', 70);
 
 %% Pack and simulate problem
 problem = packSimulationProblem(state0, model_fine, schedule, ...
@@ -185,8 +185,9 @@ vtc_c1 = model_hybrid.operators.N(vtc, 1);
 vtc_c2 = model_hybrid.operators.N(vtc, 2);
 plotGrid(model_hybrid.G, 'edgealpha', 0.2, 'facecolor', 'none')
 all_coarse_cells = zeros(model_hybrid.G.cells.num, 1);
-all_coarse_cells(vtc_c1) = 1;
-all_coarse_cells(vtc_c2) = 1;
+%all_coarse_cells(vtc_c1) = 1;
+%all_coarse_cells(vtc_c2) = 1;
+all_coarse_cells(1:33) = 1;
 plotCellData(model_hybrid.G, all_coarse_cells)
 %plotCellData(model_hybrid.G, model_hybrid.G.cells.discretization);
 view(0, 0)
@@ -206,8 +207,9 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 
 [ok, status] = simulatePackedProblem(problem_hybrid);
 
-
 [ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
+
+%% Reconstruct fine states
 states_hybrid_fs = convertMultiVEStates_res(model_hybrid, states_hybrid);
 
 %% Simulate schedule hybrid
@@ -233,15 +235,21 @@ sn_h = sn_h(idx_sort);
 
 %sn_f_net = sn_f;
 diff_fh = zeros(numel(idx_new_vol)-1, 1);
+var_fh = zeros(size(diff_fh));
 for i=1:numel(idx_new_vol)-1
     ii = idx_new_vol(i);
     jj = idx_new_vol(i+1);
     diff_fh(i) = median(abs(sn_h(ii:jj) - sn_f_net(ii:jj)));
+    var_fh(i) = var(abs(sn_h(ii:jj) - sn_f_net(ii:jj)));
 end
 %diff_fh = abs(sn_h - sn_f_net);
 
 figure();
-plot(1:numel(diff_fh), diff_fh)
+% Smallest volumes are fine cells, which obviously gives accurate
+% reconstruction of saturation
+plot(1:numel(diff_fh), diff_fh, 'b', 'DisplayName', 'Median')
+hold on
+plot(1:numel(var_fh), var_fh, '-r', 'DisplayName', 'Variance')
 % SET VOLUME TICKS !
 xlabel('Coarse cells (increasing volume)')
 title('Absolute difference in CO2 saturation for hybrid and fine models')
@@ -268,7 +276,7 @@ for i = 1:20:numel(states)
         f2 = figure(2); clf    
         plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
         plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-        view(0, 0); colormap(cc);
+        view(0, 0); colormap(cc); 
         axis tight off
         title(['Fine-scale capillary pressure, step:', num2str(i)])   
 
@@ -281,7 +289,7 @@ for i = 1:20:numel(states_hybrid)
     plotCellData(model.G, states_hybrid_fs{i}.s(:, 2), 'edgec', 'none');
     plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
     view(0, 0);
-    colormap(cc);
+    colormap(cc); caxis([0, 1]);
     axis tight off
     title(['Hybrid: VE reconstructed saturation, step:', num2str(i)])
     
