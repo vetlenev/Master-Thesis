@@ -95,12 +95,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         % find bounding sealing faces
         sealingCellsIdx = G.cells.indexMap(sealingCells);    
 
-%         top_c2f = gridCellFaces(G, top_neighbors_idx);
-%         bottom_c2f = gridCellFaces(G, bottom_neighbors_idx);
-%         sealing_c2f = gridCellFaces(G, sealingCellsIdx);
-%        
-%         faces = intersect(sealing_c2f, [top_c2f; bottom_c2f]); % faces at boundary between sealing cells and VE cells
-%                 
         faces = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx);
     end
         

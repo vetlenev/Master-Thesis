@@ -1,5 +1,4 @@
-function [sG, snMaxVE_bottom, vG_any] = height2SatConvert(model, h_func, h_max_func, swr, snr, Sn, ...
-                                            snMax, snMaxVE_bottom, vG, vG_any, ii)
+function [sG, h, h_max, c_VE_Not] = height2SatConvert(model, h_func, h_max_func, Sn, snMax, vG, ii)
     % Transformation from from plume and residual depths to coarse
     % saturations. Used for convertion from coarse to fine states.
     % Inputs:
@@ -11,6 +10,11 @@ function [sG, snMaxVE_bottom, vG_any] = height2SatConvert(model, h_func, h_max_f
     %   veBottomNonzeroSn: boolean array indicating cells in vertical
     %                      ve transition zone, where ve is upper part and ve/fine cells lower part.
     %   Sn: Co2 saturation from COARSE grid
+    % Returns:
+    %   sG: fine-scale gas saturation reconstructed from height
+    %   h: global height of plume for fine cells
+    %   h_max: global max height of plume through history
+    %   c_VE_Not: cells satisfying NVE
     CG = model.G;
     op = model.operators;
     isFine = CG.cells.discretization == 1;      
@@ -26,71 +30,51 @@ function [sG, snMaxVE_bottom, vG_any] = height2SatConvert(model, h_func, h_max_f
     BB = CG.parent.cells.bottomDepth;
     H = CG.cells.height(p);
     
+    swr = model.fluid.krPts.w(1);
+    snr = model.fluid.krPts.g(1);
+    
+    [c_VE_Not, c_VE] = getResidualFilledCells(model, Sn, vG); % coarse saturation Sn, not fine saturation sG
+    cNVE = ismember(p, c_VE_Not); % get parent cells
+    
     % --- 3. Standard ---    
     h = h_func(Sn_p, snMax_p, H);
-    h_max = h_max_func(snMax_p, H);
+    h_max = h_max_func(snMax_p, H);    
     
-    [a_M, a_R, sG] = getGasSatFromHeight(TT, tt, BB, bb, h, h_max, swr, snr);
+    [a_M, a_R, sG] = getGasSatFromHeight(TT, tt, BB, bb, h, h_max, swr, snr, cNVE);
     % -------------------
-      
-    % Modify for ve bottom transition
-    veTransition = op.connections.veToFineConn | ...
-                    op.connections.veTransitionVerticalConn & op.T > 0;
-    veInternalConn = op.connections.veInternalConn; 
-      
-    %n = CG.faces.neighbors;
-    n = op.N;
-    cn = op.N(veTransition, :);
-    vG_veTrans = vG(ismember(n, cn, 'rows'));
-    
-    %vG_any = max(vG_veTrans > 0, vG_any); % if any vG goes from zero to non-zero, vG_any updated to 1
-    
-    for idx=1:2 % loop over neighbor set
-        c = cn(:, idx);         
-        isVE_c = ~isFine(c);
-        
-        if any(isVE_c) % reconstruct specifically for ve col transitioning to a lower layer
-            t = CG.cells.topDepth(c);
-            T = op.connections.faceTopDepth(veTransition, idx);
-            b = CG.cells.bottomDepth(c);
-            B = op.connections.faceBottomDepth(veTransition, idx);                                                             
-                                  
-            veBottomConnIdx = (B == b & T ~= t) & (vG_veTrans > 0 & Sn_c < snr); % transition from UPPER ve column to LOWER fine cells, not from LOWER ve col to UPPER fine cells, and plume comes from lower layer.
-            %veBottomConnIdx = (B == b & T ~= t) & (abs(vG_veTrans) > 0 | vG_any); % nonzero flux of co2 from bottom
-            veValid = (B == b & T ~= t) & (vG_veTrans > 0 & Sn_c >= snr);
-            
-            c_veNot = c(veBottomConnIdx);
-            c_ve = v(veValid);
-   
-            c_vic = op.N(veInternalConn, :);
-            c_veNot_bool = ismember(c_vic, c_veNot);
-            c_ve_bool = ismember(c_vic, c_ve);
-            c_VE_Not = c_vic(c_veNot_bool);
-            c_VE = c_vic(c_ve_bool);
-                 
-        end
-    end
-    
-    c_VE_Not = unique(c_VE_Not);
-    
+          
     if ii == 140
        test = 0; 
     end
        
-    if ~isempty(c_VE_Not) % only update reconstructed saturation if co2 originates from bottom of any ve column
-        % --- 2. Fully residual filled (frf) ---
-        c_vic = unique(c_vic); % all unique internal ve cells
-        c_VE_Not = unique(c_VE_Not); % all unique internal ve cells whose bottom is filled with any CO2
-        Sn_vic = Sn(c_vic);
-        Sn_vic(~ismember(c_vic, c_VE_Not)) = 0; % don't include internal VE cells whose plume doesn't originate from below
+    if ~isempty(c_VE_Not)
+        % --- 1. Partly residual filled (prf) ---               
+        partly_res_filled = c_VE_Not; % fill from BOTTOM
         
-        snMaxVE_bottom = max(Sn_vic, snMaxVE_bottom); % max residual part obtained so far
-        snMaxVE_bottom_cve = snMaxVE_bottom(c_VE_Not);
-       
-        frf = snMaxVE_bottom_cve >= snr;
-        fully_res_filled = c_VE_Not(frf); % fill from TOP       
+        p_prf = ismember(p, partly_res_filled); % fine-scale cells that are partly filled     
+               
+        t_p = tt(p_prf); % fine-scale global ve heights        
+        T_p = TT(p_prf); % fine-scale local cell heights        
+        b_p = bb(p_prf);       
+        B_p = BB(p_prf);
+        H = b_p - t_p; % height of ve column partly filled      
         
-        %fully_res_filled = c_VE(Sn(c_VE) >= snr);
+        h_prf = H .* Sn_p(p_prf)./snr; % ratio of column height filled with residual co2 from below        
+        % ---
+        h(p_prf) = 0;
+        h_max(p_prf) = h_prf;
+        % ---
+        % NB: Special treatment of sG!   
+        sG_prf = fillSatFromBelow(t_p, T_p, b_p, B_p, h_prf, snr); % sGmax not needed as input; it is forced to 1
+               
+        sG(p_prf) = sG_prf; % update fine-scale saturation for partly filled cells      
+        % ---------------------------------
+    end
+    
+    if ~isempty(c_VE) % only update reconstructed saturation if co2 originates from bottom of any ve column
+        % --- 2. Fully residual filled (frf) ---                
+        fully_res_filled = c_VE; % fill from TOP       
+        
         p_frf = ismember(p, fully_res_filled);
               
         % T, t, B and b defined for coarse cells
@@ -102,33 +86,17 @@ function [sG, snMaxVE_bottom, vG_any] = height2SatConvert(model, h_func, h_max_f
         
         h_frf = h_func(Sn_p(p_frf), 1-swr, H);
         h_max_frf = h_max_func(1-swr, H); % plume originates from bottom -> enforce snGmax = 1-swr 
+        % ---
+        h(p_frf) = h_frf;
+        h_max(p_frf) = h_max_frf;
+        % ---
 
         [~, ~, sG_frf] = getGasSatFromHeight(T_f, t_f, B_f, b_f, h_frf, ...
                                             h_max_frf, swr, snr);
-
-        % NB: sG defined for parent grid, transform: coarse -> fine          
-        sG(p_frf) = sG_frf;      
-        % --------------------------------          
-    
-        % --- 1. Partly residual filled (prf) ---       
-        prf = snMaxVE_bottom_cve < snr;
-        partly_res_filled = c_VE_Not(prf); % fill from BOTTOM       
-        
-        p_prf = ismember(p, partly_res_filled); % fine-scale cells that are partly filled     
-               
-        t_p = tt(p_prf); % fine-scale global ve heights        
-        T_p = TT(p_prf); % fine-scale local cell heights        
-        b_p = bb(p_prf);       
-        B_p = BB(p_prf);
-        H = b_p - t_p; % height of ve column partly filled      
-        
-        h_prf = H .* Sn_p(p_prf)./snr; % ratio of column height filled with residual co2 from below        
-        % NB: Special treatment of sG!   
-        sG_prf = fillSatFromBelow(t_p, T_p, b_p, B_p, h_prf, snr); % sGmax not needed as input; it is forced to 1
-               
-        sG(p_prf) = sG_prf;       
-        % ---------------------------------
-    end
+     
+        sG(p_frf) = sG_frf; % update fine-scale saturation for fully filled cells     
+        % -------------------------------- 
+    end       
     
 end
 

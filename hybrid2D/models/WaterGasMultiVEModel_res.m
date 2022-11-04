@@ -7,7 +7,7 @@ classdef WaterGasMultiVEModel_res < TwoPhaseWaterGasModel
     methods
         
         function model = WaterGasMultiVEModel_res(G, rock, fluid, varargin)
-            opt = struct('sealingFaces', [], 'sealingCells', []);
+            opt = struct('sealingFaces', [], 'sealingCells', [], 'pe_rest', 0);
             opt = merge_options(opt, varargin{:});
                        
             model = model@TwoPhaseWaterGasModel(G, rock, fluid, nan, nan, varargin{:});                      
@@ -15,6 +15,9 @@ classdef WaterGasMultiVEModel_res < TwoPhaseWaterGasModel
             model.G.parent.sealingCells = opt.sealingCells;           
             %model.G.sealingFaces = model.G.faces.fconn(model.G.faces.connPos(opt.sealingFaces):model.G.faces.connPos(opt.sealingFaces+1)-1);
             model.G.sealingCells = model.G.partition(opt.sealingCells);
+                        
+            model.fluid.hys = ~isempty(regexp(func2str(model.fluid.krG), 'Hysteresis', 'match'));
+            model.fluid.pe_rest = opt.pe_rest;
             
             model = model.setupOperators(); % recompute operators in case assignment to sealing cells did modify some operators 
             

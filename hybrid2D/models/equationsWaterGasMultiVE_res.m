@@ -84,20 +84,34 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if ~isfield(state0, 'vGmax')
         state0.vGmax = zeros(size(model.operators.N, 1), 1); % initially zero fluxes by default
     end
-    
-    %[vW, vG, mobW, mobG, upcw, upcg, c_VE_Not] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGmax);
-    
-                
+    if ~isfield(state0, 'sGnve')
+       state0.sGnve = cell2mat(state0.s(:,2)); 
+    end
+       
     % Get cells partly residual filled and fully residual filled *from below*
-    [c_prf, c_frf, sgMax] = getResidualFilledCells(model, swr, snr, sG, sgMax, state0.vGmax);
+    [c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGmax); % CHANGED FROM sG to sgMax !!
+    %[c_prf, c_frf, c_horz] = getResidualFilledCells_test(model, sG, state0.vGmax, sG0, state0.sGnve);   
+        
+    % NB: Elements of sgMax corresponding to partially residual filled cells
+    % are not updated in the state-object because we manually modify these 
+    % elements of sgMax but not sG. But saturation for all other cells 
+    % (i.e. non-NVE) are updated in the state-object.
+    state.sGnve = sG; % store current saturation
+    
+%     if ~isempty(c_horz) % retrieve saturation from time step when transitioning from NVE to VE %state0.sGnve == 0 && state.sGnve > 0
+%         state.sGnve(c_horz) = state0.sGnve(c_horz);           
+%     end
 
-    %state = model.setProps(state, 'sGmax', sgMax);
+    %state = model.setProps(state, 'sGmax', sgMax);   
     
     [vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
-    
-    %state.vGmax = max(state.flux(:,2), state0.vGmax);
+    %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state.sGnve, c_prf, c_frf, c_horz);
+       
     state.vGmax = max(abs(vG), state0.vGmax);
-    % ---------------------------------------------------
+    if ~isa(sG, 'ADI')
+       stop = 0; 
+    end
+    % ---------------------------------------- -----------
     
     bWvW = op.faceUpstr(upcw, bW).*vW;
     bGvG = op.faceUpstr(upcg, bG).*vG;

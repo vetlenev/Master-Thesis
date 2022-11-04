@@ -28,6 +28,8 @@ function [model_ve, model_coarse] = convertToMultiVEModel_res(model, varargin)
 %
 %   transThreshold - Threshold to consider transmissibilities as "sealing"
 %                    if sealingFaces is defaulted.
+%   
+%   pe_rest - Entry pressure in high-permeable region (where VE columns)
 %
 % RETURNS:
 %   model_ve     - A VE model on the coarse scale
@@ -70,7 +72,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     else
         isFine = [];
     end
-    opt = struct('sealingFaces', [], 'sealingCells', [], 'multiplier', 0, 'sumTrans', true, 'transThreshold', 0);
+    opt = struct('sealingFaces', [], 'sealingCells', [], ...
+                'multiplier', 0, 'sumTrans', true, 'transThreshold', 0, 'pe_rest', 0);
     opt = merge_options(opt, varargin{:});
 
     G = model.G;
@@ -120,8 +123,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     rock_c = model_coarse.rock;
      
     % Copy operators over and create a new VE model
-    if isa(model, 'TwoPhaseWaterGasModel')
-        model_ve = WaterGasMultiVEModel_res(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, 'sealingCells', opt.sealingCells);
+    if isa(model, 'TwoPhaseWaterGasModel') %|| isa(model, 'TwoPhaseWaterGasModelHys')
+        model_ve = WaterGasMultiVEModel_res(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, 'sealingCells', opt.sealingCells, 'pe_rest', opt.pe_rest);
     elseif isa(model, 'OverallCompositionCompositionalModel')
         model_ve = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'NaturalVariablesCompositionalModel')

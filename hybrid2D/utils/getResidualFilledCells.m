@@ -1,4 +1,4 @@
-function [c_VE_Not, c_VE, snMax] = getResidualFilledCells(model, swr, snr, Sn, snMax, vG)
+function [c_VE_Not, c_VE] = getResidualFilledCells(model, Sn, vG)
     % Get VE columns that are filled with CO2 from bottom.
     % Used for correct computation of fluxes in the residual framework.
     %
@@ -20,13 +20,8 @@ function [c_VE_Not, c_VE, snMax] = getResidualFilledCells(model, swr, snr, Sn, s
     %Sn_p = Sn(p);
     %snMax_p = snMax(p);
     
-    tt = CG.cells.topDepth;
-    %TT = CG.parent.cells.topDepth;
-
-    bb = CG.cells.bottomDepth;
-    %BB = CG.parent.cells.bottomDepth;
-    H = CG.cells.height;
-    
+    swr = model.fluid.krPts.w(1);
+    snr = model.fluid.krPts.g(1);
     %[a_M, a_R, sG] = getGasSatFromHeight(TT, tt, BB, bb, h, h_max, swr, snr);
     % ------------------- 
       
@@ -34,7 +29,9 @@ function [c_VE_Not, c_VE, snMax] = getResidualFilledCells(model, swr, snr, Sn, s
     veTransition = op.connections.veToFineConn | ...
                     op.connections.veTransitionVerticalConn & op.T > 0;
     veInternalConn = op.connections.veInternalConn; 
-     
+    
+    c_VE_Not = {};
+    c_VE = {};
     n = op.N; 
     %n = CG.faces.neighbors;
     cn = op.N(veTransition, :);
@@ -61,38 +58,20 @@ function [c_VE_Not, c_VE, snMax] = getResidualFilledCells(model, swr, snr, Sn, s
             c_ve = c(veValid);
             
             c_vic = op.N(veInternalConn, :);            
-            c_veNot_bool = ismember(c_vic, c_veNot);
-            c_VE_Not = c_vic(c_veNot_bool);
-            c_ve_bool = ismember(c_vic, c_ve);
-            c_VE = c_vic(c_ve_bool);
             
-%             for i=1:2
-%                 c_vic_i = c_vic(:,i);
-%                 c_veNot_i = c_veNot_bool(:,i);
-%                 c_ve_i = c_ve_bool(:,i);
-%                 c_VE_Not{i} = c_vic_i(c_veNot_i); % get ve cells whose bottom virtual cell satisfies sG > 1e-4
-%                 c_VE{i} = c_vic_i(c_ve_i);
-%             end                   
+            c_veNot = c_vic(ismember(c_vic, c_veNot));           
+            if ~isempty(c_veNot)
+                c_VE_Not = cat(2, c_VE_Not, c_veNot);
+            end
+            
+            c_ve = c_vic(ismember(c_vic, c_ve));
+            if ~isempty(c_ve)
+                c_VE = cat(2, c_VE, c_ve);                            
+            end
         end
     end
     
-    c_VE_Not = unique(c_VE_Not);
-    c_VE = unique(c_VE);
-    c_vic = unique(c_vic); % all unique internal ve cells
-    Sn_vic = Sn(c_vic);% only update internal ve columns
-    snMax_vic = snMax(c_vic);
-    
-    if ~isempty(c_VE) % once residual plume reaches top, set sgMax to maximum and use standard formulas       
-        snMax(c_VE) = 1-swr; % would otherwise be discontinuous transition from H to snr*H
-    end  
-       
-    if ~isempty(c_VE_Not) % only update reconstructed saturation if co2 originates from bottom of any ve column
-        % --- Partly residual filled (frf) ---        
-        mask_VE_Not = ismember(c_vic, c_VE_Not);       
-        % choose max of current and previous max
-        Sn_vic(mask_VE_Not) = max(Sn_vic(mask_VE_Not), snMax_vic(mask_VE_Not));
-        % update global coarse saturation
-        %sG(c_VE_Not) = Sn_vic(mask_VE_Not);       
-    end                  
+    c_VE_Not = unique(cell2mat(c_VE_Not));
+    c_VE = unique(cell2mat(c_VE));             
        
 end

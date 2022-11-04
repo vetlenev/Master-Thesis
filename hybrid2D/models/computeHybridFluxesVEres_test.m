@@ -1,4 +1,4 @@
-function [vW, vG, mobW, mobG, upcw, upcg, c_VE_Not] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, vG, varargin)
+function [vW, vG, mobW, mobG, upcw, upcg, h_global] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, sgNVE, cellsVENot, cellsVE, cellsNVEHorz, varargin)
 % Internal function - computes interior fluxes for the hybrid VE models
 
 %{
@@ -31,60 +31,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     snr = model.fluid.krPts.g(1);
     isFine = G.cells.discretization == 1;  
     all_coarse_cells = (1:G.cells.num)';       
-    
-    % --- Check if plume in VE columns originate from lower layer ---                 
-    transition_vertical = model.operators.connections.veToFineConn | ...
-                          model.operators.connections.veTransitionVerticalConn & op.T > 0;
-  
-    transition_ve = model.operators.connections.veTransitionHorizontalConn & ~model.operators.connections.veToFineConn;     
-                      
-    c_VE_Not = {};   
-    n = op.N; 
-    %n = CG.faces.neighbors;
-    cn = op.N(transition_vertical, :);
-    vG_veTrans = vG(ismember(n, cn, 'rows'));
-    
-    for idx=1:2 % CONSIDER REMOVING LOOP: veBottomFilled and veTopEmpty will never both occur as it stand now!
-        c = cn(:, idx);        
-        isVE_c = ~isFine(c);
-           
-        if any(isVE_c) % reconstruct specifically for ve col transitioning to a lower layer
-            t = G.cells.topDepth(c);
-            T = op.connections.faceTopDepth(transition_vertical, idx);
-            b = G.cells.bottomDepth(c);
-            B = op.connections.faceBottomDepth(transition_vertical, idx);              
             
-            Sn_c = value(sG(c));         
-            %veBottomFilled = (B == b & T ~= t) & Sn_c > 1e-4; % transition from UPPER ve column to LOWER fine cells, not from LOWER ve col to UPPER fine cells, and plume comes from lower layer.
-            veBottomFilled = (B == b & T ~= t) & (vG_veTrans > 0 & Sn_c < snr); % bottom of col is filled but co2 hasn't reached top yet => not in VE!
-            %veTopEmpty = (B ~= b & T == t) & vG_veTrans == 0; % top of ve column empty => VE assumption not hold yet!
-%             veBottomTop = any([veBottomFilled; veTopEmpty]);
-%             maskBottomAndTop = splitapply(@all, veBottomTop, findgroups(c)); % returns true if veBottomFilled and veTopEmpty both satisfied for a column
-%             cellsBottomAndTop = splitapply(@mode, c, findgroups(c));
-%             maskBottomAndTop = maskBottomAndTop(cellsBottomAndTop);           
-            veValid = (B == b & T ~= t) & Sn_c == 0;
-                                            
-            %c_veNot = intersect(c(veBottomFilled), c(veTopEmpty)); % internal ve columns where ve assumption not satisfied
-            c_veNot = c(veBottomFilled);
-            c_ve = c(veValid);
-            
-            c_vic = op.N(op.connections.veInternalConn, :);            
-            c_veNot_bool = ismember(c_vic, c_veNot);
-            c_VE_Not = c_vic(c_veNot_bool);                   
-            
-%             for i=1:2
-%                 c_vic_i = c_vic(:,i);
-%                 c_veNot_i = c_veNot_bool(:,i);
-%                 c_ve_i = c_ve_bool(:,i);
-%                 c_VE_Not{i} = c_vic_i(c_veNot_i); % get ve cells whose bottom virtual cell satisfies sG > 1e-4
-%                 c_VE{i} = c_vic_i(c_ve_i);
-%             end                   
-        end
-    end
-    
-    c_VE_Not = unique(c_VE_Not);
-    % ---------------------------------------------------------------
-    
     % --- upscaledSat2height ---
     if strcmp(opt.ve_model, 'sharp_interface')
         % Sharp interface: Plume height simple expression of sG
@@ -107,13 +54,19 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         error('VE model %s not supported', opt.ve_model);
     end
     
-    if ~isempty(c_VE_Not) % only change height for transition zones
-       %c_VE_Not = ismember(n_cells, c_VE_Not);
-       h_global(c_VE_Not) = 0; % no mobile part of plume
-       h_max_global(c_VE_Not) = value(sG(c_VE_Not)).*H(c_VE_Not)./snr; % distribute "removed" mobile part to residual content to preserve mass
-    end
-    % WHEN TRANSITIONG FROM Sn < snr to Sn > snr, change hmax in original
-    % formula from 0.1 (snr) to H !!!
+    if ~isempty(cellsVENot) % NVEs -> update definitions of plume height
+       % NB: Coarse saturation remains unchanged, but the DISTRIBUTION
+       % (represented by h and h_max) is changed => modifies the fluxes
+       h_global(cellsVENot) = 0; % no mobile part of plume => no CO2 mobility!
+       h_max_global(cellsVENot) = value(sG(cellsVENot)).*H(cellsVENot)./snr; % distribute "removed" mobile part to residual content to preserve mass
+       
+       if ~isempty(cellsNVEHorz) % NVE columns with horizontal flux from neighbors
+            Sn = value(sG(cellsNVEHorz)); % current saturation
+            Snc = value(sgNVE(cellsNVEHorz)); % saturation at timestep when first nonzero flux from horizontal VE neighbors occured            
+            h_global(cellsNVEHorz) = (Sn - Snc).*H(cellsNVEHorz)./(1-swr); % Sn - Snc: additional saturation after NVE->VE transformation
+            h_max_global(cellsNVEHorz) = Snc.*H(cellsNVEHorz)./snr + h_global(cellsNVEHorz);
+       end   
+    end     
     % --------------------------       
     
     if strcmp(opt.ve_model, 'sharp_interface') && isfield(f, 'pcWG')
@@ -130,7 +83,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     %[pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, isFine);
     [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h_global, h_max_global, H, rhoW, rhoG, muW, muG, ...
                                                 isFine, all_coarse_cells, h_global, h_max_global, {}, {}, ...
-                                                c_VE_Not, 've_model', opt.ve_model, 'p_entry', p_entry);
+                                                cellsVENot, 've_model', opt.ve_model, 'p_entry', p_entry);
     if isa(model, 'ThreePhaseCompositionalModel')
         sW = 1-sG;
         rhoWf = op.faceAvg(rhoW.*sW)./max(op.faceAvg(sW), 1e-8);
@@ -163,19 +116,24 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     upcw  = (value(dpW)<=0);
     vW = -op.faceUpstr(upcw, mobW) .* trans .* dpW;
 
-    % Treat transition between different discretizations   
+    % Treat transition between different discretizations
+    transition_ve = model.operators.connections.veTransitionHorizontalConn & ~model.operators.connections.veToFineConn;
+     
     if any(transition_ve)
         [vW(transition_ve), vG(transition_ve),...
          upcw(transition_ve), upcg(transition_ve)] = computeTransitionFluxVE(model, pW, h_global, h_max_global, rhoW, rhoG, muW, muG, ...
-                                                                              transition_ve, true, c_VE_Not, 'p_entry', p_entry);
+                                                                              transition_ve, true, cellsVENot, 'p_entry', p_entry);
     end
     % Treat transition between ve zones in vertical direction (for diffuse
-    % leakage)    
+    % leakage)
+    transition_vertical = model.operators.connections.veToFineConn | ...
+                          model.operators.connections.veTransitionVerticalConn & op.T > 0;
+  
     if any(transition_vertical)        
         [vW(transition_vertical), vG(transition_vertical),...
          upcw(transition_vertical), upcg(transition_vertical)] = computeTransitionFluxVE(model, pW, h_global, h_max_global, rhoW, rhoG, muW, muG, ...
-                                                                                            transition_vertical, false, c_VE_Not, 'p_entry', p_entry);
-    end      
+                                                                                            transition_vertical, false, cellsVENot, 'p_entry', p_entry);
+    end
 
 end
 
@@ -245,7 +203,7 @@ function [pW, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransitionValu
 end
 
 
-function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, rhoW, rhoG, muW, muG, vtc, treatAsCoarse, c_VE_Not, varargin)
+function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, rhoW, rhoG, muW, muG, vtc, treatAsCoarse, cellsVENot, varargin)
     % INPUTS:
     %   h: global depth of mobile plume
     %   h_max: global height of residual part
@@ -317,10 +275,10 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, rho
     n1 = nn(:,1); n2 = nn(:,2);     
 
     [pW_l, pG_l, mobW_l, mobG_l] = evaluatePropertiesVE(model, pW_l, sG_l, h_l, h_max_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l, ...
-                                                         isFine_l, n1, h, h_max, vtc, 1, c_VE_Not, ...
+                                                         isFine_l, n1, h, h_max, vtc, 1, cellsVENot, ...
                                                          've_model', opt.ve_model, 'p_entry', opt.p_entry);
     [pW_r, pG_r, mobW_r, mobG_r] = evaluatePropertiesVE(model, pW_r, sG_r, h_r, h_max_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r, ...
-                                                         isFine_r, n2, h, h_max, vtc, 2, c_VE_Not, ...
+                                                         isFine_r, n2, h, h_max, vtc, 2, cellsVENot, ...
                                                          've_model', opt.ve_model, 'p_entry', opt.p_entry);    
 
 
@@ -336,7 +294,7 @@ end
 
 
 function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H, rhoW, rhoG, muW, muG, ...
-                                                      isFine, n_cells, h_global, h_max_global, vtc, index, c_VE_Not, varargin)
+                                                      isFine, n_cells, h_global, h_max_global, vtc, index, cellsVENot, varargin)
     % INPUTS:
     %   model: model of type WaterGasMultiVEModel
     %   pW: water pressure
@@ -422,14 +380,17 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     %[krw, krg] = model.evaluateRelPerm({sW, sG}, p, 'sGmax', sGmax);    
    
     % --- Residual saturation - sharp interface assumption ---      
-%     if ~isempty(c_VE_Not) && ~isempty(vtc) % only change height for transition zones
-%        c_VE_Not = ismember(n_cells, c_VE_Not);
+%     if ~isempty(cellsVENot) && ~isempty(vtc) % only change height for transition zones
+%        c_VE_Not = ismember(n_cells, cellsVENot);
 %        h(c_VE_Not) = 0; % no mobile part of plume
 %        h_max(c_VE_Not) = value(sG(c_VE_Not)).*H(c_VE_Not)./snr; % distribute "removed" mobile part to residual content to preserve mass
 %     end
     
     krwVE = (f.krW(1-snr).*(h_max-h) + (H-h_max))./H; % water mobile in residual zone and pure brine zone
     krgVE = f.krG(1-swr).*(h./H); % max CO2 sat in cells of mobile plume is 1-swr (sharp interface assumption)
+    if ~isempty(cellsVENot) && ~isempty(neighborsVEHorz)
+       krwVE =  
+    end
     mobW = (isVE.*krwVE + isFine.*krw)./muW;
     mobG = (isVE.*krgVE + isFine.*krg)./muG;        
     % ---------------------------

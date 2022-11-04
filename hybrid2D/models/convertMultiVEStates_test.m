@@ -22,16 +22,24 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     ns = numel(states_c);
     states = cell(ns, 1);    
-    states0_sGmax = states_c{1}.sGmax;
+    states0_sGmax = states_c{1}.sGmax;   
     sgMax = states0_sGmax(model.G.partition);
+    snMaxVE_bottom = 0;
+    vG_any = 0; % only CO2 flux at initial state is at well
+    
     for i = 1:ns
-        [states{i}, sgMax] = convertState(model, states_c{i}, sgMax);                          
+        if i > 1
+            states0_c = states_c{i-1};
+        else
+            states0_c = states_c{i};
+        end
+        [states{i}, sgMax, snMaxVE_bottom, vG_any] = convertState(model, states_c{i}, states0_c, sgMax, snMaxVE_bottom, vG_any, i);        
         %states0_sGmax = states{i}.sGmax; % update historically max fine-scale sat
         % what about converting flux?
     end
 end
 
-function [state, sgMax] = convertState(model, state_c, sgMax_fine)
+function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, state0_c, sgMax_fine, snMaxVE_bottom, vG_any, i)
     f = model.fluid;
     op = model.operators;
 
@@ -44,24 +52,26 @@ function [state, sgMax] = convertState(model, state_c, sgMax_fine)
     b = CG.cells.bottomDepth(p);
     B = CG.parent.cells.bottomDepth;
     
-    %h_c = state_c.s(:,2).*CG.cells.height;
-    %h = h_c(p);
-    %sG = getGasSaturationFromHeight(T, t, B, b, h);  
+    H = CG.cells.height(p); 
+   
+    % --- RESIDUAL SATURATION ---         
+    swr = model.fluid.krPts.w(1);
+    snr = model.fluid.krPts.g(1);
+
+    sgMax = state_c.sGmax;
+    sgMax_c = sgMax(p); % max saturation from hybrid - not updated since coarse states already solved for
+    sG = state_c.s(:,2);
+    sG_c = sG(p);
+      
+    vG = state_c.vGmax; % get max absolute co2 flux for each coarse connection
+    sG0 = state0_c.s(:,2);
+    sgNVE0 = state0_c.sGnve;
+       
+    h_max = @(sgMax, H) H.*(sgMax./(1-swr));   
+    h = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
     
-    % --- RESIDUAL SATURATION ---    
-    H = CG.cells.height(p);
-    swr = min(model.fluid.krPts.w);
-    snr = min(model.fluid.krPts.g);
-
-    sgMax = state_c.sGmax(p); % max saturation from hybrid - not updated since coarse states already solved for
-
-    % h_max and h is SAME for all fine cells in VE column
-    h_max = H.*(sgMax./(1-swr));
-    h = H.*(state_c.s(:,2)./(1-swr));  
-  
-    % sG is DIFFERENT for fine cells in VE column
-    sG = getGasSatFromHeight(T, t, B, b, h, h_max);   
-    % ---------------------------
+    sg = height2SatConvert_test(model, h, h_max, sG, sgMax, vG, sG0, sgNVE0, i);  
+    % ---------------------------------------------------------------            
     
     state = state_c;
     g = norm(model.gravity);
@@ -81,62 +91,37 @@ function [state, sgMax] = convertState(model, state_c, sgMax_fine)
     isFine = CG.cells.discretization == 1;
     
     % shift pressure from center to bottom
-    %state_c.pressure(~isFine) = state_c.pressure(~isFine) + g.*rhow(~isFine).*CG.cells.height(~isFine)/2;    
+    state_c.pressure(~isFine) = state_c.pressure(~isFine) + g.*rhow(~isFine).*CG.cells.height(~isFine)/2;    
     % shift pressure from center to top of each VE column
-    state_c.pressure(~isFine) = state_c.pressure(~isFine) - g.*rhow(~isFine).*CG.cells.height(~isFine)/2;
+    %state_c.pressure(~isFine) = state_c.pressure(~isFine) - g.*rhow(~isFine).*CG.cells.height(~isFine)/2;
     
     cz = (T + B)/2;
     pressure = state_c.pressure(p); % fine-sclae pressures initially defined at top
     % WHY USE THIS FUNCTION TO RECONSTRUCT PRESSURE IN INTERNAL VE COLUMNS? DOESN'T DUPUIT ASSUMPTION HOLD HERE?  
     % Dupuit not valid only for veToFine and veVerticalConn -> significant
-    % vertical flow here (captured by fine cells
-    p_c = getWaterPressureFromHeight(cz, t, B, b, h, pressure, g, rhow(p), rhog(p));   
+    % vertical flow here (captured by fine cells)
+    rhow = rhow(p);
+    rhog = rhog(p);
+    p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   
     % use original pressure from internal fine cells
     p_c(isFine(p)) = pressure(isFine(p));
     % use Dupuit approx in internal ve conn (WHAT ABOUT HORIZONTAL VE
     % CONN?)
-    cells_veInternalConn = CG.faces.neighbors(op.connections.veInternalConn, :);    
-    dupuit = ~isFine(p) && cells_veInternalConn(p);
-    % dupuit = ~isFine(p) && cells_veInternalHorizontalConn(p);
-    p_c(dupuit) = pressure(dupuit) + rhow(dupuit).*g.*cz(dupuit);
+    vIc_cells = zeros(CG.cells.num, 1); % veInternalConn cells
+    vIc_n1 = op.N(op.connections.veInternalConn, 1);    
+    vIc_n2 = op.N(op.connections.veInternalConn, 2);
+    vIc_cells(vIc_n1 | vIc_n2) = 1;
+    dupuit = logical(vIc_cells(p));   
+    p_c(dupuit) = pressure(dupuit) - rhow(dupuit).*g.*cz(dupuit); % pressure from bottom back to center
     
     state.pressure = p_c;
-    state.s = [1-sG, sG]; 
+    state.s = [1-sg, sg]; 
     % choose max among current calculated fine scale sat and fine scale sat
     % from all previous states
-    state.sGmax = max(sG, sgMax_fine); % max of new sG and current max sG
+    state.sGmax = max(sg, sgMax_fine); % max of new sG and current max sG
     sgMax = state.sGmax;
     
-    % -------- Reconstruct fluxes ------------
-    vW_c = state_c.flux(:,1); % do we need this?
-    vG_c = state_c.flux(:,2);
-    % apply relperm function on reconstructed saturations
-    krW = f.krW(1-sG); 
-    krG = f.krG(sG);
-    mobW = krW./f.muW;
-    mobG = krG./f.muG;
-       
-    z = (T + B)/2; % midpoint of each cell in parent grid
-    dpW = op.Grad(p_c) - rhow.*g.*op.Grad(z);
-    
-    sealingCells = CG.sealingCells(p); % sealing cells for parent grid
-    all_cells = (1:CG.parent.cells.num)';
-    n_sealing = ismember(all_cells, sealingCells);
-    pG = p_c + f.pcWG(sG, n_sealing, ones(CG.parent.cells.num, 1)); % all cells treated as fine
-    dpG = op.Grad(pG) - rhog.*g.*op.Grad(z);
-    
-    % --- TODO ---
-    % Reconstruct trans over fine faces
-    trans = 0;
-    % ------------
-    
-    upcw  = (value(dpW)<=0);
-    vW = -op.faceUpstr(upcw, mobW) .* trans .* dpW;
-    upcg  = (value(dpG)<=0);
-    vG = -op.faceUpstr(upcg, mobG) .* trans .* dpG;
-    
-    % ---------------------------------------
-    
+
     if isprop(model, 'EOSModel')
         state.T = state.T(p);
         state.L = state.L(p);
@@ -149,3 +134,4 @@ function [state, sgMax] = convertState(model, state_c, sgMax_fine)
         state.y = ~pureVapor.*state_c.y(CG.partition, :) + pureVapor.*state.components;
     end
 end
+

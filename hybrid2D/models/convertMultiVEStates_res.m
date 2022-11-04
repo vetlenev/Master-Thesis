@@ -27,7 +27,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     snMaxVE_bottom = 0;
     vG_any = 0; % only CO2 flux at initial state is at well
     
-    for i = 1:ns
+    for i = 1:ns        
         [states{i}, sgMax, snMaxVE_bottom, vG_any] = convertState(model, states_c{i}, sgMax, snMaxVE_bottom, vG_any, i);        
         %states0_sGmax = states{i}.sGmax; % update historically max fine-scale sat
         % what about converting flux?
@@ -41,14 +41,15 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     CG = model.G;
     p = CG.partition;
     
-    t = CG.cells.topDepth(p);
-    T = CG.parent.cells.topDepth;
+    all_cells = ismember(p, (1:CG.cells.num)');    
     
+    t = CG.cells.topDepth(p);
+    T = CG.parent.cells.topDepth;   
     b = CG.cells.bottomDepth(p);
-    B = CG.parent.cells.bottomDepth;
+    B = CG.parent.cells.bottomDepth;    
+    H = CG.cells.height(p); 
    
-    % --- RESIDUAL SATURATION ---    
-    H = CG.cells.height(p);
+    % --- RESIDUAL SATURATION ---         
     swr = model.fluid.krPts.w(1);
     snr = model.fluid.krPts.g(1);
 
@@ -56,23 +57,17 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     sgMax_c = sgMax(p); % max saturation from hybrid - not updated since coarse states already solved for
     sG = state_c.s(:,2);
     sG_c = sG(p);
-    %vG = state_c.flux(:,2);    
-    vG = state_c.vGmax;
+      
+    vG = state_c.vGmax; % get max absolute co2 flux for each coarse connection
+       
+    h_max_func = @(sgMax, H) H.*(sgMax./(1-swr));   
+    h_func = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
     
-    % --- Check if plume in VE columns originate from lower layer ---     
-    isFine = CG.cells.discretization == 1;  
-    all_coarse_cells = (1:CG.cells.num)';
-    
-    % h_max and h is SAME for all fine cells in VE column 
-    h_max = @(sgMax, H) H.*(sgMax./(1-swr));   
-    h = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
-    
-    [sg, snMaxVE_bottom, vG_any] = height2SatConvert(model, h, h_max, swr, snr, sG, sgMax, snMaxVE_bottom, vG, vG_any, i);  
-    % ---------------------------------------------------------------
-        
-    % sG is DIFFERENT for fine cells in VE column
-    %[a_M, a_R, sG] = getGasSatFromHeight(T, t, B, b, h, h_max, swr, snr);   
-    % ---------------------------
+    [sg, h, h_max, cellsNVE] = height2SatConvert(model, h_func, h_max_func, sG, sgMax, vG, i);
+    % Returned h and h_max are for parent grid, same value copied for all
+    % fine cells of a VE column.
+    cellsNVE = ismember(p, cellsNVE);
+    % ---------------------------------------------------------------            
     
     state = state_c;
     g = norm(model.gravity);
@@ -91,6 +86,12 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     end
     isFine = CG.cells.discretization == 1;
     
+    state.s = [1-sg, sg]; 
+    % choose max among current calculated fine scale sat and fine scale sat
+    % from all previous states
+    state.sGmax = max(sg, sgMax_fine); % max of new sG and current max sG
+    sgMax = state.sGmax;
+    
     % shift pressure from center to bottom
     state_c.pressure(~isFine) = state_c.pressure(~isFine) + g.*rhow(~isFine).*CG.cells.height(~isFine)/2;    
     % shift pressure from center to top of each VE column
@@ -103,11 +104,14 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     % vertical flow here (captured by fine cells)
     rhow = rhow(p);
     rhog = rhog(p);
-    p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   
+    %p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);    
+    %p_c = getPwFromHeight(cz, t, b, h(sg, sgMax, H), h_max(sgMax, H), pressure, g, rhow, rhog, swr, snr, cellsNVE, all_cells);
+    cNVE = ismember(all_cells, cellsNVE);
+    p_c = getPwFromHeight(cz, t, b, h, h_max, pressure, g, rhow, rhog, swr, snr, 'cNVE', cNVE);
     % use original pressure from internal fine cells
     p_c(isFine(p)) = pressure(isFine(p));
     % use Dupuit approx in internal ve conn (WHAT ABOUT HORIZONTAL VE
-    % CONN?)
+    % CONN -> can't assume Dupuit hold here?)
     vIc_cells = zeros(CG.cells.num, 1); % veInternalConn cells
     vIc_n1 = op.N(op.connections.veInternalConn, 1);    
     vIc_n2 = op.N(op.connections.veInternalConn, 2);
@@ -115,12 +119,7 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     dupuit = logical(vIc_cells(p));   
     p_c(dupuit) = pressure(dupuit) - rhow(dupuit).*g.*cz(dupuit); % pressure from bottom back to center
     
-    state.pressure = p_c;
-    state.s = [1-sg, sg]; 
-    % choose max among current calculated fine scale sat and fine scale sat
-    % from all previous states
-    state.sGmax = max(sg, sgMax_fine); % max of new sG and current max sG
-    sgMax = state.sGmax;
+    state.pressure = p_c;    
     
     % -------- Reconstruct fluxes ------------
 %     vW_c = state_c.flux(:,1); % do we need this?

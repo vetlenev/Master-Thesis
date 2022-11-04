@@ -15,8 +15,8 @@ my_seed = 2234;
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
-pe_sealing = convertTo(1.5*10^4*Pascal, barsa); % higher entry pressure in aquitards
-pe_rest = 0*barsa;
+pe_sealing = 1*10^5*Pascal; %5*10^4*Pascal; % higher entry pressure in aquitards
+pe_rest = 5*10^3*Pascal;%5*10^3*Pascal;
 p_cap = 5*pe_sealing;
 
 %% Setup original fine-scale case
@@ -25,17 +25,21 @@ p_cap = 5*pe_sealing;
 useFaceConstraint = false;
 
 if useFaceConstraint
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/face_nopc_smax/');   
+    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/face_orig_large/');   
 else
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_nopc_smax/');
+    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_orig_large/');
 end
 mkdir(plot_dir);
 
 nx = 200; ny = 1; nz = 50;
 lx = 750; ly = 1; lz = 250;
-trans_mult = useFaceConstraint*1e-7 + ~useFaceConstraint; % 1e-4
+trans_mult = useFaceConstraint*1e-4 + ~useFaceConstraint; % 1e-4
 
-[state0, models, schedule, isFineCells, facesZeroTrans] = setupSlopedGrid(useFaceConstraint, [nx,ny,nz], [lx,ly,lz], trans_mult);
+useAdaptive = false;
+
+[state0, models, schedule, ...
+    isFineCells, facesZeroTrans] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
+                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
 
 sealingCells = isFineCells.sealing;
 sealingCells = any(cell2mat(sealingCells), 2);
@@ -52,9 +56,9 @@ snr = model_fine.fluid.krPts.g(1); % residual CO2 sat
 dummy_s = linspace(0, 1, model_fine.G.cells.num)';
 
 sealingCellsFine = model_fine.G.cells.indexMap(sealingCells);
-% model_fine.fluid.pcWG = @(s) Capillary.runStandardPcSharp(s, dummy_s, swr, snr, pe_sealing, pe_rest, ...
-%                                            sealingCellsFine, model_fine.G);
-% 
+model_fine.fluid.pcWG = @(s) Capillary.runStandardPcSharp(s, dummy_s, swr, snr, pe_sealing, pe_rest, ...
+                                           sealingCellsFine, model_fine.G);
+
 
 G = model_fine.G;
 W = schedule.control(1).W;
@@ -78,7 +82,7 @@ axis equal tight
 daspect([1, 0.1, 0.5])
 xlabel('Lateral position [m]');
 ylabel('Depth [m]');
-title({'Fine scale grid with flat sealing layer', 'Imposed fine cells highlighted in green'})
+title({'Fine scale grid', 'Imposed fine cells highlighted in green'})
 
 figure(2);
 plotOutlinedGrid(G, W, bc, facesZeroTrans);
@@ -99,8 +103,15 @@ xlabel('Lateral position [m]');
 ylabel('Depth [m]');
 title('Permeability field')
 
+% Plot van Genuchten capillary pressure
+swMin = 0.2; swr = 0.1; snr = 0.15;
+alpha = -1/(10^4*Pascal); n = 1.5; gamma_D = 2; gamma_I = 1.5;
+pc_func = @(Sw, sne, swr, alpha, n, gamma) Hysteresis.pc_func(Sw, sne, swr, alpha, n, gamma);
+sw_func = @(Sw, sne, swr, alpha, n, gamma) Hysteresis.sw_func(Sw, sne, swr, alpha, n, gamma);
+pc_scan = Hysteresis.Genuchten(dummy_s, swMin, snr, swr, pc_func, sw_func, alpha, n, gamma_D, gamma_I);
+
 fig3 = figure(3);
-plot(1-dummy_s, Capillary.PcSharp(dummy_s, swr, snr, pe_sealing, 10) , 'LineWidth', 1.5);
+plot(1-dummy_s, Capillary.PcGas(dummy_s, swr, snr, pe_rest, 4), 'LineWidth', 1.5);
 xlabel('Water saturation');
 xlim([swr, 1]);
 title('Capillary pressure function');
@@ -113,7 +124,8 @@ nls = NonLinearSolver('maxIterations', 70);
 %% Pack and simulate problem
 problem = packSimulationProblem(state0, model_fine, schedule, ...
     'horz_finescale', 'NonLinearSolver', nls);
- 
+
+%[states, wellSols] = simulateScheduleAD(state0, model_fine, schedule, 'NonLinearSolver', nls);
 % Simulate and get the output
 simulatePackedProblem(problem);
 [ws, states, report] = getPackedSimulatorOutput(problem);
@@ -138,12 +150,13 @@ states_ve_fs = convertMultiVEStates_res(model_ve, states_ve); % retrieve fine-sc
                                             'sealingFaces', find(facesZeroTrans), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
                                             'multiplier', trans_mult, ...
-                                            'sumTrans', true);
-
-% model_hybrid.fluid.pcWG = @(s, n_sealing, isVE) ...
-%                             Capillary.runHybridPcSharp(s, swr, snr, pe_sealing, ...
-%                                                 pe_rest, n_sealing, isVE);                                                                                                      
-%                                         
+                                            'sumTrans', true, ...
+                                            'pe_rest', pe_rest);
+                                       
+model_hybrid.fluid.pcWG = @(s, n_sealing) ...
+                            Capillary.runStandardPcSharp(s, dummy_s, swr, snr, pe_sealing, ...
+                                                pe_rest, n_sealing, model_hybrid.G);                                                                                                      
+                                        
 schedule_hybrid = upscaleSchedule(model_hybrid, schedule);
 state0_hybrid = upscaleState(model_hybrid, model, state0);
 
@@ -180,14 +193,14 @@ ylabel('Depth [m]');
 title('Partition of hybrid VE model')
 
 figure(5)
-vtc = model_hybrid.operators.connections.veToFineConn;
+vtc = model_hybrid.operators.connections.veToFineHorizontal;
 vtc_c1 = model_hybrid.operators.N(vtc, 1);
 vtc_c2 = model_hybrid.operators.N(vtc, 2);
 plotGrid(model_hybrid.G, 'edgealpha', 0.2, 'facecolor', 'none')
 all_coarse_cells = zeros(model_hybrid.G.cells.num, 1);
-%all_coarse_cells(vtc_c1) = 1;
-%all_coarse_cells(vtc_c2) = 1;
-all_coarse_cells(1:33) = 1;
+all_coarse_cells(vtc_c1) = 1;
+all_coarse_cells(vtc_c2) = 1;
+%all_coarse_cells(1:33) = 1;
 plotCellData(model_hybrid.G, all_coarse_cells)
 %plotCellData(model_hybrid.G, model_hybrid.G.cells.discretization);
 view(0, 0)
@@ -213,7 +226,7 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 states_hybrid_fs = convertMultiVEStates_res(model_hybrid, states_hybrid);
 
 %% Simulate schedule hybrid
-%[states, wellSols] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+[states, wellSols] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
 
 %% Compute net CO2 volume in each VE column 
 % and compare with fine solution
@@ -229,8 +242,11 @@ idx_new_vol = [idx_new_vol; numel(vol_sort)];
 pvh = poreVolume(model_hybrid.G, model_hybrid.rock);
 pvf = poreVolume(model.G, model.rock);
 
-sn_f_net = accumarray(p, sn_f, size(unique(p)), @mean);
+%sn_f_net = accumarray(p, sn_f, size(unique(p)), @mean);
+sn_f_net = accumarray(p, sn_f.*pvf, size(unique(p)));
+sn_f_net = sn_f_net ./ pvh;
 sn_f_net = sn_f_net(idx_sort);
+%sn_h = sn_h.*pvh;
 sn_h = sn_h(idx_sort);
 
 %sn_f_net = sn_f;
@@ -253,6 +269,7 @@ plot(1:numel(var_fh), var_fh, '-r', 'DisplayName', 'Variance')
 % SET VOLUME TICKS !
 xlabel('Coarse cells (increasing volume)')
 title('Absolute difference in CO2 saturation for hybrid and fine models')
+legend();
 drawnow;
 
 %% Plot CO2 saturation for each model
@@ -264,7 +281,7 @@ cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 
 for i = 1:20:numel(states)
     f1 = figure(1); clf    
-    plotCellData(model.G, states{i}.s(:, 2), 'edgec', 'none');
+    plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
     plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
     view(0, 0); colormap(cc);
     axis tight off
