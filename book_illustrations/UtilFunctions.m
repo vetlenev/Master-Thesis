@@ -48,26 +48,131 @@ classdef UtilFunctions
        
        function [boundary_faces] = localBoundaryFaces(G, cells, varargin)
            % cells: list of indices of cells to extract boundary faces of
+            opt = struct('full_dim', false); % defaults: sharp interface, negligable horizontal flux for NVEHorz cells (r=0) 
+            opt = merge_options(opt, varargin{:});
+            
             all_faces = zeros([numel(cells) 6]); % each cell has 6 faces in 3D
             
             for i=1:size(cells)
+                % Only in pocessing of grid before simulation, so despite
+                % potentially many loops, not too expensive overall
                 icell_start = G.cells.facePos(cells(i));
                 icell_stop = G.cells.facePos(cells(i)+1)-1;
                 all_faces(i,:) = G.cells.faces(icell_start:icell_stop, 1);
             end
             
-            [ii, ~, ~] = gridLogicalIndices(G);
-            nx = numel(unique(ii(cells)));
-
-            bottom = all_faces(:,6);       
-            bottom = bottom(numel(bottom)-(nx-1):numel(bottom));
-            left = all_faces(:,1);
-            left = left(1:nx:numel(left));
-            right = all_faces(:,2);
-            right = right(nx:nx:numel(right));
-            top = all_faces(:,5);
-            top = top(1:nx);
-            boundary_faces = cat(1, bottom, top, left, right);
+            [ii, jj, kk] = gridLogicalIndices(G);
+            nx = numel(unique(ii(cells)));                                  
+            
+            if opt.full_dim
+                ny = numel(unique(jj(cells)));
+                
+                bottom = UtilFunctions.boundingFaces(G, 'bottom', all_faces, kk, @max);
+                top = UtilFunctions.boundingFaces(G, 'top', all_faces, kk, @min);
+                left = UtilFunctions.boundingFaces(G, 'left', all_faces, ii, @min);
+                right = UtilFunctions.boundingFaces(G, 'right', all_faces, ii, @max);
+                west = UtilFunctions.boundingFaces(G, 'west', all_faces, jj, @min);
+                east = UtilFunctions.boundingFaces(G, 'east', all_faces, jj, @max);
+                
+%                 bottom = all_faces(:,6);                
+%                 nb = G.faces.neighbors(bottom, :);
+%                 nb_i = all(nb > 0, 2);
+%                 nb = nb(nb_i);
+%                 bottom = bottom(nb_i);
+%                 max_nb = any(kk(nb) == max(kk(nb)), 2); % indices of faces neighbors to bottommost cells in sealing layer
+%                 bottom = bottom(max_nb);              
+%                 %bottom = bottom(numel(bottom)-(nx-1):numel(bottom));
+%                 
+%                 left = all_faces(:,1);
+%                 nl = G.faces.neighbors(left, :);
+%                 nl_i = all(nl > 0, 2); % interior neighbors
+%                 nl = nl(nl_i);
+%                 left = left(nl_i);
+%                 min_nl = any(ii(nl) == min(ii(nl)), 2);
+%                 left = left(min_nl);
+%                 %left = left(1:nx:numel(left));
+%                 
+%                 right = all_faces(:,2);
+%                 nr = G.faces.neighbors(right, :);
+%                 nr_i = all(nr > 0, 2);
+%                 nr = nr(nr_i);
+%                 right = right(nr_i);
+%                 max_nr = any(ii(nr) == max(ii(nr)), 2);
+%                 right = right(max_nr);
+%                 %right = right(nx:nx:numel(right));                
+%                 
+%                 top = all_faces(:,5);
+%                 nt = G.faces.neighbors(top, :);
+%                 nt_i = all(nt > 0, 2);
+%                 nt = nt(nt_i);
+%                 top = top(nt_i);
+%                 min_nt = any(kk(nt) == min(kk(nt)), 2);
+%                 top = top(min_nt);
+%                 %top = top(1:nx);
+%                 
+%                 west = all_faces(:,3);
+%                 nw = G.faces.neighbors(west, :);
+%                 nw_i = all(nw > 0, 2);
+%                 nw = nw(nw_i);
+%                 west = west(nw_i);
+%                 min_nw = any(jj(nw) == min(jj(nw)), 2);
+%                 west = west(min_nw);
+%                 
+%                 east = all_faces(:,4);
+%                 ne = G.faces.neighbors(east, :);
+%                 ne_i = all(ne > 0, 2);
+%                 ne = ne(ne_i);
+%                 east = east(ne_i);
+%                 max_ne = any(jj(ne) == max(jj(ne)), 2);
+%                 east = east(max_ne);
+                
+%                 west_old = all_faces(:,3); 
+%                 west_single_size = numel(1:(nx*(ny-1)):numel(west_old));
+%                 west = zeros(nx, west_single_size);
+%                 for i=1:nx
+%                     west(i,:) = west_old(i:(nx*(ny-1)):numel(west_old));
+%                 end                            
+%                 
+%                 east_old = all_faces(:,4);
+%                 east_single_size = numel((nx*(ny-1)+1):(nx*(ny-1)):numel(east_old));
+%                 east = zeros(nx, east_single_size);
+%                 for i=1:nx
+%                     east(i,:) = east_old((nx*(ny-1)+i):(nx*(ny-1)):numel(east_old));
+%                 end                
+                
+                % Flatten back to original ordering
+%                 west = west(:);
+%                 east = east(:); 
+                
+                boundary_faces = cat(1, bottom, top, left, right, west, east);                
+            else        
+                bottom = all_faces(:,6);       
+                bottom = bottom(numel(bottom)-(nx-1):numel(bottom));
+                left = all_faces(:,1);
+                left = left(1:nx:numel(left));
+                right = all_faces(:,2);
+                right = right(nx:nx:numel(right));
+                top = all_faces(:,5);
+                top = top(1:nx);
+                boundary_faces = cat(1, bottom, top, left, right); 
+            end                                            
+       end
+       
+       function [faces] = boundingFaces(G, side, all_faces, xx, max_or_min)
+           side_idx = struct('left', 1, 'right', 2, 'west', 3, ...
+                                'east', 4, 'top', 5, 'bottom', 6);
+           
+            faces = all_faces(:, side_idx.(side));
+            n = G.faces.neighbors(faces, :);
+            [row, col] = find(n == 0);
+            for r=1:numel(row)
+               n(row(r), col(r)) = n(row(r), 3-col(r));  
+            end
+            %n_i = all(n > 0, 2); % interior faces 
+            %n = n(n_i);
+            %faces = faces(n_i);
+            bound_n = any(xx(n) == max_or_min(xx(n)), 2);
+            faces = faces(bound_n);
        end
        
        function [var] = initNanADI(ad_var)

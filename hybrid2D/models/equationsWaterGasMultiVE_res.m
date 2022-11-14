@@ -68,8 +68,37 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     g = norm(model.gravity);
     pW_center = pW;
     
-    isVE = G.cells.discretization > 1;    
-    
+    isVE = G.cells.discretization > 1;  
+    % ----- Find relevant VE bottom cells
+    veTransition = op.connections.veToFineVertical | ...
+                    op.connections.veTransitionVerticalConn & op.T > 0;        
+    veAll = op.connections.veInternalConn | op.connections.veTransitionHorizontalConn;
+    cn = op.N(veTransition, :);
+    c_vic = op.N(veAll, :);
+    cB = {};
+   
+    for idx=1:2
+        c = cn(:,idx);
+        isVE_c = isVE(c);
+        if any(isVE_c)
+            t = G.cells.topDepth(c);
+            T = op.connections.faceTopDepth(veTransition, idx);
+            b = G.cells.bottomDepth(c);
+            B = op.connections.faceBottomDepth(veTransition, idx);
+            Hb = G.cells.height(c); % to not overwrite global H
+            
+            veB = B == b & T ~= t;
+            cb = c(veB); % select correct bottom cells
+%             cb = c_vic(ismember(c_vic, cb));
+%             if ~isempty(cb)
+%                 cB = cat(2, cB, cb);
+%             end
+        end
+    end    
+    %cB = unique(cell2mat(cB));
+    cB = cb;
+    % -----
+     
     % Modify the fluxes to account for VE transitions
     [rhoW, rhoG] = deal(rho{:});
    
@@ -81,52 +110,63 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     swr = f.krPts.w(1);   
     snr = f.krPts.g(1);
     
-    if ~isfield(state0, 'vGmax')
-        state0.vGmax = zeros(size(model.operators.N, 1), 1); % initially zero fluxes by default
+    if ~isfield(state0, 'vGsum')
+        state0.vGsum = zeros(size(model.operators.N, 1), 1); % initially zero fluxes by default
+        %state0.vGsum = zeros(numel(cB), 1);
     end
     if ~isfield(state0, 'sGnve')
-       state0.sGnve = cell2mat(state0.s(:,2)); 
+       state0.sGnve = cell2mat(state0.s(:,2)); % initial saturation
+    end
+    if ~isfield(state0, 'vGsMax')
+       state0.vGsMax = zeros(size(model.operators.N, 1), 1);
+       state.vGsMax = state0.vGsMax;
+       %state0.vGsMax = zeros(numel(cB), 1); 
     end
        
     % Get cells partly residual filled and fully residual filled *from below*
-    [c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGmax); % CHANGED FROM sG to sgMax !!
-    %[c_prf, c_frf, c_horz] = getResidualFilledCells_test(model, sG, state0.vGmax, sG0, state0.sGnve);   
-        
-    % NB: Elements of sgMax corresponding to partially residual filled cells
-    % are not updated in the state-object because we manually modify these 
-    % elements of sgMax but not sG. But saturation for all other cells 
-    % (i.e. non-NVE) are updated in the state-object.
-    state.sGnve = sG; % store current saturation
+    %[c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGsum); % CHANGED FROM sG to sgMax !!
+    %[c_prf, c_mrf, c_frf] = getResidualFilledCellsMob(model, pv0, bG0, sG0, sgMax, state0.vGsum); % [partly residual filled, mobile residual filled, fully residual filled]
+    c_prf = []; c_mrf = []; c_frf = []; c_horz = [];
+    r_NVEHorz = 0;
     
-%     if ~isempty(c_horz) % retrieve saturation from time step when transitioning from NVE to VE %state0.sGnve == 0 && state.sGnve > 0
-%         state.sGnve(c_horz) = state0.sGnve(c_horz);           
-%     end
-
+    %sg = value(sG); % to avoid ADI/double warning when using sG for caluclations
+    
     %state = model.setProps(state, 'sGmax', sgMax);   
     
-    [vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
-    %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state.sGnve, c_prf, c_frf, c_horz);
-       
-    state.vGmax = max(abs(vG), state0.vGmax);
-    if ~isa(sG, 'ADI')
-       stop = 0; 
-    end
+    %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
+    [vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsMax, cB, veB, c_prf, c_mrf, c_frf, c_horz, 'r', r_NVEHorz);
+        
+    %state.vGsum = max(abs(vG), state0.vGsum);   
     % ---------------------------------------- -----------
     
     bWvW = op.faceUpstr(upcw, bW).*vW;
     bGvG = op.faceUpstr(upcg, bG).*vG;
+     
+    state.vGsum = state0.vGsum + bGvG.*dt; % abs-value: assume all fluxes through bottom interface is directed upwards
+       
+    % bottom flux summed up to time step of first occurence of current sgMax
+    veTrans = ismember(op.N, cn, 'rows');
+    vGsum_trans = value(state.vGsum(veTrans));
+    vGsMax_trans = state0.vGsMax(veTrans); % NB: important to choose from earlier state
+%     state.vGsMax = state0.vGsMax.*(sG(cBottom) < sgMax(cBottom)) + ... % choose summed flux from earlier time step
+%                     state.vGsum(veBottom).*(sG(cBottom) >= sgMax(cBottom)); % choose summed flux from current time step
+%   
+    veB_global = find(veTrans);
+    veB_global = veB_global(veB); % global index connection (veB is local index connection for veToFine and veVertical transition connections)
+    state.vGsMax(veB_global) = vGsMax_trans(veB).*(value(sG(cb)) < sgMax(cb)) + ... % choose stored summed bottom flux
+                                vGsum_trans(veB).*(value(sG(cb)) >= sgMax(cb)); % choose current summed bottom flux
     
     if model.outputFluxes
         state = model.storeFluxes(state, vW, [], vG);
     end
-    if model.extraStateOutput
+    if model.extraStateOutput  
         state = model.storebfactors(state, bW, [], bG);
         state = model.storeMobilities(state, mobW, [], mobG);
         state = model.storeUpstreamIndices(state, upcw, [], upcg);
     end
       
     % --------------------------- Continuity equations ---------------------------
-    
+     
     eqs{1} = (1/dt) .* (pv .* bW .* (1-sG) - pv0 .* bW0 .* (1-sG0)) + op.Div(bWvW);
     eqs{2} = (1/dt) .* (pv .* bG .* sG     - pv0 .* bG0 .* sG0    ) + op.Div(bGvG);
 
@@ -146,6 +186,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     [eqs, names, types, state.wellSol] = model.insertWellEquations(eqs, names, types, wellSol0, wellSol, wellVars, wellMap, pW_center, mob, rho, {}, {}, dt, opt);
 
     problem = LinearizedProblem(eqs, types, names, primaryVars, state, dt);    
+    % END
 end
 
 

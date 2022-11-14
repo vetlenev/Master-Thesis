@@ -30,11 +30,11 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, Sn, snMax, vG,
     swr = model.fluid.krPts.w(1);
     snr = model.fluid.krPts.g(1);
     
-    % --- 3. Standard ---    
+    % --- Standard ---    
     h = h_func(Sn_p, snMax_p, H);
     h_max = h_max_func(snMax_p, H);
     
-    [a_M, a_R, sG] = getGasSatFromHeight(TT, tt, BB, bb, h, h_max, swr, snr);
+    %[a_M, a_R, sG] = getGasSatFromHeight(TT, tt, BB, bb, h, h_max, swr, snr);    
     % -------------------
       
     [c_VE_Not, c_VE, c_VE_Horz] = getResidualFilledCells_test(model, Sn, vG, Sn0, sgNVE0); % coarse saturation Sn, not fine saturation sG
@@ -86,8 +86,12 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, Sn, snMax, vG,
         % -------------------------------- 
     end
     
+    if ~isempty(c_VE_Mob)
+       % --- 3. NVE cells with finite mobile plume at top --- 
+    end
+    
     if ~isempty(c_VE_Horz)
-        % --- 3. NVE cells with horizontal fluxes from neighbors ---
+        % --- 4. NVE cells with horizontal fluxes from neighbors ---
         p_nve_horz = ismember(p, c_VE_Horz);
         
         t_h = tt(p_nve_horz);           

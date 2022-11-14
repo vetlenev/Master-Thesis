@@ -1,5 +1,6 @@
 function [faces, sealingCells] = addConfiningLayers(G, varargin)
-%Undocumented Utility Function
+% Add a single confining layer, represented as faces or cells.
+% All cells constituting the confining layer must be direct neighbors.
 
 %{
 Copyright 2009-2022 SINTEF Digital, Mathematics & Cybernetics.
@@ -21,6 +22,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 %}
 
     opt = struct('type', 'faces', ...
+                 'full_dim', false, ...
                  'i_range', [-inf, inf], ...
                  'j_range', [-inf, inf], ...
                  'k_range', [-inf, inf], ...
@@ -95,7 +97,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         % find bounding sealing faces
         sealingCellsIdx = G.cells.indexMap(sealingCells);    
 
-        faces = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx);
+        faces = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx, 'full_dim', opt.full_dim);
     end
         
 end

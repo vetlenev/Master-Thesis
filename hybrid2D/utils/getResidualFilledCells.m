@@ -47,10 +47,8 @@ function [c_VE_Not, c_VE] = getResidualFilledCells(model, Sn, vG)
             b = CG.cells.bottomDepth(c);
             B = op.connections.faceBottomDepth(veTransition, idx);              
             
-            Sn_c = value(Sn(c));         
-            %veBottomFilled = (B == b & T ~= t) & Sn_c > 1e-4; % transition from UPPER ve column to LOWER fine cells, not from LOWER ve col to UPPER fine cells, and plume comes from lower layer.
-            veBottomFilled = (B == b & T ~= t) & (vG_veTrans > 0 & Sn_c < snr); % bottom of col is filled but co2 hasn't reached top yet => not in VE!
-            %veTopEmpty = (B ~= b & T == t) & vG_veTrans == 0; % top of ve column empty => VE assumption not hold yet!       
+            Sn_c = value(Sn(c));                     
+            veBottomFilled = (B == b & T ~= t) & (vG_veTrans > 0 & Sn_c < snr); % bottom of col is filled but co2 hasn't reached top yet => not in VE!          
             veValid = (B == b & T ~= t) & (vG_veTrans > 0 & Sn_c >= snr); % residual plume has reached top -> from prf to frf -> VE assumption holds
                                             
             %c_veNot = intersect(c(veBottomFilled), c(veTopEmpty)); % internal ve columns where ve assumption not satisfied

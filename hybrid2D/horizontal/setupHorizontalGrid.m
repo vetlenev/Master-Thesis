@@ -35,28 +35,27 @@ lx = gridSizes(1); ly = gridSizes(2); lz = gridSizes(3);
 % perm = perm.*200*milli*darcy;
 perm = repmat(100*milli*darcy, G.cells.num, 1);
 
-x_range = [0, lx/2]; % cover entire domain
+x_face = [0, lx/2]; % cover entire domain
+x_cell = [lx/3, 2*lx/3];
 setZeroTrans = zeros(G.faces.num, 1);
 sealingCellsPerm = 0.1*milli*darcy;
 
-if faceConstraint    
+% Sealing faces   
     k_range = [fix(nz/2), fix(nz/2+1)]; % single cell  
     
-    sealingCells = zeros(G.cells.num, 1); 
-    sealing_faces = addConfiningFaces(G, 'x_range', x_range, 'k_range', k_range);           
+    sealing_faces = addConfiningFaces(G, 'x_range', x_face, 'k_range', k_range);           
    
-else % cell constraints      
+% Sealing cells      
     z_rate = 0.02;
     z_range = [fix(lz/2-lz*z_rate), fix(lz/2+lz*z_rate)]; % very small thickness
     
-    [sealing_faces, sealingCells] = addConfiningCells(G, 'type', 'horizontal', 'x_range', x_range, 'z_range', z_range);       
+    [sealingCells_faces, sealingCells] = addConfiningCells(G, 'type', 'horizontal', 'x_range', x_cell, 'z_range', z_range);       
     
     % assign low permeability to sealing layer
     nxi = numel(unique(ii(sealingCells)));
     nzi = numel(unique(kk(sealingCells)));
     perm(sealingCells) = logNormCells([nxi, 1, nzi], repmat(sealingCellsPerm, nzi, 1)); % mean permeability of 0.1 mD 
-    
-end
+
 
 setZeroTrans(sealing_faces) = 1; 
 setZeroTrans = logical(setZeroTrans); 

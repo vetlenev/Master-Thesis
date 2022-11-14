@@ -8,14 +8,14 @@ mrstModule add ad-core ad-blackoil ad-props co2lab matlab_bgl coarsegrid;
 mrstModule add mrst-gui test-suite
 
 rootdir = strrep(ROOTDIR, '\', '/');
-data_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/data');
+data_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid3D/test/data');
 mkdir(data_dir);
 
 my_seed = 2234;
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
-pe_sealing = 1*10^5*Pascal; %5*10^4*Pascal; % higher entry pressure in aquitards
+pe_sealing = 5*10^4*Pascal; %5*10^4*Pascal; % higher entry pressure in aquitards
 pe_rest = 5*10^3*Pascal;%5*10^3*Pascal;
 p_cap = 5*pe_sealing;
 
@@ -23,26 +23,42 @@ p_cap = 5*pe_sealing;
 % Using face constraints, fine cells only constitute the well
 % Using cell constraints, fine cells also include sealing layer
 useFaceConstraint = false;
+useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
+run3D = false;
+
+trans_mult = ~useAdaptive*(useFaceConstraint*1e-4 + ~useFaceConstraint) + useAdaptive*1e-4; % 1e-4
+
+if run3D
+    nx = 100; ny = 8; nz = 50;
+	lx = 500; ly = 25; lz = 250;
+    [state0, models, schedule, ...
+    isFineCells, sealingFaces] = setupSlopedGrid3D(useFaceConstraint, useAdaptive, ...
+                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
+    vx = 30; vz = 20; % view angles
+    hybrid_folder = 'hybrid3D';
+else
+    nx = 200; ny = 1; nz = 50;
+    lx = 750; ly = 1; lz = 250;
+    [state0, models, schedule, ...
+    isFineCells, sealingFaces] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
+                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
+    vx = 0; vz = 0;
+    hybrid_folder = 'hybrid2D';
+end
 
 if useFaceConstraint
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/face_orig_large/');   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/figs/face_res_mob/'), hybrid_folder);   
 else
-    plot_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid2D/res_cap/figs/cell_orig_large/');
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/figs/cell_res_mob/'), hybrid_folder);
 end
 mkdir(plot_dir);
 
-nx = 200; ny = 1; nz = 50;
-lx = 750; ly = 1; lz = 250;
-trans_mult = useFaceConstraint*1e-4 + ~useFaceConstraint; % 1e-4
-
-useAdaptive = false;
-
-[state0, models, schedule, ...
-    isFineCells, facesZeroTrans] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
-                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
-
-sealingCells = isFineCells.sealing;
+sealingCells = isFineCells.sealingCells;
 sealingCells = any(cell2mat(sealingCells), 2);
+% -----
+sealingCells_faces = false(size(sealingFaces));
+sealingCells_faces(isFineCells.sealingCells_faces) = true;
+% -----
 wellCells = isFineCells.well;
 fineCells = sealingCells | wellCells;
 
@@ -68,24 +84,29 @@ T = model.operators.T;
 [ii, jj, kk] = gridLogicalIndices(G);
 nn = G.faces.neighbors;
 
-% Plot fine grid
+%% Plot fine grid
 figure(1);
-plotOutlinedGrid(G, W, bc, model.operators.T_all);
+%plotOutlinedGrid(G, W, bc, model.operators.T_all);
+plotWell(G, W, 'color', 'r')
 plotGrid(G, 'edgealpha', 0.2, 'facecolor', 'none')
 %plotFaceData(G, model.operators.T_all);
 
 fineCellsIdx = G.cells.indexMap(fineCells); % for plotting
+%fineCellsIdx = G.faces.neighbors(sealingCells_faces);
+%fineCellsIdx = fineCellsIdx(fineCellsIdx > 0)
 
 plotCellData(G, double(fineCells), fineCellsIdx, 'facecolor', 'green'); % requires numeric input, not logical
-view(0, 0)
+view(vx, vz)
 axis equal tight
-daspect([1, 0.1, 0.5])
+daspect([1, 0.1, 1])
 xlabel('Lateral position [m]');
-ylabel('Depth [m]');
+zlabel('Depth [m]');
 title({'Fine scale grid', 'Imposed fine cells highlighted in green'})
 
+%% More plots
 figure(2);
-plotOutlinedGrid(G, W, bc, facesZeroTrans);
+plotOutlinedGrid(G, W, bc, sealingFaces);
+plotOutlinedGrid(G, W, bc, sealingCells_faces);
 plotGrid(G, 'edgealpha', 0.2, 'facecolor', 'none')
 
 fineCellsIdx = G.cells.indexMap(fineCells); % for plotting
@@ -96,11 +117,11 @@ if ~useFaceConstraint
     caxis([min(log10(convertTo(model.rock.perm, milli*darcy))), ...
             max(log10(convertTo(model.rock.perm, milli*darcy)))])
 end
-view(0, 0)
+view(vx, vz)
 axis equal tight
-daspect([1, 0.1, 0.5])
+daspect([1, 0.1, 1])
 xlabel('Lateral position [m]');
-ylabel('Depth [m]');
+zlabel('Depth [m]');
 title('Permeability field')
 
 % Plot van Genuchten capillary pressure
@@ -110,13 +131,13 @@ pc_func = @(Sw, sne, swr, alpha, n, gamma) Hysteresis.pc_func(Sw, sne, swr, alph
 sw_func = @(Sw, sne, swr, alpha, n, gamma) Hysteresis.sw_func(Sw, sne, swr, alpha, n, gamma);
 pc_scan = Hysteresis.Genuchten(dummy_s, swMin, snr, swr, pc_func, sw_func, alpha, n, gamma_D, gamma_I);
 
-fig3 = figure(3);
-plot(1-dummy_s, Capillary.PcGas(dummy_s, swr, snr, pe_rest, 4), 'LineWidth', 1.5);
-xlabel('Water saturation');
-xlim([swr, 1]);
-title('Capillary pressure function');
-saveas(fig3, strcat(plot_dir, '/cap_pres'), 'png');
-hold off
+% fig3 = figure(3);
+% plot(1-dummy_s, Capillary.PcGas(dummy_s, swr, snr, pe_rest, 4), 'LineWidth', 1.5);
+% xlabel('Water saturation');
+% xlim([swr, 1]);
+% title('Capillary pressure function');
+% saveas(fig3, strcat(plot_dir, '/cap_pres'), 'png');
+% hold off
 
 %% Nonlinear solver
 nls = NonLinearSolver('maxIterations', 70);
@@ -147,8 +168,9 @@ states_ve_fs = convertMultiVEStates_res(model_ve, states_ve); % retrieve fine-sc
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
 [model_hybrid, model_coarse] = convertToMultiVEModel_res(model, fineCells, ...
-                                            'sealingFaces', find(facesZeroTrans), ... % same as find(model.operators.T_all == 0)
+                                            'sealingFaces', find(sealingFaces), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
+                                            'sealingCells_faces', sealingCells_faces, ...
                                             'multiplier', trans_mult, ...
                                             'sumTrans', true, ...
                                             'pe_rest', pe_rest);
@@ -164,33 +186,35 @@ state0_hybrid = upscaleState(model_hybrid, model, state0);
 figure(2);
 %plotOutlinedGrid(model_coarse.G, W, bc, T_all==0);
 plotGrid(model_coarse.G, 'edgealpha', 0.2, 'facecolor', 'none')
-view(0, 0)
+view(vx, vz)
 axis equal tight
-daspect([1, 1, 0.5])
+daspect([1, 0.1, 1])
 title('Grid for coarse model')
 
 % Plot grid 
-figure(3);
-plotOutlinedGrid(G, W, bc, facesZeroTrans);
-plotGrid(model_hybrid.G, 'edgealpha', 0.2, 'facecolor', 'none')
+f3 = figure(3);
+plotOutlinedGrid(G, W, bc, sealingFaces | sealingCells_faces);
+%plotGrid(model_hybrid.G, 'edgealpha', 0.5, 'edgecolor', 'green', 'facecolor', 'blue')
 %plotFaceData(model_hybrid.G, model_hybrid.operators.T_all);
-view(0, 0)
+view(vx, vz)
 axis equal tight
-daspect([1, 0.1, 0.5])
+daspect([1, 0.1, 1])
 title('Grid for hybrid VE model')
+saveas(f3, strcat(plot_dir, 'sealing_faces'), 'png')
 
 % Plot VE partitions on grid
 % Here we can see how VE cells exist between sealing layers and can be
 % stacked on top of each other.
-figure(4);
-plotOutlinedGrid(G, W, bc, facesZeroTrans);
+f4 = figure(4);
+plotOutlinedGrid(G, W, bc, sealingFaces | sealingCells_faces);
 plotCellData(G, model_hybrid.G.partition,'edgealpha', 0.2)
-view(0, 0)
+view(vx, vz)
 axis equal tight
-daspect([1, 1, 0.5])
+daspect([1, 0.1, 1])
 xlabel('Lateral position [m]');
-ylabel('Depth [m]');
+zlabel('Depth [m]');
 title('Partition of hybrid VE model')
+saveas(f4, strcat(plot_dir, 'hybrid_discretization'), 'png')
 
 figure(5)
 vtc = model_hybrid.operators.connections.veToFineHorizontal;
@@ -203,9 +227,9 @@ all_coarse_cells(vtc_c2) = 1;
 %all_coarse_cells(1:33) = 1;
 plotCellData(model_hybrid.G, all_coarse_cells)
 %plotCellData(model_hybrid.G, model_hybrid.G.cells.discretization);
-view(0, 0)
+view(vx, vz)
 axis equal tight
-daspect([1, 1, 0.5])
+daspect([1, 0.1, 1])
 title('VE to Fine transition regions')
 
 %% Set capillary state function
@@ -226,7 +250,7 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 states_hybrid_fs = convertMultiVEStates_res(model_hybrid, states_hybrid);
 
 %% Simulate schedule hybrid
-[states, wellSols] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+%[states_hybrid, wellSols] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
 
 %% Compute net CO2 volume in each VE column 
 % and compare with fine solution
@@ -253,14 +277,14 @@ sn_h = sn_h(idx_sort);
 diff_fh = zeros(numel(idx_new_vol)-1, 1);
 var_fh = zeros(size(diff_fh));
 for i=1:numel(idx_new_vol)-1
-    ii = idx_new_vol(i);
-    jj = idx_new_vol(i+1);
-    diff_fh(i) = median(abs(sn_h(ii:jj) - sn_f_net(ii:jj)));
-    var_fh(i) = var(abs(sn_h(ii:jj) - sn_f_net(ii:jj)));
+    iv = idx_new_vol(i);
+    jv = idx_new_vol(i+1);
+    diff_fh(i) = median(abs(sn_h(iv:jv) - sn_f_net(iv:jv)));
+    var_fh(i) = var(abs(sn_h(iv:jv) - sn_f_net(iv:jv)));
 end
 %diff_fh = abs(sn_h - sn_f_net);
 
-figure();
+f10 = figure(10);
 % Smallest volumes are fine cells, which obviously gives accurate
 % reconstruction of saturation
 plot(1:numel(diff_fh), diff_fh, 'b', 'DisplayName', 'Median')
@@ -268,12 +292,13 @@ hold on
 plot(1:numel(var_fh), var_fh, '-r', 'DisplayName', 'Variance')
 % SET VOLUME TICKS !
 xlabel('Coarse cells (increasing volume)')
-title('Absolute difference in CO2 saturation for hybrid and fine models')
+title('Absolute difference in CO2 saturation: hybrid / fine')
 legend();
 drawnow;
+saveas(f10, strcat(plot_dir, 'abs_diff_sat'), 'png')
 
 %% Plot CO2 saturation for each model
-fafa = find(facesZeroTrans);
+fafa = find(sealingFaces | sealingCells_faces);
 
 c1 = [48, 37, 255]/255;
 c2 = [0, 255, 0]/255;
@@ -282,8 +307,8 @@ cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 for i = 1:20:numel(states)
     f1 = figure(1); clf    
     plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
-    plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-    view(0, 0); colormap(cc);
+    plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
+    view(vx, vz); colormap(cc);
     axis tight off
     title(['Fine-scale saturation, step:', num2str(i)])   
     
@@ -302,28 +327,66 @@ for i = 1:20:numel(states)
 end
 
 for i = 1:20:numel(states_hybrid)
-    f1 = figure(1); clf    
+    f2 = figure(2); clf    
     plotCellData(model.G, states_hybrid_fs{i}.s(:, 2), 'edgec', 'none');
-    plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-    view(0, 0);
+    plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
+    view(vx, vz);
     colormap(cc); caxis([0, 1]);
     axis tight off
     title(['Hybrid: VE reconstructed saturation, step:', num2str(i)])
     
-    saveas(f1, sprintf(strcat(plot_dir, 'hybrid_sat_%d'), i), 'png');  
+    saveas(f2, sprintf(strcat(plot_dir, 'hybrid_sat_%d'), i), 'png');  
     
     if 0
         f2 = figure(2); clf    
         seal = ismember((1:model_hybrid.G.cells.num)', model_hybrid.G.sealingCells);
         ve = model_hybrid.G.cells.discretization > 1;
         plotCellData(model.G, model_hybrid.fluid.pcWG(states_hybrid_fs{i}.s(:,2), seal, ve), 'edgec', 'none');
-        plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
+        plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2, 'facealpha', 0)
         view(0, 0); colormap(cc); colorbar('location', 'southoutside');
         axis tight off
         title(['Hybrid capillary pressure, step:', num2str(i)])   
 
         saveas(f2, sprintf(strcat(plot_dir, 'hybrid_pc_%d'), i), 'png');
     end
+end
+%% Plot 2D section
+if run3D    
+   section_2d = (jj == 4);
+   
+   cells_2d = model.G.cells.indexMap(section_2d);
+   n_2d = unique(model.G.faces.neighbors(fafa, :));
+   cells_2d_faces = cells_2d(ismember(cells_2d, n_2d));     
+   faces_2d = gridCellFaces(model.G, cells_2d_faces);
+   faces_2d = fafa(ismember(fafa, faces_2d));
+   
+   for i=1:20:fix(2*numel(states)/3)
+       f6 = figure(6); clf
+       sf = states{i}.s(:,2);      
+       sf = sf(section_2d);
+       plotCellData(model.G, sf, cells_2d, 'edgec', 'none')
+       plotFaces(G, faces_2d, 'facec', 'w', 'linewidth', 0.5, 'facealpha', 0)
+       view(0, 0); colormap(cc); caxis([0,1]); colorbar('location', 'southoutside');
+       axis tight off    
+       pause(0.2)
+       title(['Fine saturation, step:', num2str(i)])
+       
+       %saveas(f6, sprintf(strcat(plot_dir, 'section2d_fine_sat_%d'), i), 'png');
+   end
+   
+   for i=1:20:fix(2*numel(states_hybrid)/3)
+       f7 = figure(7); clf
+       sh = states_hybrid_fs{i}.s(:,2);      
+       sh = sh(section_2d);
+       plotCellData(model.G, sh, cells_2d, 'edgec', 'none')
+       plotFaces(G, faces_2d, 'facec', 'w', 'linewidth', 0.5, 'facealpha', 0)
+       view(0, 0); colormap(cc); caxis([0,1]); colorbar('location', 'southoutside');
+       axis tight off  
+       pause(0.2)
+       title(['Hybrid saturation, step:', num2str(i)])
+       
+       %saveas(f7, sprintf(strcat(plot_dir, 'section2d_hybrid_sat_%d'), i), 'png');
+   end
 end
 
 %% Plot result at injection stop and end of simulation
@@ -341,7 +404,7 @@ xl_max = max(G.cells.centroids(:,1))*(1+1/50);
 zl_min = -max(G.cells.centroids(:,3))/50;
 zl_max = max(G.cells.centroids(:,3))*(1+1/50);
 
-fign = 6;
+fign = 8;
 for i = 1:numel(substeps)
     ss = substeps(i);
     ff = UtilFunctions.fullsizeFig(fign);
@@ -366,11 +429,14 @@ for i = 1:numel(substeps)
         end
         subplot(1, 2, 2-mod(j,2));
         plotCellData(g, s, 'EdgeColor', 'none')
-        plotOutlinedGrid(G, W, bc, facesZeroTrans);
+        %plotOutlinedGrid(G, W, bc, sealingCells_faces, 'facecolor', 'none');
+        if ~isfield(g, 'parent')
+            plotFaces(g, fafa, 'facec', 'w', 'facealpha', 0, 'linewidth', 0.3);
+        end
 
-        view(0, 0)
+        view(vx, vz)
         axis equal tight
-        daspect([1, 1, 0.5]) 
+        daspect([1, 0.1, 1]) 
         %xlim([xl_min, xl_max]);
         %zlim([zl_min, zl_max]);
         colormap(cc); caxis([0, 1])

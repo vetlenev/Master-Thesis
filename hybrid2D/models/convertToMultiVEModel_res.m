@@ -19,6 +19,10 @@ function [model_ve, model_coarse] = convertToMultiVEModel_res(model, varargin)
 %   sealingCells - List of sealing cells, the (almost) impermeable layer
 %                  delimited by sealing faces.
 %
+%   sealingCells_faces - List of sealing faces delimiting sealing cells.
+%                           Are NOT assigned transmissibility multipler,
+%                           only used for categorization of hybrid grid.
+%
 %   multiplier   - Weighting applied to sealing faces (default: zero)
 %
 %   
@@ -72,7 +76,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     else
         isFine = [];
     end
-    opt = struct('sealingFaces', [], 'sealingCells', [], ...
+    opt = struct('sealingFaces', [], 'sealingCells', [], 'sealingCells_faces', [], ...
                 'multiplier', 0, 'sumTrans', true, 'transThreshold', 0, 'pe_rest', 0);
     opt = merge_options(opt, varargin{:});
 
@@ -85,11 +89,17 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     % Find categories
     trans_category = ones(model.G.faces.num, 1);
     trans_category(trans <= opt.transThreshold) = 0;
-    if ~isempty(opt.sealingFaces)
+    % Zero category: different discretization, virtual fine cells
+    if ~isempty(opt.sealingFaces) % vertical VE trans
         trans_category(opt.sealingFaces) = 0;
     end
+    % -----
+    if ~isempty(opt.sealingCells_faces) % VE to Fine (horizontal or vertical)
+        trans_category(opt.sealingCells_faces) = 0;
+    end
+    % -----
     [categories, c_h] = findCategoriesMultiVE(G, trans_category);
-    if ~isempty(isFine)
+    if ~isempty(isFine) % internal fine -> each fine cell is its own "column"
         % Set category zero for sub-columns containing fine cells
         categories(ismember(c_h, c_h(isFine))) = 0;
     end
@@ -169,4 +179,36 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     model_ve.operators.T = model_coarse.operators.T;
     model_ve.operators.T_all = model_coarse.operators.T_all;
+    
+    % --- Add veBottom cells and connections ---
+    op = model_ve.operators;
+    isVE = model_ve.G.cells.discretization > 1;
+    veTransition = op.connections.veToFineVertical | ...
+                    op.connections.veTransitionVerticalConn & op.T > 0;        
+    veAll = op.connections.veInternalConn | op.connections.veTransitionHorizontalConn;
+    cn = op.N(veTransition, :);
+    c_vic = op.N(veAll, :);  
+   
+    for idx=1:2
+        c = cn(:,idx);
+        isVE_c = isVE(c);
+        if any(isVE_c)
+            t = model_ve.G.cells.topDepth(c);
+            T = op.connections.faceTopDepth(veTransition, idx);
+            b = model_ve.G.cells.bottomDepth(c);
+            B = op.connections.faceBottomDepth(veTransition, idx);
+            Hb = model_ve.G.cells.height(c); % to not overwrite global H
+            
+            veB = B == b & T ~= t;
+            cB = c(veB); % select correct bottom cells
+%             cb = c_vic(ismember(c_vic, cb));
+%             if ~isempty(cb)
+%                 cB = cat(2, cB, cb);
+%             end
+        end
+    end    
+    
+    model_ve.G.cells.bottomVE = cB;
+    model_ve.operators.connections.bottomVE = veB;
+    % ------------------------------------------
 end
