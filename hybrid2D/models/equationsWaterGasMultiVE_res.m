@@ -75,7 +75,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     veAll = op.connections.veInternalConn | op.connections.veTransitionHorizontalConn;
     cn = op.N(veTransition, :);
     c_vic = op.N(veAll, :);
-    cB = {};
+    cb = []; veB = [];
    
     for idx=1:2
         c = cn(:,idx);
@@ -122,6 +122,11 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
        state.vGsMax = state0.vGsMax;
        %state0.vGsMax = zeros(numel(cB), 1); 
     end
+    if ~isfield(state0, 'h_T') || ~isfield(state0, 'h_B') || ~isfield(state0, 'h')
+       state0.h_T = zeros(size(state0.sGnve)); 
+       state0.h_B = zeros(size(state0.sGnve));
+       state0.h = zeros(size(state0.sGnve));
+    end
        
     % Get cells partly residual filled and fully residual filled *from below*
     %[c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGsum); % CHANGED FROM sG to sgMax !!
@@ -134,8 +139,12 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     %state = model.setProps(state, 'sGmax', sgMax);   
     
     %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
-    [vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsMax, cB, veB, c_prf, c_mrf, c_frf, c_horz, 'r', r_NVEHorz);
+    [vW, vG, mobW, mobG, upcw, upcg, ...
+        h, h_T, h_B] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsMax, cB, veB, c_prf, c_mrf, c_frf, c_horz, 'r', r_NVEHorz);
         
+    state.h = h;
+    state.h_T = h_T;
+    state.h_B = h_B;
     %state.vGsum = max(abs(vG), state0.vGsum);   
     % ---------------------------------------- -----------
     

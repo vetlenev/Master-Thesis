@@ -1,4 +1,4 @@
-function [sG] = height2SatConvert_test(model, h_func, h_max_func, Sn, snMax, vG, Sn0, sgNVE0, ii)
+function [sG] = height2SatConvert_test(model, h_func, h_max_func, h_T, h_B, Sn, snMax, vG, ii)
     % Transformation from from plume and residual depths to coarse
     % saturations. Used for convertion from coarse to fine states.
     % Inputs:
@@ -16,9 +16,7 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, Sn, snMax, vG,
     
     p = CG.partition;
     Sn_p = Sn(p);
-    snMax_p = snMax(p);
-    Sn0_p = Sn0(p);
-    sgNVE0_p = sgNVE0(p);
+    snMax_p = snMax(p);  
     
     tt = CG.cells.topDepth(p);
     TT = CG.parent.cells.topDepth;
@@ -31,15 +29,20 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, Sn, snMax, vG,
     snr = model.fluid.krPts.g(1);
     
     % --- Standard ---    
-    h = h_func(Sn_p, snMax_p, H);
-    h_max = h_max_func(snMax_p, H);
+    %h = h_func(Sn_p, snMax_p, H);
+    %h_max = h_max_func(snMax_p, H);
+    h = h_func(p);
+    h_T = h_T(p);
+    h_B = h_B(p);
     
-    %[a_M, a_R, sG] = getGasSatFromHeight(TT, tt, BB, bb, h, h_max, swr, snr);    
+    % Works for all cells -> h_B = H for no bottom flux
+    [a_M, a_R, sG] = getGasSatFromHeightMob2(TT, tt, BB, bb, h, h_T, h_B, swr, snr);
     % -------------------
       
-    [c_VE_Not, c_VE, c_VE_Horz] = getResidualFilledCells_test(model, Sn, vG, Sn0, sgNVE0); % coarse saturation Sn, not fine saturation sG
+    %[c_VE_Not, c_VE, c_VE_Horz] = getResidualFilledCells_test(model, Sn, vG, Sn0, sgNVE0); % coarse saturation Sn, not fine saturation sG
+    c_VE_Not = []; c_VE = []; c_VE_Horz = [];
     
-    if ii == 140
+    if ii == 220
        test = 0; 
     end
        
@@ -86,9 +89,9 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, Sn, snMax, vG,
         % -------------------------------- 
     end
     
-    if ~isempty(c_VE_Mob)
-       % --- 3. NVE cells with finite mobile plume at top --- 
-    end
+%     if ~isempty(c_VE_Mob)
+%        % --- 3. NVE cells with finite mobile plume at top --- 
+%     end
     
     if ~isempty(c_VE_Horz)
         % --- 4. NVE cells with horizontal fluxes from neighbors ---

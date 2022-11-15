@@ -6,9 +6,9 @@ function [a_M, a_R, sG] = getGasSatFromHeightMob2(T, t, B, b, h, h_T, h_B, swr, 
     
     a_M = max(min((z_M - T)./H, 1), 0); % scaling factor for plume saturation
     a_RB = max(min((B - z_RB)./H, 1), 0); % changed from B - h_B to B - z_RB
-    a_RT = 1 - a_M - a_RB - min(max((B - z_RT)./H, 0), 1); % scaling factor for residual saturation
+    a_RT = 1 - a_M - min(max((B - z_RT)./H, 0), 1); % scaling factor for residual saturation
     
-    a_R = (a_RT + a_RB).*(snr > 0);
+    a_R = max(a_RT + a_RB, 0).*(snr > 0); % max to avoid potential negative saturations
     sG = a_M.*(1 - swr) + a_R.*snr; % if below residual CO2 zone, sG = 0   
     
     if nargin > 9

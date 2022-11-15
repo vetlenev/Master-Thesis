@@ -63,14 +63,18 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     sG = state_c.s(:,2);
     sG_c = sG(p);
       
-    vG = state_c.vGmax; % get max absolute co2 flux for each coarse connection
-    sG0 = state0_c.s(:,2);
-    sgNVE0 = state0_c.sGnve;
+    vG = state_c.vGsum; % get max absolute co2 flux for each coarse connection
+    %sG0 = state0_c.s(:,2);
+    %sgNVE0 = state0_c.sGnve;
        
     h_max = @(sgMax, H) H.*(sgMax./(1-swr));   
-    h = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
+    %h = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
     
-    sg = height2SatConvert_test(model, h, h_max, sG, sgMax, vG, sG0, sgNVE0, i);  
+    h = state_c.h;
+    h_T = state_c.h_T;
+    h_B = state_c.h_B;
+    
+    sg = height2SatConvert_test(model, h, h_max, h_T, h_B, sG, sgMax, vG, i);  
     % ---------------------------------------------------------------            
     
     state = state_c;
@@ -102,7 +106,8 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     % vertical flow here (captured by fine cells)
     rhow = rhow(p);
     rhog = rhog(p);
-    p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   
+    %p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   
+    p_c = getPwFromHeight(cz, t, b, h(p), h_T(p), pressure, g, rhow, rhog, swr, snr);
     % use original pressure from internal fine cells
     p_c(isFine(p)) = pressure(isFine(p));
     % use Dupuit approx in internal ve conn (WHAT ABOUT HORIZONTAL VE

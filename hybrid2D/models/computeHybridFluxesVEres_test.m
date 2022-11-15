@@ -1,4 +1,5 @@
-function [vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, vG_B, vG_B_smax, cB, veB, cellsNVE, cellsNVEMob, cellsVE, cellsNVEHorz, varargin)
+function [vW, vG, mobW, mobG, upcw, upcg, ...
+            h_global, h_T_global, h_B_global] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, vG_B, vG_B_smax, cB, veB, cellsNVE, cellsNVEMob, cellsVE, cellsNVEHorz, varargin)
 % Internal function - computes interior fluxes for the hybrid VE models
 
 %{
@@ -90,7 +91,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 %     end
     % --------------------------   
     h_T_global = h_max_global.*(snr > 0) + h_global.*(snr == 0);
-    h_B_global = zeros(size(sgMax));
+    h_B_global = H;
     
     veTransition = op.connections.veToFineVertical | ...
                     op.connections.veTransitionVerticalConn & op.T > 0;    

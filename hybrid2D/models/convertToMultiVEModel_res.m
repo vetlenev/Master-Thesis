@@ -189,6 +189,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     cn = op.N(veTransition, :);
     c_vic = op.N(veAll, :);  
    
+    cB = [];
+    veB = [];
     for idx=1:2
         c = cn(:,idx);
         isVE_c = isVE(c);
