@@ -1,4 +1,4 @@
-function [sG] = height2SatConvert_test(model, h_func, h_max_func, h_T, h_B, Sn, snMax, vG, ii)
+function [sG] = height2SatConvert_test(model, h_func, h_max_func, h_T, h_B, Sn, snMax, vG, ii, varargin)
     % Transformation from from plume and residual depths to coarse
     % saturations. Used for convertion from coarse to fine states.
     % Inputs:
@@ -10,6 +10,11 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, h_T, h_B, Sn, 
     %   veBottomNonzeroSn: boolean array indicating cells in vertical
     %                      ve transition zone, where ve is upper part and ve/fine cells lower part.
     %   Sn: Co2 saturation from COARSE grid
+%     if nargin > 9
+%         cHorz = varargin{1};
+%         hBi = varargin{2};
+%         Hi = varargin{3};
+%     end
     CG = model.G;
     op = model.operators;
     isFine = CG.cells.discretization == 1;      
@@ -35,8 +40,12 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, h_T, h_B, Sn, 
     h_T = h_T(p);
     h_B = h_B(p);
     
+    % REMEMBER TO PARTITION varargin BEFORE SENDING TO
+    % getGasSatFromHeightMob !!
+    
     % Works for all cells -> h_B = H for no bottom flux
     [a_M, a_R, sG] = getGasSatFromHeightMob2(TT, tt, BB, bb, h, h_T, h_B, swr, snr);
+    %[a_M, a_R, sG] = getGasSatFromHeightMob(TT, tt, BB, bb, h, h_T, h_B, swr, snr, varargin{:});
     % -------------------
       
     %[c_VE_Not, c_VE, c_VE_Horz] = getResidualFilledCells_test(model, Sn, vG, Sn0, sgNVE0); % coarse saturation Sn, not fine saturation sG

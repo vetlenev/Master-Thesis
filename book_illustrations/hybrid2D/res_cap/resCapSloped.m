@@ -27,7 +27,7 @@ warning('off', 'Future:Deprecation');
 % Using cell constraints, fine cells also include sealing layer
 useFaceConstraint = true;
 useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
-run3D = true;
+run3D = false;
 
 trans_mult = ~useAdaptive*(useFaceConstraint*1e-4 + ~useFaceConstraint) + useAdaptive*1e-4; % 1e-4
 
@@ -43,16 +43,16 @@ else
     nx = 200; ny = 1; nz = 50;
     lx = 750; ly = 1; lz = 250;
     [state0, models, schedule, ...
-    isFineCells, sealingFaces] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
+    isFineCells, sealingFaces] = setupHorizontalGrid(useFaceConstraint, useAdaptive, ...
                                                     [nx,ny,nz], [lx,ly,lz], trans_mult);
     vx = 0; vz = 0;
     hybrid_folder = 'hybrid2D';
 end
 
 if useFaceConstraint
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/figs/face_res_mob/'), hybrid_folder);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/figs/face_veHorz/'), hybrid_folder);   
 else
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/figs/cell_res_mob/'), hybrid_folder);
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/figs/cell_veHorz/'), hybrid_folder);
 end
 mkdir(plot_dir);
 
@@ -153,7 +153,7 @@ problem = packSimulationProblem(state0, model_fine, schedule, ...
 % Simulate and get the output
 %simulatePackedProblem(problem);
 %[ws, states, report] = getPackedSimulatorOutput(problem);
-[states, ws] = simulateScheduleAD(state0, model_fine, schedule, 'NonLinearSolver', nls);
+[ws, states] = simulateScheduleAD(state0, model_fine, schedule, 'NonLinearSolver', nls);
 
 %% Simple VE.
 % Simulate standard VE model, not accounting for sealing faces.
@@ -223,14 +223,14 @@ title('Partition of hybrid VE model')
 saveas(f4, strcat(plot_dir, 'hybrid_discretization'), 'png')
 
 figure(5)
-vtc = model_hybrid.operators.connections.veToFineHorizontal;
+vtc = model_hybrid.operators.connections.veTransitionHorizontalConn;
 vtc_c1 = model_hybrid.operators.N(vtc, 1);
 vtc_c2 = model_hybrid.operators.N(vtc, 2);
 plotGrid(model_hybrid.G, 'edgealpha', 0.2, 'facecolor', 'none')
 all_coarse_cells = zeros(model_hybrid.G.cells.num, 1);
-all_coarse_cells(vtc_c1) = 1;
-all_coarse_cells(vtc_c2) = 1;
-%all_coarse_cells(1:33) = 1;
+%all_coarse_cells(vtc_c1) = 1;
+%all_coarse_cells(vtc_c2) = 1;
+all_coarse_cells(161) = 1;
 plotCellData(model_hybrid.G, all_coarse_cells)
 %plotCellData(model_hybrid.G, model_hybrid.G.cells.discretization);
 view(vx, vz)
@@ -253,7 +253,7 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 [ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
 
 %% Simulate schedule hybrid
-[states_hybrid, ws_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
 
 %% Reconstruct fine states
 %states_hybrid_fs = convertMultiVEStates_res(model_hybrid, states_hybrid);
@@ -311,27 +311,27 @@ c1 = [48, 37, 255]/255;
 c2 = [0, 255, 0]/255;
 cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 
-for i = 1:20:numel(states)
-    f1 = figure(1); clf    
-    plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
-    plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
-    view(vx, vz); colormap(cc);
-    axis tight off
-    title(['Fine-scale saturation, step:', num2str(i)])   
-    
-    saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
-    
-    if 0
-        f2 = figure(2); clf    
-        plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
-        plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-        view(0, 0); colormap(cc); 
-        axis tight off
-        title(['Fine-scale capillary pressure, step:', num2str(i)])   
-
-        saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
-    end
-end
+% for i = 1:20:numel(states)
+%     f1 = figure(1); clf    
+%     plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
+%     plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
+%     view(vx, vz); colormap(cc);
+%     axis tight off
+%     title(['Fine-scale saturation, step:', num2str(i)])   
+%     
+%     saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
+%     
+%     if 0
+%         f2 = figure(2); clf    
+%         plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
+%         plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
+%         view(0, 0); colormap(cc); 
+%         axis tight off
+%         title(['Fine-scale capillary pressure, step:', num2str(i)])   
+% 
+%         saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
+%     end
+% end
 
 for i = 1:20:numel(states_hybrid)
     f2 = figure(2); clf    

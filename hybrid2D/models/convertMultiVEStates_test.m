@@ -74,7 +74,11 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     h_T = state_c.h_T;
     h_B = state_c.h_B;
     
-    sg = height2SatConvert_test(model, h, h_max, h_T, h_B, sG, sgMax, vG, i);  
+    cHorz = state_c.cVEHorz;
+    hBi = state_c.hBi;
+    Hi = state_c.Hi;
+    
+    sg = height2SatConvert_test(model, h, h_max, h_T, h_B, sG, sgMax, vG, i);%, cHorz, hBi, Hi);  
     % ---------------------------------------------------------------            
     
     state = state_c;
