@@ -42,17 +42,21 @@ allSealingFaces = []; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
 allSealingCells_faces = []; % bounding faces for sealing cells
 
-k_pos = [nz/5, nz/4; ...
-            nz/4, nz/3; ...
-            nz/3, nz/2; ...
-            nz/3, nz/2; ...
-            nz/2, 3*nz/4];
-        
-i_range = [3*nx/5, 4*nx/5; ...
-            nx/5, nx/3; ...
-            nx/5, nx/2; ...
-            3*nx/5, 4*nx/5; ...
-            3*nx/5, nx];
+% k_pos = [nz/5, nz/5+2; ...
+%             nz/5, nz/5+1; ...
+%             nz/3, nz/3+1; ...
+%             2*nz/3, 2*nz/3+2; ...
+%             4*nz/5, 4*nz/5+2];
+k_pos = [nz/2, nz/2+2; ...
+            nz/2, nz/2+2];
+
+% i_range = [3*nx/5, 4*nx/5; ...
+%             nx/5, nx/3; ...
+%             nx/5, nx/2; ...
+%             3*nx/5, 4*nx/5; ...
+%             3*nx/5, nx];
+i_range = [nx/3, nx; ...
+            0, nx/3-nx/40];
 
 if adaptiveSealing % Assign faces or cells based on thickness
     dz_eps = nz/15; % thickness threshold
@@ -121,16 +125,18 @@ G = computeGeometry(G);
 
 rock = makeRock(G, perm, 0.3);
 % add compressibility ??
+swr = 0.1;
+snr = 0.1;
 fluid = initSimpleADIFluid('phases', 'WG', ...
                            'mu', [8e-4 3e-5]*Pascal*second,...
                            'rho', [1100 700].* kilogram/meter^3, ... % simulate supercritical CO2
-                           'n', [2,2], ...
-                           'smin', [0, 0], ...
+                           'n', [1,1], ... % [2,2] !!
+                           'smin', [swr, snr], ...
                            'pRef', 100*barsa);
 
-tot_time = 1000*year;
-inj_stop = 0.05;
-pv_rate = 0.2;
+tot_time = 400*year;
+inj_stop = 0.1;
+pv_rate = 0.1;
 
 pv = poreVolume(G, rock);
 inj_rate = pv_rate*sum(pv)/(inj_stop*tot_time); % inject pv_rate of total pore volume over injection time
@@ -144,11 +150,17 @@ W = verticalWell([], G, rock, nx, 1, nz, ...
     'val', inj_rate, ... % volumetric injection rate
     'comp_i', [0 1]);    % inject CO2, not water
 
-%bc = pside(bc, G, 'East', fluid.rhoWS*unique(z)*norm(gravity), 'sat', [1, 0]);
+% bc = pside(bc, G, 'West', 100*barsa, 'sat', [1, 0]);
+% bc = pside(bc, G, 'East', 100*barsa, 'sat', [1, 0]);
+% bc.value = bc.value + fluid.rhoWS.*G.faces.centroids(bc.face, 3)*norm(gravity);
 bf = boundaryFaces(G);
 bfx = G.faces.centroids(bf, 1);
-east_faces = bf(bfx == max(bfx));
-bc = addBC(bc, east_faces, 'pressure', fluid.rhoWS*unique(z)*norm(gravity), 'sat', [1,0]);
+bfz = G.faces.centroids(bf, 3);
+z_stop = bfz >= 0;
+west_faces_top = bf(bfx == min(bfx) & z_stop);
+%east_faces_top = bf(bfx == max(bfx) & z_stop);
+bc = addBC(bc, west_faces_top, 'pressure', fluid.rhoWS*bfz(bfx == min(bfx) & z_stop)*norm(gravity), 'sat', [1,0]);
+%bc = addBC(bc, east_faces_top, 'pressure', fluid.rhoWS*bfz(bfx == max(bfx) & z_stop)*norm(gravity), 'sat', [1,0]);
 
 horzWellDistRate = 0.1; % ratio of total horizontal length considered "close" to well
 vertWellDistRate = 0.1;
@@ -190,11 +202,11 @@ model = TwoPhaseWaterGasModel(G, rock, fluid, 1, 1, 'useCNVConvergence', true);
 model_fine = model;
 
 % Apply transmissibility multiplier to sealing faces
-if ~isempty(sealing_faces)
+if ~isempty(allSealingFaces)
     transMult = false(G.faces.num, 1);
     
     map = false(G.faces.num, 1);
-    map(sealing_faces) = true; 
+    map(allSealingFaces) = true; 
         
     transMult(map) = true;
     T(transMult) = T(transMult).*trans_multiplier;

@@ -58,7 +58,7 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     sG = state_c.s(:,2);
     sG_c = sG(p);
       
-    vG = state_c.vGmax; % get max absolute co2 flux for each coarse connection
+    vG = state_c.vGsum; % get max absolute co2 flux for each coarse connection
        
     h_max_func = @(sgMax, H) H.*(sgMax./(1-swr));   
     h_func = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  

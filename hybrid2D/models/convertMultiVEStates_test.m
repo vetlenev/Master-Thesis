@@ -74,11 +74,16 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     h_T = state_c.h_T;
     h_B = state_c.h_B;
     
-    cHorz = state_c.cVEHorz;
-    hBi = state_c.hBi;
+    cHorz = state_c.cHorz;
+    hHi = state_c.hHi;
     Hi = state_c.Hi;
     
-    sg = height2SatConvert_test(model, h, h_max, h_T, h_B, sG, sgMax, vG, i);%, cHorz, hBi, Hi);  
+    cBottomHorz = state_c.cBottomHorz;
+    hBHi = state_c.hBHi;
+    BHi = state_c.BHi;
+    
+    %i = 200;
+    sg = height2SatConvert_test(model, h, h_max, h_T, h_B, sG, sgMax, vG, i, cHorz, cBottomHorz, hHi, hBHi, Hi, BHi);  
     % ---------------------------------------------------------------            
     
     state = state_c;
@@ -104,10 +109,7 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     %state_c.pressure(~isFine) = state_c.pressure(~isFine) - g.*rhow(~isFine).*CG.cells.height(~isFine)/2;
     
     cz = (T + B)/2;
-    pressure = state_c.pressure(p); % fine-sclae pressures initially defined at top
-    % WHY USE THIS FUNCTION TO RECONSTRUCT PRESSURE IN INTERNAL VE COLUMNS? DOESN'T DUPUIT ASSUMPTION HOLD HERE?  
-    % Dupuit not valid only for veToFine and veVerticalConn -> significant
-    % vertical flow here (captured by fine cells)
+    pressure = state_c.pressure(p); % fine-sclae pressures initially defined at top    
     rhow = rhow(p);
     rhog = rhog(p);
     %p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   

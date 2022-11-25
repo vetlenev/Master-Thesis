@@ -40,19 +40,20 @@ function [sG] = height2SatConvert_test(model, h_func, h_max_func, h_T, h_B, Sn, 
     h_T = h_T(p);
     h_B = h_B(p);
     
-    % REMEMBER TO PARTITION varargin BEFORE SENDING TO
+    % varargin should already be partitioned before sending to
     % getGasSatFromHeightMob !!
+%     varargin{1} = find(ismember(p, varargin{1}));
     
     % Works for all cells -> h_B = H for no bottom flux
-    [a_M, a_R, sG] = getGasSatFromHeightMob2(TT, tt, BB, bb, h, h_T, h_B, swr, snr);
-    %[a_M, a_R, sG] = getGasSatFromHeightMob(TT, tt, BB, bb, h, h_T, h_B, swr, snr, varargin{:});
+    %[a_M, a_R, sG] = getGasSatFromHeightMob2(TT, tt, BB, bb, h, h_T, h_B, swr, snr);
+    [a_M, a_R, sG] = getGasSatFromHeightMob(model, TT, tt, BB, bb, h, h_T, h_B, swr, snr, varargin{:});
     % -------------------
       
     %[c_VE_Not, c_VE, c_VE_Horz] = getResidualFilledCells_test(model, Sn, vG, Sn0, sgNVE0); % coarse saturation Sn, not fine saturation sG
     c_VE_Not = []; c_VE = []; c_VE_Horz = [];
     
-    if ii == 220
-       test = 0; 
+    if ii == 700
+       test = 0;  
     end
        
     if ~isempty(c_VE_Not)
