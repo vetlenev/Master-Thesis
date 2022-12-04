@@ -22,6 +22,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                  'reverseMode' , false       , ...
                  'resOnly'     , false       , ...
                  'iteration'   , -1          , ...
+                 'schedule', [], ...
                  'stepOptions' , []); % compatibility only
     opt = merge_options(opt, varargin{:});
     
@@ -29,7 +30,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     op = model.operators;
     G = model.G;
     p = G.partition;
-    f = model.fluid;
+    f = model.fluid;   
     
     % Extract current and previous values of all variables to solve for
     [pW, sG, wellSol] = model.getProps(state, 'pressure', 'sg', 'wellsol');   
@@ -63,7 +64,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     [muW, muG] = deal(mu{:});
     [bW0, bG0] = deal(b0{:});
     
-    trans = model.getProps(state, 'Transmissibility');
+    trans = model.getProps(state, 'Transmissibility');       
+    
     sgMax = model.getProps(state, 'sGmax');    
 
     g = norm(model.gravity);
@@ -155,25 +157,32 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
        
     % Get cells partly residual filled and fully residual filled *from below*
-    [c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGsum); % CHANGED FROM sG to sgMax !!
+    %[c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGsum); % CHANGED FROM sG to sgMax !!
     %[c_prf, c_mrf, c_frf] = getResidualFilledCellsMob(model, pv0, bG0, sG0, sgMax, state0.vGsum); % [partly residual filled, mobile residual filled, fully residual filled]    
     
     %sg = value(sG); % to avoid ADI/double warning when using sG for caluclations   
-    [vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
-    %[vW, vG, mobW, mobG, upcw, upcg, ...
-    %    h, h_T, h_B, hHi_state, hBHi_state] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsMax, cB, veB, cH, veH);
+    %[vW, vG, mobW, mobG, upcw, upcg, pG, ...
+    %    h, h_T, h_B, hHi_state, hBHi_state] = computeHybridFluxesVEboundary(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsMax, cB, veB, cH, veH);
+    %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
+    [vW, vG, mobW, mobG, upcw, upcg, ...
+        h, h_T, h_B, cellsBH, hHi_state, hBHi_state] = computeHybridFluxesVEres_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsMax, cB, veB, cH, veH);
             
-%     state.h = h;
-%     state.h_T = h_T;
-%     state.h_B = h_B;
-%     
-%     state.cHorz = hHi_state{1}; % VE horizontal transition cells fulfilling T ~= t
-%     state.hHi = hHi_state{2}; % depth of (top of) bottom plume in each virtual VE cell
-%     state.Hi = hHi_state{3}; % depth of bottom of associated virtual VE cells
-%     
-%     state.cBottomHorz = hBHi_state{1};
-%     state.hBHi = hBHi_state{2};
-%     state.BHi = hBHi_state{3};
+    state.h = h;
+    state.h_T = h_T;
+    state.h_B = h_B;
+    % NB: Change to only append store cells ONCE (no need to store the same
+    % cells for every state.
+    if ~isfield(state0, 'cBottom') % only append static cells to one state to avoid redundant stores in later states
+        state.cBottom = cellsBH{1}; state.fBottom = cellsBH{4}; % bottom cells; bottom connections
+        state.cHorz = cellsBH{2}; state.fHorz = cellsBH{5}; % VE horizontal transition cells fulfilling T ~= t   
+        state.cBottomHorz = cellsBH{3}; state.fBottomHorz = cellsBH{6};
+    end
+    
+    state.hHi = hHi_state{1}; % depth of (top of) bottom plume in each virtual VE cell
+    state.Hi = hHi_state{2}; % depth of bottom of associated virtual VE cells
+        
+    state.hBHi = hBHi_state{1};
+    state.BHi = hBHi_state{2};
     
     %state.vGsum = max(abs(vG), state0.vGsum);   
     % ---------------------------------------- -----------
@@ -184,28 +193,33 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     state.vGsum = state0.vGsum + bGvG.*dt; % abs-value: assume all fluxes through bottom interface is directed upwards
        
     % --- BOTTOM flux summed up to time step of first occurence of current sgMax
-%     veBottom = ismember(op.N, c_bottom, 'rows');
-%     vGsum_bottom = value(state.vGsum(veBottom));
-%     vGsMax_bottom = state0.vGsMax(veBottom); % NB: important to choose from earlier state
-% 
-%     veB_global = find(veBottom);
-%     veB_global = veB_global(veB); % global index connection (veB is local index connection for veToFine and veVertical transition connections)
-%     state.vGsMax(veB_global) = vGsMax_bottom(veB).*(value(sG(cB)) < sgMax(cB)) + ... % choose stored summed bottom flux
-%                                 vGsum_bottom(veB).*(value(sG(cB)) >= sgMax(cB)); % choose current summed bottom flux
-%                             
+    veBottom = ismember(op.N, c_bottom, 'rows');
+    vGsum_bottom = value(state.vGsum(veBottom));
+    vGsMax_bottom = state0.vGsMax(veBottom); % NB: important to choose from earlier state
+
+    veB_global = find(veBottom);
+    veB_global = veB_global(veB); % global index connection (veB is local index connection for veToFine and veVertical transition connections)
+    state.vGsMax(veB_global) = vGsMax_bottom(veB).*(value(sG(cB)) < sgMax(cB)) + ... % choose stored summed bottom flux
+                                vGsum_bottom(veB).*(value(sG(cB)) >= sgMax(cB)); % choose current summed bottom flux
+                            
     % --- HORIZONTAL fluxes summed up to time step of first occurence of current sgMax
-%     veHorz = ismember(op.N, c_horz, 'rows');                        
-%     vGsum_horz = value(state.vGsum(veBottom)); % Choose current summed flux (since sG exceeds sMax)
-%     vGsMax_horz = state0.vGsMax(veBottom); % Choose from earlier state (point when sMax was reached)
-% 
-%     veH_global = find(veHorz);
-%     veH = [veH{1}; veH{2}];
-%     cH = [cH{1}; cH{2}];
-%     veH_global = veH_global(veH); % global index connection (veB is local index connection for veToFine and veVertical transition connections)
-%     state.vGsMax(veH_global) = vGsMax_horz(veH).*(value(sG(cH)) < sgMax(cH)) + ... % choose stored summed bottom flux
-%                                 vGsum_horz(veH).*(value(sG(cH)) >= sgMax(cH)); % choose current summed bottom flux
-%                             
+    veHorz = ismember(op.N, c_horz, 'rows');                        
+    %vGsum_horz = value(state.vGsum(veBottom)); % Choose current summed flux (since sG exceeds sMax)
+    %vGsMax_horz = state0.vGsMax(veBottom); % Choose from earlier state (point when sMax was reached)
+    vGsum_horz = value(state.vGsum(veHorz));
+    vGsMax_horz = state0.vGsMax(veHorz);
+
+    veH_global = find(veHorz);
+    veH = [veH{1}; veH{2}];
+    cH = [cH{1}; cH{2}];
+    veH_global = veH_global(veH); % global index connection (veB is local index connection for veToFine and veVertical transition connections)
+    state.vGsMax(veH_global) = vGsMax_horz(veH).*(value(sG(cH)) < sgMax(cH)) + ... % choose stored summed bottom flux
+                                vGsum_horz(veH).*(value(sG(cH)) >= sgMax(cH)); % choose current summed bottom flux
+                            
     % ---------------
+    
+    % --- SPECIFIC FOR BOUNDARY TREATMENT ---   
+    % ---------------------------------------
     
     if model.outputFluxes
         state = model.storeFluxes(state, vW, [], vG);

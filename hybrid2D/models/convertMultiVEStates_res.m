@@ -1,4 +1,4 @@
-function states = convertMultiVEStates_res(model, states_c)
+function states = convertMultiVEStates_res(model_c, model_f, states_c, states_f, varargin)
 %Undocumented Utility Function
 
 %{
@@ -18,27 +18,30 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with MRST.  If not, see <http://www.gnu.org/licenses/>.
-%}
-
+%}   
+    
     ns = numel(states_c);
     states = cell(ns, 1);    
     states0_sGmax = states_c{1}.sGmax;   
-    sgMax = states0_sGmax(model.G.partition);
+    sgMax = states0_sGmax(model_c.G.partition);
     snMaxVE_bottom = 0;
     vG_any = 0; % only CO2 flux at initial state is at well
     
     for i = 1:ns        
-        [states{i}, sgMax, snMaxVE_bottom, vG_any] = convertState(model, states_c{i}, sgMax, snMaxVE_bottom, vG_any, i);        
+        [states{i}, sgMax, snMaxVE_bottom, vG_any] = convertState(model_c, model_f, states_c{i}, states_f{i}, sgMax, snMaxVE_bottom, vG_any, i, varargin{:});        
         %states0_sGmax = states{i}.sGmax; % update historically max fine-scale sat
         % what about converting flux?
     end
 end
 
-function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, sgMax_fine, snMaxVE_bottom, vG_any, i)
-    f = model.fluid;
-    op = model.operators;
+function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model_c, model_f, state_c, state_f, sgMax_fine, snMaxVE_bottom, vG_any, i, varargin)
+    opt = struct('convert_flux', false, 'schedule', []);
+    opt = merge_options(opt, varargin{:});
+    
+    f = model_c.fluid;
+    op = model_c.operators;
 
-    CG = model.G;
+    CG = model_c.G;
     p = CG.partition;
     
     all_cells = ismember(p, (1:CG.cells.num)');    
@@ -50,8 +53,8 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     H = CG.cells.height(p); 
    
     % --- RESIDUAL SATURATION ---         
-    swr = model.fluid.krPts.w(1);
-    snr = model.fluid.krPts.g(1);
+    swr = model_c.fluid.krPts.w(1);
+    snr = model_c.fluid.krPts.g(1);
 
     sgMax = state_c.sGmax;
     sgMax_c = sgMax(p); % max saturation from hybrid - not updated since coarse states already solved for
@@ -63,26 +66,26 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     h_max_func = @(sgMax, H) H.*(sgMax./(1-swr));   
     h_func = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
     
-    [sg, h, h_max, cellsNVE] = height2SatConvert(model, h_func, h_max_func, sG, sgMax, vG, i);
+    [sg, h, h_max, cellsNVE] = height2SatConvert(model_c, h_func, h_max_func, sG, sgMax, vG, i);
     % Returned h and h_max are for parent grid, same value copied for all
     % fine cells of a VE column.
     cellsNVE = ismember(p, cellsNVE);
     % ---------------------------------------------------------------            
     
     state = state_c;
-    g = norm(model.gravity);
+    g = norm(model_c.gravity);
     if isfield(state_c, 'rho')
         rhow = state_c.rho(p, 1);
         rhog = state_c.rho(p, 2);
     else
-        if isprop(model, 'EOSModel')
-            rhow = model.fluid.rhoOS;
+        if isprop(model_c, 'EOSModel')
+            rhow = model_c.fluid.rhoOS;
         else
-            rhow = model.fluid.rhoWS;
+            rhow = model_c.fluid.rhoWS;
         end
-        rhog = model.fluid.rhoGS;
-        rhog = repmat(rhog, model.G.cells.num, 1);
-        rhow = repmat(rhow, model.G.cells.num, 1);
+        rhog = model_c.fluid.rhoGS;
+        rhog = repmat(rhog, model_c.G.cells.num, 1);
+        rhow = repmat(rhow, model_c.G.cells.num, 1);
     end
     isFine = CG.cells.discretization == 1;
     
@@ -122,36 +125,86 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, state_c, s
     state.pressure = p_c;    
     
     % -------- Reconstruct fluxes ------------
-%     vW_c = state_c.flux(:,1); % do we need this?
-%     vG_c = state_c.flux(:,2);
-%     % apply relperm function on reconstructed saturations
-%     krW = f.krW(1-sG); 
-%     krG = f.krG(sG);
-%     mobW = krW./f.muW;
-%     mobG = krG./f.muG;
-%        
-%     z = (T + B)/2; % midpoint of each cell in parent grid
-%     dpW = op.Grad(p_c) - rhow.*g.*op.Grad(z);
-%     
-%     sealingCells = CG.sealingCells(p); % sealing cells for parent grid
-%     all_cells = (1:CG.parent.cells.num)';
-%     n_sealing = ismember(all_cells, sealingCells);
-%     pG = p_c + f.pcWG(sG, n_sealing, ones(CG.parent.cells.num, 1)); % all cells treated as fine
-%     dpG = op.Grad(pG) - rhog.*g.*op.Grad(z);
-%     
-%     % --- TODO ---
-%     % Reconstruct trans over fine faces
-%     trans = 0;
-%     % ------------
-%     
-%     upcw  = (value(dpW)<=0);
-%     vW = -op.faceUpstr(upcw, mobW) .* trans .* dpW;
-%     upcg  = (value(dpG)<=0);
-%     vG = -op.faceUpstr(upcg, mobG) .* trans .* dpG;
-%     
-%     % ---------------------------------------
-%     
-    if isprop(model, 'EOSModel')
+    if opt.convert_flux
+        vW = zeros(CG.parent.faces.num, 1);
+        vG = zeros(CG.parent.faces.num, 1);
+        % apply relperm function on reconstructed saturations
+        krW = f.krW(1-sG); 
+        krG = f.krG(sG);
+        mobW = krW./f.muW;
+        mobG = krG./f.muG;
+
+        z = (T + B)/2; % midpoint of each cell in parent grid
+        dpW = op.Grad(p_c) - rhow.*g.*op.Grad(z);
+
+        sealingCells = CG.sealingCells(p); % sealing cells for parent grid
+        all_cells = (1:CG.parent.cells.num)';
+        n_sealing = ismember(all_cells, sealingCells);
+        pcap = f.pcWG(sG, n_sealing);
+        pG = p_c + pcap; % all cells treated as fine
+        dpG = op.Grad(pG) - rhog.*g.*op.Grad(z);
+
+        % Reconstruct trans over fine faces
+        trans_c = model_c.operators.T_all;
+        trans_p = trans_c(CG.faces.fconn);
+        trans_int = trans_p(bf); % coarse trans uniformly distributed to associated fine cells               
+
+        upcw  = (value(dpW)<=0);       
+        upcg  = (value(dpG)<=0);
+        
+        % parent faces
+        faces = (1:CG.parent.faces.num)';
+        bf = boundaryFaces(CG.parent); % boundary faces of parent gris
+        ifaces = faces(~ismember(faces, bf)); % interior faces of parent grid
+        open_bf = opt.schedule.control(1).face;
+        closed_bf = bf(~ismember(bf, open_bf));
+        % map from faces to cells
+        if2c = CG.parent.faces.neighbors(ifaces, :);
+        bf2c = CG.parent.faces.neighbors(bf, :);
+        bf2c = bf2c(bf2c ~= 0); % choose cell at boundary but inside grid    
+        obf2c = CG.parent.faces.neighbors(open_bf, :);
+        obf2c = obf2c(obf2c ~= 0);
+        % assign fluxes for interior faces
+        vW(ifaces) = -op.faceUpstr(upcw, mobW(if2c)) .* trans_int .* dpW(ifaces);
+        vG(ifaces) = -op.faceUpstr(upcg, mobG(if2c)) .* trans_int .* dpG(ifaces); 
+        
+        % Reconstruct for exterior faces
+        trans_c = model_c.operators.T_all;
+        trans_p = trans_c(CG.faces.fconn);
+        trans_ext = trans_p(bf); % transmissibility for boundary faces (uniform values by partitioning of fine grid)
+        
+        open_pW = opt.schedule.control(1).value;       
+        dpw = op.Grad(pW);
+        dpw(open_bf) = open_pW - pW(obf2c); % boundary face water pressure - boundary cell water pressure
+        dpw(closed_bf) = 0;
+        open_pG = open_pW + pcap(obf2c); % add capillary pressure at open boundary
+        dpg = op.Grad(pG);
+        dpg(open_bf) = open_pG - pG(obf2c); % boundary face gas pressure - boundary cell gas pressure
+        dpg(closed_bf) = 0; 
+        
+        z_cell = (CG.parent.cells.bottomDepth + CG.parent.cells.topDepth)/2;
+        gdz = g.*z_cell;
+        z_face = CG.parent.faces.centroids(:,3);    
+        %gdz(open_bf) = g.*(z_face(open_bf) - z_cell(obf2c));    
+        gdz(bf) = g.*(z_face(bf) - z_cell(bf2c));
+        %dpG   = op.Grad(pG) - rhoGf .* gdz_g;
+        dpG = dpg(bf) - rhoGf.*gdz(bf);
+        dpW = dpw(bf) - rhoWf.*gdz(bf);
+        
+        vG(bf) = mobG(bf2c).*trans_ext.*dpG; % bf2c is always upwind cell for half-faces
+        vG(closed_bf) = 0;
+        vW(bf) = mobW(bf2c).*trans_ext.*dpW;
+        vW(closed_bf) = 0;
+                
+        %cts = rldecode((1:CG.faces.num)', diff(CG.faces.connPos));
+        %Tc = accumarray(cts, model_f.operators.T_all(CG.faces.fconn));
+        state.flux = zeros(CG.parent.faces.num, 2);
+        state.flux(:,1) = vW;
+        state.flux(:,2) = vG;
+    end
+    % ---------------------------------------
+    
+    if isprop(model_c, 'EOSModel')
         state.T = state.T(p);
         state.L = state.L(p);
         state.K = state.K(p, :);

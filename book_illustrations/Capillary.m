@@ -43,15 +43,15 @@ classdef Capillary
         else % hybrid grid           
             n_sealing = n_cells(ismember(n_cells, G.sealingCells));
             idx_diff = setdiff(n_cells, n_sealing);
-            is_sealing = ismember(n_cells, idx_diff);
-            region_idx = {n_cells(is_sealing), n_sealing};   
+            not_sealing = ismember(n_cells, idx_diff);
+            region_idx = {n_cells(not_sealing), n_sealing};   
             
             if numel(value(S)) == G.cells.num
                 sG = S; % evaluated for entire domain
             else % only a subset of cells evaluated -> 
                 sG = zeros(G.cells.num, 1);                    
-                sG(region_idx{1}) = value(S(find(is_sealing)));
-                sG(region_idx{2}) = value(S(find(~is_sealing)));                
+                sG(region_idx{1}) = value(S(find(not_sealing))); % high-permeable regions
+                sG(region_idx{2}) = value(S(find(~not_sealing))); % low-permeable regions
             end
             
             pc = interpReg(region_table, sG, region_idx);

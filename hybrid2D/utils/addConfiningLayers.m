@@ -1,4 +1,4 @@
-function [faces, sealingCells] = addConfiningLayers(G, varargin)
+function [faces, bottom_faces, sealingCells] = addConfiningLayers(G, varargin)
 % Add a single confining layer, represented as faces or cells.
 % All cells constituting the confining layer must be direct neighbors.
 
@@ -64,6 +64,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         tmp = rand(size(faces));
         faces = faces(tmp < opt.fraction);
     end
+    bottom_faces = [];
     
     if strcmp(opt.type, 'cells')
 %         z_faces = G.faces.centroids(faces, 3);
@@ -87,7 +88,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
             sealing_N(bottom_neighbors, 2) = nan; % only remove bottom neighbor, retain layer right above sealing face
         else                
             sealing_N(top_neighbors, 1) = nan; % get correct sealing faces         
-            sealing_N(bottom_neighbors, 2) = nan;           
+            sealing_N(bottom_neighbors, 2) = nan; % remove cell layer below bottom sealing face         
         end
         
         sealing_N = sealing_N(~isnan(sealing_N));
@@ -97,7 +98,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         % find bounding sealing faces
         sealingCellsIdx = G.cells.indexMap(sealingCells);    
 
-        faces = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx, 'full_dim', opt.full_dim);
+        [faces, bottom_faces] = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx, 'full_dim', opt.full_dim);
     end
         
 end

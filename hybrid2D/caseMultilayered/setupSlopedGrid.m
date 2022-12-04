@@ -69,13 +69,13 @@ if adaptiveSealing % Assign faces or cells based on thickness
         if abs(k_range(1) - k_range(2)) < dz_eps % asssign sealing face
             sealing_type = 'faces';
             k_range = [ceil(k_pos(i,2))-1, ceil(k_pos(i,2))]; % set to one cell height thick
-            [sealing_faces, sealingCells] = addConfiningLayers(G0, 'type', sealing_type, 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);
+            [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', sealing_type, 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);
             
             allSealingFaces = [allSealingFaces; sealing_faces];
             %allSealingCells = cat(2, allSealingCells, sealingCells);
         else
             sealing_type = 'cells';
-            [sealing_faces, sealingCells] = addConfiningLayers(G0, 'type', sealing_type, 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);
+            [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', sealing_type, 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);
             
             allSealingCells_faces = [allSealingCells_faces; sealing_faces];
             allSealingCells = cat(2, allSealingCells, sealingCells);
@@ -91,7 +91,7 @@ else % Manually assign faces or cells
         for i=1:size(k_pos,1)
             %k_range = [floor(k_pos(i,1)), ceil(k_pos(i,2))]; % +1
             k_range = [ceil(k_pos(i,2))-1, ceil(k_pos(i,2))];
-            [sealing_faces, sealingCells] = addConfiningLayers(G0, 'type', 'faces', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);                    
+            [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', 'faces', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);                    
             allSealingFaces = [allSealingFaces; sealing_faces];
             allSealingCells = cat(2, allSealingCells, sealingCells);      
         end
@@ -99,7 +99,7 @@ else % Manually assign faces or cells
     else % cell constraints    
         for i=1:size(k_pos,1)
             k_range = [floor(k_pos(i,1)), ceil(k_pos(i,2))];
-            [sealing_faces, sealingCells] = addConfiningLayers(G0, 'type', 'cells', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);       
+            [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', 'cells', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);       
 
             %allSealingFaces = [allSealingFaces; sealing_faces];     
             allSealingCells_faces = [allSealingCells_faces; sealing_faces];
@@ -193,8 +193,8 @@ if ~isempty(bc)
     nearWell(sum(G.faces.neighbors(bc.face, :), 2)) = true;
 end
    
-nsteps_after_inj = 300;
-dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/300, 10);
+nsteps_after_inj = 200;
+dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/250, 10);
 %dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
 dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/400, 10)];
 

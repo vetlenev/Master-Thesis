@@ -15,7 +15,7 @@ my_seed = 2234;
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
-pe_sealing = 4*10^4*Pascal; %5*10^4*Pascal; % higher entry pressure in aquitards
+pe_sealing = 4*10^4*Pascal; %4*10^4*Pascal; % higher entry pressure in aquitards
 pe_rest = 5*10^3*Pascal;%5*10^3*Pascal;
 p_cap = 5*pe_sealing;
 
@@ -28,13 +28,14 @@ warning('off', 'Future:Deprecation');
 useFaceConstraint = false;
 useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
 run3D = false;
+sloped = false;
 
 trans_mult = 1e-5; % 1e-4
 trans_mult = ~useAdaptive*(useFaceConstraint*trans_mult + ~useFaceConstraint) ...
                 + useAdaptive*trans_mult;
 
 if run3D
-    nx = 100; ny = 8; nz = 50;
+    nx = 80; ny = 8; nz = 40; % 100, 8, 50
 	lx = 500; ly = 25; lz = 250;
     [state0, models, schedule, ...
     isFineCells, sealingFaces] = setupSlopedGrid3D(useFaceConstraint, useAdaptive, ...
@@ -42,19 +43,33 @@ if run3D
     vx = 30; vz = 20; % view angles
     hybrid_folder = 'hybrid3D';
 else
-    nx = 200; ny = 1; nz = 50;
+    nx = 75; ny = 1; nz = 50; % nz = 50
     lx = 750; ly = 1; lz = 250;
-    [state0, models, schedule, ...
-    isFineCells, sealingFaces] = setupHorizontalGrid(useFaceConstraint, useAdaptive, ...
+    if sloped
+        [state0, models, schedule, ...
+         isFineCells, sealingFaces] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
                                                     [nx,ny,nz], [lx,ly,lz], trans_mult);
+    else
+        [state0, models, schedule, ...
+         isFineCells, sealingFaces] = setupHorizontalGrid(useFaceConstraint, useAdaptive, ...
+                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
+    end
     vx = 0; vz = 0;
     hybrid_folder = 'hybrid2D';
 end
 
-if useFaceConstraint
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/horizontal/face_lowperm_linrelperm/'), hybrid_folder);   
+if sloped
+    geometry_folder = 'sloped';
 else
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/horizontal/cell_lowperm_linrelperm/'), hybrid_folder);
+    geometry_folder = 'horizontal';
+end
+
+if useAdaptive    
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);   
+elseif useFaceConstraint
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/face_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);       
+else    
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/cell_lowperm_nz_linrelperm%d/'), hybrid_folder, geometry_folder, nz);   
 end
 mkdir(plot_dir);
 
@@ -165,12 +180,12 @@ state0_ve = upscaleState(model_ve, model, state0);
 problem_ve = packSimulationProblem(state0_ve, model_ve, schedule_ve, ...
     'horz_ve', 'NonLinearSolver', nls);
 
-%[ok, status] = simulatePackedProblem(problem_ve);
-%[ws_ve, states_ve, report_ve] = getPackedSimulatorOutput(problem_ve);
+[ok, status] = simulatePackedProblem(problem_ve);
+[ws_ve, states_ve, report_ve] = getPackedSimulatorOutput(problem_ve);
 
-[ws_ve, states_ve] = simulateScheduleAD(state0_ve, model_ve, schedule_ve, 'NonLinearSolver', nls);
+%[ws_ve, states_ve] = simulateScheduleAD(state0_ve, model_ve, schedule_ve, 'NonLinearSolver', nls);
 
-states_ve_fs = convertMultiVEStates_test(model_ve, states_ve); % retrieve fine-scale states
+states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
 
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
@@ -264,8 +279,113 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 [ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
 
 %% Reconstruct fine states
-states_hybrid_fs = convertMultiVEStates_res(model_hybrid, states_hybrid);
-%states_hybrid_fs = convertMultiVEStates_test(model_hybrid, states_hybrid);
+%states_hybrid_fs = convertMultiVEStates_res(model_hybrid, model_fine, states_hybrid, states);
+states_hybrid_fs = convertMultiVEStates_test(model_hybrid, model_fine, states_hybrid, 'schedule', schedule, 'convert_flux', true); % send in fine schedule to extract fine boundary faces
+
+mh = model_hybrid;
+oph = mh.operators;
+n = oph.N;
+shf = states_hybrid_fs;
+
+%% Compute difference in CO2 vol between fine and hybrid models
+ff = 20;
+figure(ff);
+%plotOutlinedGrid(G, W, bc, sealingFaces | sealingCells_faces);
+p = model_hybrid.G.partition;
+discr = model_hybrid.G.cells.discretization;
+plotCellData(G, discr(p), 'edgealpha', 0.2)
+xt = model_hybrid.G.cells.centroids(:,1);
+zt = model_hybrid.G.cells.centroids(:,3);
+discr_u = unique(discr);
+for i=1:numel(discr_u)
+    d = discr_u(i);   
+    if d ~= 1 % only show discretization number for VE cells, to distinguish them
+        xti = mean(xt(discr == d))-lx/nx;   
+        zti = mean(zt(discr == d))-lz/nz;    
+        %text(xti, 0, zti, string(d), 'FontSize', 18, 'Color', 'black');
+        text(xti, 0, zti, string(d), 'FontSize', 18, 'FontName', 'Castellar', 'Color', 'black');
+    end
+end
+view(vx, vz)
+axis equal tight
+daspect([1, 0.1, 1])
+
+vol_hybrid = zeros(numel(states_hybrid_fs), 1);
+vol_fine = zeros(numel(states), 1);
+
+cB = shf{1}.cBottom;
+veB = shf{1}.fBottom;
+veBottom = ismember(n, n(oph.connections.veToFineVertical | oph.connections.veTransitionVerticalConn, :), 'rows');
+veB_global = find(veBottom);
+veB_global = veB_global(veB);
+db = unique(discr(cB));
+for d=1:numel(db)
+    dc = discr(cB) == db(d);
+    bottom_conn = veB_global(dc);
+    bottom_flux = any(shf{end}.vGsMax(bottom_conn));
+    if ~bottom_flux
+       continue; % skip discretization region if no CO2 originates from bottom
+    end
+    
+    ff = ff + 1;
+    figure(ff);
+    for i=1:numel(states)
+        [vol_h, vol_f] = discrCO2Vol(db(d), model_hybrid, model_fine, ...
+                                                shf{i}, states{i});
+        vol_hybrid(i) = sum(vol_h);
+        vol_fine(i) = sum(vol_f);
+    end
+
+    plot(1:numel(states), vol_fine, 'DisplayName', 'fine')
+    hold on
+    plot(1:numel(states_hybrid), vol_hybrid, 'DisplayName', 'hybrid')
+    xlabel('Time step');
+    ylabel('m^3');
+    title(sprintf('CO2 volume in discretization region %d (bottom fluxes)', db(d)));
+    legend('location', 'northwest')
+end
+
+cH = shf{1}.cHorz;
+veH = shf{1}.fHorz;
+veHorz = ismember(n, n(oph.connections.veTransitionHorizontalConn, :), 'rows');
+veH_global = find(veHorz);
+veH_global = veH_global(veH);
+
+cBH = shf{1}.cBottomHorz;
+veBH = shf{1}.fBottomHorz;
+veBottomHorz = veBottom | veHorz;
+veBH_global = find(veBottomHorz);
+veBH_global = veBH_global(veBH);
+
+cBH_all = [cH; cBH];
+veBH_all = [veH_global; veBH_global]; 
+
+dbh = unique(discr(cBH_all));
+for d=1:numel(dbh)
+    dc = discr(cBH_all) == dbh(d);
+    bh_conn = veBH_all(dc);
+    bh_flux = any(shf{end}.vGsMax(bh_conn));
+    if ~bh_flux
+       continue; % skip discretization region if no CO2 originates from bottom
+    end
+    
+    ff = ff + 1;
+    figure(ff);
+    for i=1:numel(states)
+        [vol_h, vol_f] = discrCO2Vol(dbh(d), model_hybrid, model_fine, ...
+                                                states_hybrid_fs{i}, states{i});
+        vol_hybrid(i) = sum(vol_h);
+        vol_fine(i) = sum(vol_f);
+    end
+
+    plot(1:numel(states), vol_fine, 'DisplayName', 'fine')
+    hold on
+    plot(1:numel(states_hybrid), vol_hybrid, 'DisplayName', 'hybrid')
+    xlabel('Time step');
+    ylabel('m^3');
+    title(sprintf('CO2 volume in discretization region %d (horizontal fluxes)', dbh(d)));
+    legend('location', 'northwest')
+end
 
 %% Compute net CO2 volume in each VE column 
 % and compare with fine solution
@@ -273,7 +393,7 @@ sn_f = states{end}.s(:,2); % fine saturations
 sn_h = states_hybrid{end}.s(:,2); % hybrid saturations
 p = model_hybrid.G.partition;
 
-[vol_unique, ~, idx_sort] = unique(model_hybrid.G.cells.volumes);
+[vol_unique, ~, idx_sort] = uniquetol(model_hybrid.G.cells.volumes);
 
 pvh = poreVolume(model_hybrid.G, model_hybrid.rock);
 pvf = poreVolume(model.G, model.rock);
@@ -281,7 +401,7 @@ pvf = poreVolume(model.G, model.rock);
 sn_f_net = accumarray(p, sn_f.*pvf);
 sn_f_net = sn_f_net ./ pvh;
 
-% VOLUME MISMATCH FOR COARSE CELLS
+% VOLUME MISMATCH FOR COARSE CELLS - sorted after increasing volume
 diff_fh = zeros(numel(vol_unique), 1);
 var_fh = zeros(size(diff_fh));
 for i=1:numel(vol_unique)    
@@ -328,23 +448,34 @@ legend();
 drawnow;
 saveas(f11, strcat(plot_dir, 'diff_sat_fine'), 'png')
 
-%% Plot flux boundary
-figure(20);
-bfaces = zeros(G.faces.num, 1);
-bf = boundaryFaces(G);
-bfx = G.faces.centroids(bf, 1);
-bfz = G.faces.centroids(bf, 3);
-lz = max(bfz(bfx == min(bfx)));
-[nx, ny, nz] = deal(G.cartDims(1), G.cartDims(2), G.cartDims(3));
-top_left_faces = bf(bfx == min(bfx) & bfz <= lz/nz);
-%plotOutlinedGrid(G, W, bc, top_left_faces);
-nn = model_hybrid.G.faces.neighbors;
-nn = find(~all(nn,2));
-plotGrid(model_hybrid.G, 'faceColor', 'none', 'edgecolor', 'none');
-plotFaces(model_hybrid.G, nn, 'r')
-view(vx, vz)
-axis equal tight
-daspect([1, 0.1, 1])
+f12 = figure(12);
+dt = schedule.step.val;
+rate = [];
+for i=1:numel(schedule.control)
+    num_W = nnz(schedule.step.control == i);
+    rate_i = schedule.control(i).W.val * schedule.control(i).W.status; % only add rate if well is on
+    rate = cat(1, rate, repmat(rate_i, num_W, 1));
+end
+V_inj = cumsum(rate.*dt);
+Vf_net = [];
+Vh_net = [];
+for i=1:numel(states)
+   Vf_net = cat(1, Vf_net, sum(states{i}.s(:,2).*pvf)); 
+   Vh_net = cat(1, Vh_net, sum(states_hybrid_fs{i}.s(:,2).*pvf));
+end
+
+Vf_exit = V_inj - Vf_net;
+Vh_exit = V_inj - Vh_net;
+
+plot(1:numel(states), Vf_exit, 'b', 'DisplayName', 'Fine model')
+hold on
+plot(1:numel(states_hybrid_fs), Vh_exit, 'r', 'DisplayName', 'Hybrid model')
+xlabel('Time step')
+ylabel('m^3')
+title('CO2 volume exited domain')
+legend('location', 'northwest');
+drawnow;
+saveas(f12, strcat(plot_dir, 'volume_exit'), 'png')
 
 %% Plot CO2 saturation for each model
 fafa = find(sealingFaces | sealingCells_faces);
@@ -400,7 +531,7 @@ for i = 1:20:numel(states_hybrid)
 end
 %% Plot 2D section
 if run3D    
-   section_2d = (jj == 6);  frf
+   section_2d = (jj == 5);
    
    cells_2d = model.G.cells.indexMap(section_2d);
    n_2d = unique(model.G.faces.neighbors(fafa, :));
@@ -454,7 +585,7 @@ xl_max = max(G.cells.centroids(:,1))*(1+1/50);
 zl_min = -max(G.cells.centroids(:,3))/50;
 zl_max = max(G.cells.centroids(:,3))*(1+1/50);
 
-fign = 12;
+fign = 13;
 for i = 1:numel(substeps)
     ss = substeps(i);
     ff = UtilFunctions.fullsizeFig(fign);
@@ -504,4 +635,21 @@ for i = 1:numel(substeps)
         end
     end
     clf;
+end
+
+%% Functions:
+function [v_hybrid, v_fine] = discrCO2Vol(d, model_hybrid,  model_fine, state_hybrid_fs, state_fine)
+    discr = model_hybrid.G.cells.discretization == d;
+    p = model_hybrid.G.partition;
+    discr = discr(p);
+    vol = model_fine.G.cells.volumes(discr);
+    snh = state_hybrid_fs.s(:,2);    
+    snh = snh(discr);
+    snf = state_fine.s(:,2);
+    snf = snf(discr);
+    pv = poreVolume(model_fine.G, model_fine.rock);
+    pv = pv(discr);
+    
+    v_hybrid = pv.*snh;
+    v_fine = pv.*snf;
 end
