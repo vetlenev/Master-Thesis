@@ -1,4 +1,5 @@
-function [state0, models, schedule, isFine, setZeroTrans, varargout] = setupSlopedGrid3D(faceConstraint, adaptiveSealing, dims, sizes, varargin)
+function [state0, models, schedule, isFine, setZeroTrans, allSealingFaces] = ...
+            setupSlopedGrid3D(faceConstraint, adaptiveSealing, dims, sizes, varargin)
 %SETUPHORIZONTALGRID Set up cartesian grid with horizontal impermeable
 %layer in middle of domain.
 %   Impermeable layer either to be represented as face constraint or as
@@ -144,10 +145,10 @@ else % Manually assign faces or cells
     end
 end
 
-allSealingFaces = vertcat(allSealingFaces{:});
+sealingFaces = vertcat(allSealingFaces{:});
 %allSealingBottom = vertcat(allSealingBottom{:});
 
-setZeroTrans(allSealingFaces) = 1; 
+setZeroTrans(sealingFaces) = 1; 
 setZeroTrans = logical(setZeroTrans); 
 
 G = computeGeometry(G); 
@@ -225,7 +226,7 @@ dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/400, 10)]
 
 times = cumsum(dt)/year();
 n_steps = numel(dt);
-[~, inj_stop] = min(abs(times - inj_stop*times(end)));
+[~, inj_stop] = min(abs(times - inj_stop*times(end))); % fine time step of injection stop
 
 schedule = simpleSchedule(dt, 'W', W, 'bc', bc);
 schedule.control(2) = schedule.control(1); % new control for well shutoff
@@ -257,11 +258,11 @@ model.FlowPropertyFunctions.RelativePermeability = ...
 model_fine = model;
 
 % Apply transmissibility multiplier to sealing faces
-if ~isempty(allSealingFaces)
+if ~isempty(sealingFaces)
     transMult = false(G.faces.num, 1);
     
     map = false(G.faces.num, 1);
-    map(allSealingFaces) = true; 
+    map(sealingFaces) = true; 
         
     transMult(map) = true;
     T(transMult) = T(transMult).*trans_multiplier;

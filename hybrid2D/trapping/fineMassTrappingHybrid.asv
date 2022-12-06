@@ -1,4 +1,4 @@
-function [masses, masses_0] = massTrappingDistributionHybridADI(Gt, Gh, cTopHybrid, p, sG, sW, h, h_max, ...
+function [masses, masses_0] = fineMassTrappingHybrid(Gt, Gh, cTopHybrid, cmap, p, sG, sW, h, h_max, ...
                                                                  h_B, h_H, h_BH, Hh, Hbh, cB, cH, cBH, ...
                                                                  rock, fluidADI, trapstruct, dh, varargin)
 % Compute the trapping status distribution of CO2 in each cell of global
@@ -69,39 +69,14 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     % cTopHybrid: fine cells at top surface of grid Gt with hybrid indices    
     cth = cTopHybrid;
     
-    ct_hybrid_height = Gh.cells.height(cth);
-    ct_hybrid_z = Gh.cells.topDepth(cth);
-        
-    cB_idx = ismember(cB, cth); % index for arrays with one element per bottom cell cB (from hybrid indexes for full grid)
-    cB_subidx = ismember(cth, cB); % index for arrays with one element per cell in subgrid (from hybrid indexes for full grid)
-    %cB = cB(cB_idx); % only select bottom VE flux cells that are part of subgrid Gt
-    cB_sub = find(cB_subidx);
-           
-    cH_idx = ismember(cH, cth); % with duplicates    
-    cH_subidx = ismember(cth, cH);
-    cH = cH(cH_idx);
-    cH_sub = find(cH_subidx); % indices for cHorz cells in subgrid
-    [cH_u, ~, uHidx] = unique(cH); 
-    
-    if ~isempty(cH)
-        cH_sub = extendIndexForDuplicates(cH, cH_u, cH_sub);
-    end
-        
-    cBH_idx = ismember(cBH, cth);
-    cBH_subidx = ismember(cth, cBH);
-    cBH = cBH(cBH_idx); 
-    cBH_sub = find(cBH_subidx);
-    [cBH_u, ~, uBHidx] = unique(cBH);
-    
-    if ~isempty(cBH)
-        cBH_sub = extendIndexForDuplicates(cBH, cBH_u, cBH_sub);
-    end
+    %ct_hybrid_height = Gh.cells.height(cth);
+    %ct_hybrid_z = Gh.cells.topDepth(cth);        
     
     % Extracting relevant information from 'sol'
     sw=fluidADI.krPts.w(1);%liquid residual saturation (scalar)
     sr=fluidADI.krPts.g(1);%gas residual saturation (scalar)
-    SW = sW(cth) .* ct_hybrid_height; % used to check that all elements in trapping inventory sum up to net fluid amount
-    SG = sG(cth) .* ct_hybrid_height; % height of mobile plume
+    SW = sW .* Gh.cells.height; % used to check that all elements in trapping inventory sum up to net fluid amount
+    SG = sG .* Gh.cells.topDepth; % height of mobile plume
     h = h(cth);
     h_max = h_max(cth);
     rs = opt.rs;
