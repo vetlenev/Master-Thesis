@@ -128,9 +128,7 @@ classdef UtilFunctions
             
             [~, col_idx] = max(kk(subcells), [], 2); % choose bottom neighbor, not top
             subcells = diag(subcells(:, col_idx));
-            
-            % Remove desired bottom faces from list of all semi-perm layers
-            %all_bottom_faces(ismember(all_bottom_faces, bottom_faces)) = [];            
+                        
             iis = ii(subcells);
             jjs = jj(subcells);
             kks = kk(subcells);
@@ -144,11 +142,7 @@ classdef UtilFunctions
             subcells = G.cells.indexMap(ii >= subcells_left & ii <= subcells_right & ...
                                         jj >= subcells_west & jj <= subcells_east & ...
                                         kk >= subcells_top);
-                                    
-            ve_mask = Gh.cells.discretization(p(subcells)) > 1;
-            %fine_mask = fine_mask(fine_mask == 1);
-            vecells = subcells(ve_mask); % only ve
-            finecells = subcells(~ve_mask); % only fine
+                                                
                     
             remove_cells = {};
             for i=1:numel(sealingCells) % loop through semi-perm layers and find overlaps and "subsubgrids" to remove from subgrid
@@ -194,13 +188,20 @@ classdef UtilFunctions
             end
             % remove other semi-perm layers inside subgrid
             remove_cells = unique(vertcat(remove_cells{:})); % blocks of cells to remove may overlap -> duplicates removed by selecting unique            
-            vecells = setdiff(vecells, remove_cells);   
-            finecells = setdiff(finecells, remove_cells);
-                                  
+            
+            subcells = setdiff(subcells, remove_cells);
+            ve_mask = Gh.cells.discretization(p(subcells)) > 1;
+            vecells = subcells(ve_mask); % only ve
+            finecells = subcells(~ve_mask); % only fine            
+                          
+            % extract separate grids
             [Gss, cmaps, fmaps, nmaps] = extractSubgrid(G, vecells); % subgrid for VE regions under sealing layer
             [Gsf, cmapf, fmapf, nmapf] = extractSubgrid(G, finecells); % subgrid for fine regions under sealing layer
             
-            Gs = {Gss, Gsf};
+            % extract combined grid
+            [Gs_tot, ~, ~, ~] = extractSubgrid(G, subcells);
+            
+            Gs = {Gss, Gsf, Gs_tot};
             cmap = {cmaps, cmapf};
             fmap = {fmaps, fmapf};
             nmap = {nmaps, nmapf};          

@@ -289,29 +289,12 @@ oph = mh.operators;
 n = oph.N;
 shf = states_hybrid_fs;
 
-%% Extract subgrids, find traps
-Gsi = {}; Gfi = {}; Gti = {};
+%% Find traps for global top surface
+Gsi = {}; Gfi = {}; Gts = {};
 cmaps = {}; fmaps = {}; nmaps = {};
 cmapf = {}; fmapf = {}; nmapf = {};
-tai = {};
+tas = {};
 
-for i=1:numel(isFineCells.sealingBottom)
-    subfaces = isFineCells.sealingBottom{i}; % bottom faces of sealing layer    
-    [Gs, cmap, fmap, nmap] = UtilFunctions.extractLayerSubgrid(G, Gh, subfaces,  ...
-                                                isFineCells.sealingCells, sealingFaces_ascell); 
-    Gsi = cat(1, Gsi, Gs{1}); % subgrid for VE regions
-    Gfi = cat(1, Gfi, Gs{2}); % subgrid for fine regions
-    cmaps = cat(1, cmaps, cmap{1}); cmapf = cat(1, cmapf, cmap{2});
-    fmaps = cat(1, fmaps, fmap{1}); fmapf = cat(1, fmapf, cmap{2});
-    nmaps = cat(1, nmaps, nmap{1}); nmapf = cat(1, nmapf, cmap{2});
-    
-    Gts = topSurfaceGrid(Gs{1}); % top surface of subgrid (only makes sense for subgrids of VE regions)
-    ta = trapAnalysis(Gts, true);
-    Gti = cat(1, Gti, Gts);
-    tai = cat(1, tai, ta);
-end
-
-%% Find traps for global top surface
 top_cells = G.cells.indexMap(kk == min(kk));
 bf = boundaryFaces(G);
 top_faces = zeros(numel(top_cells), 6);
@@ -322,20 +305,65 @@ top_faces = intersect(bf, top_faces);
 
 [G_glob, cmap_glob, fmap_glob, ~] = UtilFunctions.extractLayerSubgrid(G, Gh, top_faces, ...
                                                      isFineCells.sealingCells, sealingFaces_ascell);
-Gt = topSurfaceGrid(G_glob{1}); % grid from ve parts of global domain
+
+Gs_glob = G_glob{1}; % ve parts from global top surface 
+Gf_glob = G_glob{2}; % fine parts from global top surface
+G_tot_glob = G_glob{3}; % combined ve and fine parts
+
+Gt = topSurfaceGrid(Gs_glob); % grid from ve parts of global domain
 ta = trapAnalysis(Gt, true);
-spill_trap = ta.trap_regions;
+Gts = cat(1, Gts, Gt);
+tas = cat(1, tas, ta);
+% OR: Do trap analysis for combined top surface
+Gt = topSurfaceGrid(G_tot_glob);
+ta = trapAnalysis(Gt, true);
+
+%% Subgrids and traps for VE top surfaces
+
+for i=1:numel(isFineCells.sealingBottom)
+    subfaces = isFineCells.sealingBottom{i}; % bottom faces of sealing layer    
+    [Gs, cmap, fmap, nmap] = UtilFunctions.extractLayerSubgrid(G, Gh, subfaces,  ...
+                                                isFineCells.sealingCells, sealingFaces_ascell); 
+    
+    if any(Gs{1}.cells.num) % only append non-zero subgrids
+        Gsi = cat(1, Gsi, Gs{1}); % subgrid for VE regions
+        Gtsi = topSurfaceGrid(Gs{1}); % top surface of subgrid (only makes sense for subgrids of VE regions)
+        tai = trapAnalysis(Gtsi, true);
+        Gts = cat(1, Gts, Gtsi);
+        tas = cat(1, tas, tai);
+        cmaps = cat(1, cmaps, cmap{1});
+        fmaps = cat(1, fmaps, fmap{1});
+        nmaps = cat(1, nmaps, nmap{1});
+    end
+    
+    if any(Gs{2}.cells.num)
+        Gfi = cat(1, Gfi, Gs{2}); % subgrid for fine regions
+        cmapf = cat(1, cmapf, cmap{2});
+        fmapf = cat(1, fmapf, cmap{2});
+        nmapf = cat(1, nmapf, cmap{2});        
+    end
+end
+
+Gs_all = [{Gs_glob}; Gsi];
+cmaps_all = [cmap_glob{1}; cmaps];
+fmaps_all = [fmap_glob{1}; fmaps];
 
 %% Fine traps for imposed fine regions
-Gf = G_glob{2}; % fine parts from global top surface
-Gf_all = [Gf, {Gfi}]; % SUBGRID FOR FINE REGION RIGHT BELOW A SEALING LAYER
+Gf_all = [{Gf_glob}; Gfi]; % SUBGRID FOR FINE REGION RIGHT BELOW A SEALING LAYER
+cmapf_all = [cmap_glob{2}; cmapf];
+fmapf_all = [fmap_glob{2}; fmapf];
+Gtf = {};
+taf = {};
 
 for i=1:numel(Gf_all)
-    Gtf = topSurfaceGrid(Gf);
+    Gtfi = topSurfaceGrid(Gf_all{i});
+    tai = trapAnalysis(Gtfi, true);
+    Gtf = cat(1, Gtf, Gtfi);
+    taf = cat(1, taf, tai);
 end
 
 % Remaining fine cells not subject to trapping
-top_surface_cells = [vertcat(cmaps{:}); vertcat(cmapf{:}); vertcat(cmap_glob{:})]; % should be unique
+top_surface_cells = [vertcat(cmaps_all{:}); vertcat(cmapf_all{:})]; % should be unique
 fine_rem = setdiff(G.cells.indexMap, top_surface_cells);
 
 %% Plot trapping
@@ -346,11 +374,12 @@ view(vx, vz)
 axis equal tight
 %light('Position',[-1 0 -1]);lighting phong
 colorbar('horiz'); caxis([0 numel(unique(ta.traps))]);
-%set(gca,'XTickLabel',[],'YTickLabel',[]);
+title('Traps for formation top surface')
 daspect([1, 0.1, 1])
 
 %% Plot subgrids
 % Plot VE regions from top surfaces
+figure()
 subplot(1,3,1)
 plotGrid(G, 'facecolor', 'none')
 hold on
@@ -395,13 +424,12 @@ title('Remaining fine regions')
 daspect([1, 0.1, 1])
 
 %% Compute CO2 trapping
-hybrid_reports = makeHybridReports(Gt, cmap_glob, fmap_glob, ... % top surface global domain / caprock
-                                    Gti, cmaps, fmaps, ... % top surface VE regions under semi-perm layers
-                                    Gtf, cmapf, fmapf, ... % top surface FINE regions under semi-perm layers
+hybrid_reports = makeHybridReports(Gts, cmaps_all, fmaps_all, ... % top surface VE regions under semi-perm layers, including caprock
+                                    Gtf, cmapf_all, fmapf_all, ... % top surface FINE regions under semi-perm layers, including caprock
                                     fine_rem, ... % remaining fine regions not directly under semi-perm layer
                                     Gh, {state0_hybrid, states_hybrid{:}}, ...
                                     mh.rock, mh.fluid, schedule_hybrid, ...
-                                    [swr, snr], ta, tai, []);
+                                    [swr, snr], tas, taf, []);
                                                                
                                 
 %% Plot trapping inventory

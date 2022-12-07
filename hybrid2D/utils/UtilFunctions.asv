@@ -125,11 +125,10 @@ classdef UtilFunctions
             if ~any(all(subcells, 2)) % remove neighbors outside domain
                subcells = unique(subcells(subcells ~= 0));
             end
+            
             [~, col_idx] = max(kk(subcells), [], 2); % choose bottom neighbor, not top
             subcells = diag(subcells(:, col_idx));
-            
-            % Remove desired bottom faces from list of all semi-perm layers
-            %all_bottom_faces(ismember(all_bottom_faces, bottom_faces)) = [];            
+                        
             iis = ii(subcells);
             jjs = jj(subcells);
             kks = kk(subcells);

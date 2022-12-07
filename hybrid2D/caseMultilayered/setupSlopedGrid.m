@@ -56,10 +56,10 @@ i_range = [0, nx/2; ...
             2*nx/3, 5*nx/6; ...
             0, nx];
        
-allSealingFaces = []; % append for face constraints
+allSealingFaces = {}; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
-allSealingCells_faces = []; % bounding faces for sealing cells
-
+allSealingCells_faces = {}; % bounding faces for sealing cells
+allSealingBottom = {};
        
 if adaptiveSealing % Assign faces or cells based on thickness
     dz_eps = nz/15; % thickness threshold
@@ -71,15 +71,16 @@ if adaptiveSealing % Assign faces or cells based on thickness
             k_range = [ceil(k_pos(i,2))-1, ceil(k_pos(i,2))]; % set to one cell height thick
             [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', sealing_type, 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);
             
-            allSealingFaces = [allSealingFaces; sealing_faces];
-            %allSealingCells = cat(2, allSealingCells, sealingCells);
+            allSealingFaces = cat(2, allSealingFaces, sealing_faces);
+            allSealingCells = cat(2, allSealingCells, sealingCells);
+            allSealingBottom = cat(2, allSealingBottom, sealing_bottom);
         else
             sealing_type = 'cells';
             [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', sealing_type, 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);
             
-            allSealingCells_faces = [allSealingCells_faces; sealing_faces];
+            allSealingCells_faces = cat(2, allSealingCells_faces, sealing_faces);
             allSealingCells = cat(2, allSealingCells, sealingCells);
-
+            allSealingBottom = cat(2, allSealingBottom, sealing_bottom);
             % assign low permeability to sealing layer             
             perm(sealingCells) = sealingCellsPerm; % assign a random low-perm value ?
         end        
@@ -92,8 +93,10 @@ else % Manually assign faces or cells
             %k_range = [floor(k_pos(i,1)), ceil(k_pos(i,2))]; % +1
             k_range = [ceil(k_pos(i,2))-1, ceil(k_pos(i,2))];
             [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', 'faces', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);                    
-            allSealingFaces = [allSealingFaces; sealing_faces];
-            allSealingCells = cat(2, allSealingCells, sealingCells);      
+            
+            allSealingFaces = cat(2, allSealingFaces, sealing_faces);
+            allSealingCells = cat(2, allSealingCells, sealingCells);
+            allSealingBottom = cat(2, allSealingBottom, sealing_bottom);
         end
         
     else % cell constraints    
@@ -101,10 +104,10 @@ else % Manually assign faces or cells
             k_range = [floor(k_pos(i,1)), ceil(k_pos(i,2))];
             [sealing_faces, sealing_bottom, sealingCells] = addConfiningLayers(G0, 'type', 'cells', 'i_range', [i_range(i,1), i_range(i,2)], 'k_range', k_range);       
 
-            %allSealingFaces = [allSealingFaces; sealing_faces];     
-            allSealingCells_faces = [allSealingCells_faces; sealing_faces];
+            allSealingCells_faces = cat(2, allSealingCells_faces, sealing_faces);
             allSealingCells = cat(2, allSealingCells, sealingCells);
-
+            allSealingBottom = cat(2, allSealingBottom, sealing_bottom);
+            
             % assign low permeability to sealing layer
             nxi = numel(unique(ii(sealingCells)));
             nzi = numel(unique(kk(sealingCells)));
@@ -120,8 +123,10 @@ else % Manually assign faces or cells
     end
 end
 
-setZeroTrans(allSealingFaces) = 1; 
-setZeroTrans = logical(setZeroTrans); 
+sealingFaces = vertcat(allSealingFaces{:});
+
+setZeroTrans(sealingFaces) = 1; 
+setZeroTrans = logical(setZeroTrans);
 
 G = computeGeometry(G);
 [x, z] = deal(G.cells.centroids(:,1), G.cells.centroids(:,3));
@@ -215,6 +220,7 @@ T = getFaceTransmissibility(G, rock);
 isFine = struct;
 isFine.sealingCells = allSealingCells; % no sealing cells if only face constraint
 isFine.sealingCells_faces = allSealingCells_faces;
+isFine.sealingBottom = allSealingBottom;
 isFine.well = nearWell;
 
 %model = TwoPhaseWaterGasModel(G, rock, fluid, 1, 1, 'useCNVConvergence', true);
@@ -231,11 +237,11 @@ model.FlowPropertyFunctions.RelativePermeability = ...
 model_fine = model;
 
 % Apply transmissibility multiplier to sealing faces
-if ~isempty(allSealingFaces)
+if ~isempty(sealingFaces)
     transMult = false(G.faces.num, 1);
     
     map = false(G.faces.num, 1);
-    map(allSealingFaces) = true; 
+    map(sealingFaces) = true; 
         
     transMult(map) = true;
     T(transMult) = T(transMult).*trans_multiplier;

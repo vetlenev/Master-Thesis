@@ -25,12 +25,12 @@ warning('off', 'Future:Deprecation');
 %% Setup original fine-scale case
 % Using face constraints, fine cells only constitute the well
 % Using cell constraints, fine cells also include sealing layer
-useFaceConstraint = false;
+useFaceConstraint = true;
 useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
 run3D = false;
 sloped = false;
 
-trans_mult = 1e-5; % 1e-4
+trans_mult = 1e-8; % 1e-4
 trans_mult = ~useAdaptive*(useFaceConstraint*trans_mult + ~useFaceConstraint) ...
                 + useAdaptive*trans_mult;
 
@@ -65,11 +65,11 @@ else
 end
 
 if useAdaptive    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_sealing_nz%d/'), hybrid_folder, geometry_folder, nz);   
 elseif useFaceConstraint
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/face_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);       
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/face_sealing_nz%d_linrelperm/'), hybrid_folder, geometry_folder, nz);       
 else    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/cell_lowperm_nz_linrelperm%d/'), hybrid_folder, geometry_folder, nz);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/cell_sealing_nz%d_linrelperm/'), hybrid_folder, geometry_folder, nz);   
 end
 mkdir(plot_dir);
 
@@ -77,7 +77,8 @@ sealingCells = isFineCells.sealingCells;
 sealingCells = any(cell2mat(sealingCells), 2);
 % -----
 sealingCells_faces = false(size(sealingFaces));
-sealingCells_faces(isFineCells.sealingCells_faces) = true;
+sealingCells_facesAll = vertcat(isFineCells.sealingCells_faces{:});
+sealingCells_faces(sealingCells_facesAll) = true;
 % -----
 wellCells = isFineCells.well;
 fineCells = sealingCells | wellCells;
@@ -167,9 +168,9 @@ problem = packSimulationProblem(state0, model_fine, schedule, ...
     'horz_finescale', 'NonLinearSolver', nls);
 
 % Simulate and get the output
-simulatePackedProblem(problem);
-[ws, states, report] = getPackedSimulatorOutput(problem);
-%[ws, states] = simulateScheduleAD(state0, model_fine, schedule, 'NonLinearSolver', nls);
+%simulatePackedProblem(problem);
+%[ws, states, report] = getPackedSimulatorOutput(problem);
+[ws, states] = simulateScheduleAD(state0, model_fine, schedule, 'NonLinearSolver', nls);
 
 %% Simple VE.
 % Simulate standard VE model, not accounting for sealing faces.
