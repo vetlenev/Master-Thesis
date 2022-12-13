@@ -1,4 +1,5 @@
-function [state0, models, schedule, isFine, setZeroTrans] = setupSlopedGrid(faceConstraint, adaptiveSealing, dims, sizes, varargin)
+function [state0, models, schedule, ...
+            isFine, setZeroTrans, allSealingFaces] = setupSlopedGrid(faceConstraint, adaptiveSealing, dims, sizes, varargin)
 %SETUPHORIZONTALGRID Set up cartesian grid with horizontal impermeable
 %layer in middle of domain.
 %   Impermeable layer either to be represented as face constraint or as
@@ -27,11 +28,21 @@ G0 = computeGeometry(G); % original grid before adding sealing layers/faces
 nx = G.cartDims(1); ny = G.cartDims(2); nz = G.cartDims(3);
 
 m = tand(4); % aquifer slope
-%m = (k_range(2) - k_range(1)) / (i_range(2) - i_range(1));
+
+% G.nodes.coords(:,3) = G.nodes.coords(:,3) + m*G.nodes.coords(:,1) ...
+%                         + (nz/10)*sin(4*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
+%                         + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
+%                                     (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))); % linear slope of aquifer
+
+% --- For experimenting with trapping: ---
 G.nodes.coords(:,3) = G.nodes.coords(:,3) + m*G.nodes.coords(:,1) ...
-                        + (nz/10)*sin(4*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
-                        + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
-                                    (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))); % linear slope of aquifer
+                        + (nz/3)*sin(5*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
+                        + (exp(-2*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
+                                    (nz/3)) .* cos(pi/4+8*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))); % linear slope of aquifer
+                                
+% shift all nodes to have positive values (required for trap analysis)
+G.nodes.coords(:,3) = G.nodes.coords(:,3) - min(min(G.nodes.coords(:,3)), 0);                                
+% ----------------------------------------
 
 G = computeGeometry(G);
 
@@ -46,14 +57,14 @@ setZeroTrans = zeros(G.faces.num, 1);
 sealingCellsPerm = 0.1*milli*darcy;
 
 %k_pos = [nz/2-1, nz/2+1];
-k_pos = [0, nz/10; ... % 0, nz/10
-         nz/5, nz/4; ...
-         nz/3, nz/2.5; ...
-          nz/2-1, nz/2+1];
+k_pos = [nz/8, nz/7; ... % 0, nz/10
+         nz/3, nz/2.7; ...
+         nz/2.5, nz/2.3; ...
+          3*nz/5-1, 3*nz/5+1];
 %i_range = [nx/2, nx];  
-i_range = [0, nx/2; ...
-            nx/3, 3*nx/5; ...
-            2*nx/3, 5*nx/6; ...
+i_range = [0, nx/4; ...
+            nx/7, 2*nx/5; ...
+            4*nx/7, 3*nx/4; ...
             0, nx];
        
 allSealingFaces = {}; % append for face constraints
@@ -62,7 +73,7 @@ allSealingCells_faces = {}; % bounding faces for sealing cells
 allSealingBottom = {};
        
 if adaptiveSealing % Assign faces or cells based on thickness
-    dz_eps = nz/15; % thickness threshold
+    dz_eps = nz/20; % thickness threshold
     
     for i=1:size(k_pos,1)
         k_range = [floor(k_pos(i,1)), ceil(k_pos(i,2))];
@@ -201,7 +212,7 @@ end
 nsteps_after_inj = 200;
 dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/250, 10);
 %dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
-dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/400, 10)];
+dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/500, 20)];
 
 times = cumsum(dt)/year();
 n_steps = numel(dt);

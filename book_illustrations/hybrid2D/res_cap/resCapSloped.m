@@ -43,7 +43,7 @@ if run3D
     vx = 30; vz = 20; % view angles
     hybrid_folder = 'hybrid3D';
 else
-    nx = 75; ny = 1; nz = 50; % nz = 50
+    nx = 75; ny = 1; nz = 75; % nz = 50
     lx = 750; ly = 1; lz = 250;
     if sloped
         [state0, models, schedule, ...
@@ -67,9 +67,9 @@ end
 if useAdaptive    
     plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_sealing_nz%d/'), hybrid_folder, geometry_folder, nz);   
 elseif useFaceConstraint
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/face_sealing_nz%d_linrelperm/'), hybrid_folder, geometry_folder, nz);       
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/face_sealing_nz%d/'), hybrid_folder, geometry_folder, nz);       
 else    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/cell_sealing_nz%d_linrelperm/'), hybrid_folder, geometry_folder, nz);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/cell_sealing_nz%d/'), hybrid_folder, geometry_folder, nz);   
 end
 mkdir(plot_dir);
 

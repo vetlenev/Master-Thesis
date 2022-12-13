@@ -35,8 +35,8 @@ trans_mult = ~useAdaptive*(useFaceConstraint*trans_mult + ~useFaceConstraint) ..
                 + useAdaptive*trans_mult;
 
 if run3D
-    nx = 60; ny = 8; nz = 40; % 100, 8, 50
-	lx = 500; ly = 25; lz = 250;
+    nx = 60; ny = 10; nz = 40; % 100, 8, 50
+	lx = 500; ly = 50; lz = 250; % 500, 25, 250
     [state0, models, schedule, ...
     isFineCells, sealingFaces, sealingFaces_ascell] = setupSlopedGrid3D(useFaceConstraint, useAdaptive, ...
                                                     [nx,ny,nz], [lx,ly,lz], trans_mult);
@@ -47,7 +47,7 @@ else
     lx = 750; ly = 1; lz = 250;
     if sloped
         [state0, models, schedule, ...
-         isFineCells, sealingFaces] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
+         isFineCells, sealingFaces, sealingFaces_ascell] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
                                                     [nx,ny,nz], [lx,ly,lz], trans_mult);
     else
         [state0, models, schedule, ...
@@ -59,17 +59,17 @@ else
 end
 
 if sloped
-    geometry_folder = 'sloped';
+    geometry_folder = 'caseMultilayered';
 else
-    geometry_folder = 'horizontal';
+    geometry_folder = 'caseSimple';
 end
 
 if useAdaptive    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/adaptive_test/'), hybrid_folder, geometry_folder);   
 elseif useFaceConstraint
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/face_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);       
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/face_test/'), hybrid_folder, geometry_folder);       
 else    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/cell_lowperm_nz_linrelperm%d/'), hybrid_folder, geometry_folder, nz);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/cell_test/'), hybrid_folder, geometry_folder);   
 end
 mkdir(plot_dir);
 
@@ -106,7 +106,7 @@ T = model.operators.T;
 nn = G.faces.neighbors;
 
 %% Plot fine grid
-figure(1);
+f1 = figure(1);
 %plotOutlinedGrid(G, W, bc, model.operators.T_all);
 plotWell(G, W, 'color', 'r')
 plotGrid(G, 'edgealpha', 0.2, 'facecolor', 'none')
@@ -123,6 +123,7 @@ daspect([1, 0.1, 1])
 xlabel('Lateral position [m]');
 zlabel('Depth [m]');
 title({'Fine scale grid', 'Imposed fine cells highlighted in green'})
+saveas(f1, strcat(plot_dir, '/fine_regions'), 'png');
 
 %% More plots
 figure(2);
@@ -131,12 +132,13 @@ plotOutlinedGrid(G, W, bc, sealingCells_faces);
 plotGrid(G, 'edgealpha', 0.2, 'facecolor', 'none')
 
 fineCellsIdx = G.cells.indexMap(fineCells); % for plotting
+log10perm = log10(convertTo(model.rock.perm, milli*darcy));
 
-plotCellData(G, log10(convertTo(model.rock.perm, milli*darcy))); % requires numeric input, not logical
+plotCellData(G, log10perm); % requires numeric input, not logical
 colorbar('southoutside')
 if ~useFaceConstraint
-    caxis([min(log10(convertTo(model.rock.perm, milli*darcy))), ...
-            max(log10(convertTo(model.rock.perm, milli*darcy)))])
+    caxis([min(log10perm)-0.1*min(log10perm), ...
+            max(log10perm)+0.1*max(log10perm)])
 end
 view(vx, vz)
 axis equal tight
@@ -303,118 +305,80 @@ for i=1:numel(top_cells)
 end
 top_faces = intersect(bf, top_faces);
 
-[G_glob, cmap_glob, fmap_glob, ~] = UtilFunctions.extractLayerSubgrid(G, Gh, top_faces, ...
+[Gs_glob, cmap_glob, fmap_glob, ~] = UtilFunctions.extractLayerSubgrid(G, Gh, top_faces, ...
                                                      isFineCells.sealingCells, sealingFaces_ascell);
 
-Gs_glob = G_glob{1}; % ve parts from global top surface 
-Gf_glob = G_glob{2}; % fine parts from global top surface
-G_tot_glob = G_glob{3}; % combined ve and fine parts
-
-Gt = topSurfaceGrid(Gs_glob); % grid from ve parts of global domain
+% OR: Do trap analysis for combined top surface
+Gt = topSurfaceGrid(Gs_glob);
 ta = trapAnalysis(Gt, true);
 Gts = cat(1, Gts, Gt);
 tas = cat(1, tas, ta);
-% OR: Do trap analysis for combined top surface
-Gt = topSurfaceGrid(G_tot_glob);
-ta = trapAnalysis(Gt, true);
 
 %% Subgrids and traps for VE top surfaces
 
-for i=1:numel(isFineCells.sealingBottom)
-    subfaces = isFineCells.sealingBottom{i}; % bottom faces of sealing layer    
+sealingLayers = [isFineCells.sealingBottom, sealingFaces_ascell]; % merge cell- and face-representations
+
+for i=1:numel(sealingLayers)
+    subfaces = sealingLayers{i}; % bottom faces of sealing layer    
     [Gs, cmap, fmap, nmap] = UtilFunctions.extractLayerSubgrid(G, Gh, subfaces,  ...
                                                 isFineCells.sealingCells, sealingFaces_ascell); 
     
-    if any(Gs{1}.cells.num) % only append non-zero subgrids
-        Gsi = cat(1, Gsi, Gs{1}); % subgrid for VE regions
-        Gtsi = topSurfaceGrid(Gs{1}); % top surface of subgrid (only makes sense for subgrids of VE regions)
+    if any(Gs.cells.num) % only append non-zero subgrids
+        Gsi = cat(1, Gsi, Gs); % subgrid for VE regions
+        Gtsi = topSurfaceGrid(Gs); % top surface of subgrid
         tai = trapAnalysis(Gtsi, true);
         Gts = cat(1, Gts, Gtsi);
         tas = cat(1, tas, tai);
-        cmaps = cat(1, cmaps, cmap{1});
-        fmaps = cat(1, fmaps, fmap{1});
-        nmaps = cat(1, nmaps, nmap{1});
-    end
-    
-    if any(Gs{2}.cells.num)
-        Gfi = cat(1, Gfi, Gs{2}); % subgrid for fine regions
-        cmapf = cat(1, cmapf, cmap{2});
-        fmapf = cat(1, fmapf, cmap{2});
-        nmapf = cat(1, nmapf, cmap{2});        
-    end
+        cmaps = cat(1, cmaps, cmap);
+        fmaps = cat(1, fmaps, fmap);
+        nmaps = cat(1, nmaps, nmap);
+    end    
 end
 
 Gs_all = [{Gs_glob}; Gsi];
-cmaps_all = [cmap_glob{1}; cmaps];
-fmaps_all = [fmap_glob{1}; fmaps];
-
-%% Fine traps for imposed fine regions
-Gf_all = [{Gf_glob}; Gfi]; % SUBGRID FOR FINE REGION RIGHT BELOW A SEALING LAYER
-cmapf_all = [cmap_glob{2}; cmapf];
-fmapf_all = [fmap_glob{2}; fmapf];
-Gtf = {};
-taf = {};
-
-for i=1:numel(Gf_all)
-    Gtfi = topSurfaceGrid(Gf_all{i});
-    tai = trapAnalysis(Gtfi, true);
-    Gtf = cat(1, Gtf, Gtfi);
-    taf = cat(1, taf, tai);
-end
+cmaps_all = [cmap_glob; cmaps];
+fmaps_all = [fmap_glob; fmaps];
 
 % Remaining fine cells not subject to trapping
-top_surface_cells = [vertcat(cmaps_all{:}); vertcat(cmapf_all{:})]; % should be unique
+top_surface_cells = vertcat(cmaps_all{:}); % should be unique
 fine_rem = setdiff(G.cells.indexMap, top_surface_cells);
 
 %% Plot trapping
 figure(15)
 %plotCellData(Gt, ones(Gt.cells.num,1), 'EdgeColor', 'none');
-plotCellData(Gt, ta.traps, 'EdgeColor', 'k')
-view(vx, vz)
+plotCellData(Gts{5}, tas{5}.traps, 'EdgeColor', 'k')
+view(vx, vz+45)
 axis equal tight
 %light('Position',[-1 0 -1]);lighting phong
 colorbar('horiz'); caxis([0 numel(unique(ta.traps))]);
 title('Traps for formation top surface')
-daspect([1, 0.1, 1])
+daspect([2, 0.1, 1])
 
 %% Plot subgrids
 % Plot VE regions from top surfaces
 figure()
-subplot(1,3,1)
+subplot(1,2,1)
 plotGrid(G, 'facecolor', 'none')
 hold on
-plotGrid(G_glob{1}, 'facecolor', 'k', 'facealpha', 0.2)
 
-cm = jet(numel(Gsi));
-for i=1:numel(Gsi)
+cm = jet(numel(Gs_all));
+for i=1:numel(Gs_all)
     hold on
-    plotGrid(Gsi{i}, 'facecolor', cm(i,:))
+    if i == 1
+        alpha = 0.2;
+    else
+        alpha = 1;
+    end
+    plotGrid(Gs_all{i}, 'facecolor', cm(i,:), 'facealpha', alpha)
 end
 
 view(vx, vz)
 axis equal tight
-title({'VE regions under semi-perm layers', '(black fade under caprock)'})
-daspect([1, 0.1, 1])
-
-% Plot fine regions from top surfaces
-subplot(1,3,2)
-plotGrid(G, 'facecolor', 'none')
-hold on
-plotGrid(G_glob{2}, 'facecolor', 'k', 'facealpha', 0.2)
-
-cm = jet(numel(Gfi));
-for i=1:numel(Gfi)
-    hold on
-    plotGrid(Gfi{i}, 'facecolor', cm(i,:))
-end
-
-view(vx, vz)
-axis equal tight
-title({'Fine regions under semi-perm layers,', '(black fade under caprock)'})
+title({'VE regions under semi-perm layers', '(faded for caprock)'})
 daspect([1, 0.1, 1])
 
 % Plot remaining fine-perm regions
-subplot(1,3,3)
+subplot(1,2,2)
 plotGrid(G, 'facecolor', 'none')
 hold on
 plotGrid(G, fine_rem)
@@ -424,12 +388,11 @@ title('Remaining fine regions')
 daspect([1, 0.1, 1])
 
 %% Compute CO2 trapping
-hybrid_reports = makeHybridReports(Gts, cmaps_all, fmaps_all, ... % top surface VE regions under semi-perm layers, including caprock
-                                    Gtf, cmapf_all, fmapf_all, ... % top surface FINE regions under semi-perm layers, including caprock
+hybrid_reports = makeHybridReports(Gts, Gs_all, cmaps_all, fmaps_all, ... % top surface VE+fine regions under semi-perm layers, including caprock                                    
                                     fine_rem, ... % remaining fine regions not directly under semi-perm layer
                                     Gh, {state0_hybrid, states_hybrid{:}}, ...
                                     mh.rock, mh.fluid, schedule_hybrid, ...
-                                    [swr, snr], tas, taf, []);
+                                    [swr, snr], tas, []);
                                                                
                                 
 %% Plot trapping inventory
@@ -440,6 +403,8 @@ hybrid_reports = makeHybridReports(Gts, cmaps_all, fmaps_all, ... % top surface 
 % end
 fig10 = figure(10); plot(1); ax10 = get(fig10, 'currentaxes');
 plotTrappingDistribution(ax10, hybrid_reports, 'legend_location', 'northwest', 'logScale', true)
+title('Trapping inventory for hybrid model')
+saveas(fig10, strcat(plot_dir, 'trapping_inventory'), 'png');
 
 %% Compute difference in CO2 vol between fine and hybrid models
 ff = 20;
@@ -455,7 +420,8 @@ discr_u = unique(discr);
 for i=1:numel(discr_u)
     d = discr_u(i);   
     if d ~= 1 % only show discretization number for VE cells, to distinguish them
-        xti = mean(xt(discr == d))-lx/nx;   
+        xti = mean(xt(discr == d))-lx/nx;  
+        yti = mean(yt(discr == d))-ly/ny;
         zti = mean(zt(discr == d))-lz/nz;    
         %text(xti, 0, zti, string(d), 'FontSize', 18, 'Color', 'black');
         text(xti, 0, zti, string(d), 'FontSize', 18, 'FontName', 'Castellar', 'Color', 'black');
@@ -549,32 +515,36 @@ c1 = [48, 37, 255]/255;
 c2 = [0, 255, 0]/255;
 cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 
-% for i = 1:20:numel(states)
-%     f1 = figure(1); clf
-%     plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
-%     plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
-%     view(vx, vz); colormap(cc); caxis([0, 1-swr]);
-%     axis tight off
-%     title(['Fine-scale saturation, step:', num2str(i)])   
-%     
-%     saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
-%     
-%     if 0
-%         f2 = figure(2); clf    
-%         plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
-%         plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-%         view(0, 0); colormap(cc);
-%         axis tight off
-%         title(['Fine-scale capillary pressure, step:', num2str(i)])   
-% 
-%         saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
-%     end
-% end
+for i = 1:20:numel(states)
+    f1 = figure(1); clf
+    plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
+    plotFaces(G, (1:G.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
+    hold on
+    plotFaces(G, fafa, 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
+    view(vx, vz); colormap(cc); caxis([0, 1-swr]);
+    axis tight off
+    title(['Fine-scale saturation, step:', num2str(i)])   
+    
+    saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
+    
+    if 0
+        f2 = figure(2); clf    
+        plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
+        plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
+        view(0, 0); colormap(cc);
+        axis tight off
+        title(['Fine-scale capillary pressure, step:', num2str(i)])   
+
+        saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
+    end
+end
 
 for i = 1:20:numel(states_hybrid)
     f2 = figure(2); clf    
     plotCellData(model.G, states_hybrid_fs{i}.s(:, 2), 'edgec', 'none');
-    plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
+    plotFaces(G, (1:G.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
+    hold on
+    plotFaces(G, fafa, 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
     view(vx, vz); colormap(cc); caxis([0, 1-swr]); 
     axis tight off
     title(['Hybrid: VE reconstructed saturation, step:', num2str(i)])
@@ -595,4 +565,150 @@ for i = 1:20:numel(states_hybrid)
     end
 end
 
+%% Plot 2D section
+if run3D    
+   section_2d = (jj == 5);
+   
+   cells_2d = model.G.cells.indexMap(section_2d);
+   n_2d = unique(model.G.faces.neighbors(fafa, :));
+   cells_2d_faces = cells_2d(ismember(cells_2d, n_2d));     
+   faces_2d = gridCellFaces(model.G, cells_2d_faces);
+   faces_2d = fafa(ismember(fafa, faces_2d));
+   
+   for i=1:20:numel(states)%fix(2*numel(states)/3)
+       f6 = figure(6); clf
+       sf = states{i}.s(:,2);      
+       sf = sf(section_2d);
+       plotCellData(model.G, sf, cells_2d, 'edgec', 'none')
+       plotFaces(G, faces_2d, 'facec', 'w', 'linewidth', 0.5, 'facealpha', 0)
+       view(0, 0); colormap(cc); caxis([0,1-swr]);
+       colorbar('location', 'southoutside');
+       axis tight on    
+       pause(0.2)
+       title(['Fine saturation, step:', num2str(i)])
+       
+       saveas(f6, sprintf(strcat(plot_dir, 'jj5_fine_sat_%d'), i), 'png');
+   end
+   
+   for i=1:20:numel(states_hybrid)%fix(2*numel(states_hybrid)/3)
+       f7 = figure(7); clf
+       sh = states_hybrid_fs{i}.s(:,2);      
+       sh = sh(section_2d);
+       plotCellData(model.G, sh, cells_2d, 'edgec', 'none')
+       plotFaces(G, faces_2d, 'facec', 'w', 'linewidth', 0.5, 'facealpha', 0)
+       view(0, 0); colormap(cc); caxis([0,1-swr]);
+       colorbar('location', 'southoutside');
+       axis tight on
+       pause(0.2)
+       title(['Hybrid saturation, step:', num2str(i)])
+       
+       saveas(f7, sprintf(strcat(plot_dir, 'jj5_hybrid_sat_%d'), i), 'png');
+   end
+end
 
+%% Compute net CO2 volume in each VE column 
+% and compare with fine solution
+sn_f = states{end}.s(:,2); % fine saturations
+sn_h = states_hybrid{end}.s(:,2); % hybrid saturations
+p = model_hybrid.G.partition;
+
+[vol_unique, ~, idx_sort] = uniquetol(model_hybrid.G.cells.volumes);
+
+pvh = poreVolume(model_hybrid.G, model_hybrid.rock);
+pvf = poreVolume(model.G, model.rock);
+
+sn_f_net = accumarray(p, sn_f.*pvf);
+sn_f_net = sn_f_net ./ pvh;
+
+% VOLUME MISMATCH FOR COARSE CELLS - sorted after increasing volume
+diff_fh = zeros(numel(vol_unique), 1);
+var_fh = zeros(size(diff_fh));
+for i=1:numel(vol_unique)    
+    iv = idx_sort == i;
+    diff_fh(i) = mean(abs(sn_h(iv) - sn_f_net(iv)));    
+    var_fh(i) = var(abs(sn_h(iv) - sn_f_net(iv)));
+end
+
+f10 = figure(10);
+plot(1:numel(diff_fh), diff_fh, 'b', 'DisplayName', 'Mean')
+hold on
+plot(1:numel(var_fh), var_fh, '-r', 'DisplayName', 'Variance')
+% SET VOLUME TICKS !
+xlabel('Coarse cells (increasing volume)')
+title('Absolute difference in CO2 saturation: coarse')
+legend();
+drawnow;
+saveas(f10, strcat(plot_dir, 'diff_sat_coarse'), 'png')
+
+% VOLUME MISMATCH FOR FINE CELLS IN DIFFERENT DISCRETIZATION REGIONS
+sn_hf = states_hybrid_fs{end}.s(:,2);
+discr = model_hybrid.G.cells.discretization;
+discr_u = unique(discr);
+
+diff_fh = zeros(numel(discr_u), 1);
+var_fh = zeros(size(diff_fh));
+for i=1:numel(discr_u) % discretization starts at 1 for fine cells
+    d = discr_u(i);
+    dp = discr(p);
+    iv = dp == d;
+    diff_fh(i) = mean(abs(sn_hf(iv) - sn_f(iv)));    
+    var_fh(i) = var(abs(sn_hf(iv) - sn_f(iv)));
+end
+
+f11 = figure(11);
+plot(1:numel(diff_fh), diff_fh, 'b', 'DisplayName', 'Mean')
+hold on
+plot(1:numel(var_fh), var_fh, '-r', 'DisplayName', 'Variance')
+% SET VOLUME TICKS !
+xticklabels(discr_u);
+xlabel('Discretization region')
+title('Absolute difference in CO2 saturation: reconstruction')
+legend();
+drawnow;
+saveas(f11, strcat(plot_dir, 'diff_sat_fine'), 'png')
+
+f12 = figure(12);
+dt = schedule.step.val;
+rate = [];
+for i=1:numel(schedule.control)
+    num_W = nnz(schedule.step.control == i);
+    rate_i = schedule.control(i).W.val * schedule.control(i).W.status; % only add rate if well is on
+    rate = cat(1, rate, repmat(rate_i, num_W, 1));
+end
+V_inj = cumsum(rate.*dt);
+Vf_net = [];
+Vh_net = [];
+for i=1:numel(states)
+   Vf_net = cat(1, Vf_net, sum(states{i}.s(:,2).*pvf)); 
+   Vh_net = cat(1, Vh_net, sum(states_hybrid_fs{i}.s(:,2).*pvf));
+end
+
+Vf_exit = V_inj - Vf_net;
+Vh_exit = V_inj - Vh_net;
+
+plot(1:numel(states), Vf_exit, 'b', 'DisplayName', 'Fine model')
+hold on
+plot(1:numel(states_hybrid_fs), Vh_exit, 'r', 'DisplayName', 'Hybrid model')
+xlabel('Time step')
+ylabel('m^3')
+title('CO2 volume exited domain')
+legend('location', 'northwest');
+drawnow;
+saveas(f12, strcat(plot_dir, 'volume_exit'), 'png')
+
+%% Functions:
+function [v_hybrid, v_fine] = discrCO2Vol(d, model_hybrid,  model_fine, state_hybrid_fs, state_fine)
+    discr = model_hybrid.G.cells.discretization == d;
+    p = model_hybrid.G.partition;
+    discr = discr(p);
+    vol = model_fine.G.cells.volumes(discr);
+    snh = state_hybrid_fs.s(:,2);    
+    snh = snh(discr);
+    snf = state_fine.s(:,2);
+    snf = snf(discr);
+    pv = poreVolume(model_fine.G, model_fine.rock);
+    pv = pv(discr);
+    
+    v_hybrid = pv.*snh;
+    v_fine = pv.*snf;
+end

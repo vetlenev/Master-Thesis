@@ -132,7 +132,7 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_
         
             sG(pcH) = a_M.*(1-swr) + a_R_.*snr;
             a_R(pcH) = a_R_;
-        end
+        end    
         % --------------------------------------------
        
 %         T = T(cBH);

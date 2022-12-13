@@ -109,14 +109,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         c = c_horz(:,idx); % horizontal cells in coarse grid
         %cp = pc_horz(:,idx); % horizontal cells in parent grid
         
-        t = G.cells.topDepth(c);
-        tp = G.cells.topDepth(p);
-        %tp = tp(cp);
+        t = G.cells.topDepth(c);        
         T = op.connections.faceTopDepth(veHorz, idx);     
-        b = G.cells.bottomDepth(c);
-        B = op.connections.faceBottomDepth(veHorz, idx);
-        Hb = G.cells.height(c); % to not overwrite global H
-
+        
         veH{idx} = find(T ~= t); % all virtual ve cells except top one (this does not give bottom saturation region)
         cH{idx} = c(veH{idx}); % select correct ve virtual cells
         %cV = c_vic(ismember(c_vic, cv));        

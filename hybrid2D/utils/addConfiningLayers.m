@@ -39,7 +39,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     N = neighbors(act, :);
     all_faces = find(act);  
     
-    sealingCells = zeros(G.cells.num, 1); 
+    sealingCells = false(G.cells.num, 1);    
     
     x = G.faces.centroids(act, 1);
     y = G.faces.centroids(act, 2);

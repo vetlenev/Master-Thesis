@@ -148,7 +148,7 @@ classdef UtilFunctions
             for i=1:numel(sealingCells) % loop through semi-perm layers and find overlaps and "subsubgrids" to remove from subgrid
                 sealingC = G.cells.indexMap(sealingCells{i});
                 sealing_overlap = sealingC(ismember(sealingC, subcells));
-                sealing_top = min(kk(sealing_overlap)); % last term necessary in case of no overlap
+                sealing_top = min(kk(sealing_overlap));
                 sealing_left = min(ii(sealing_overlap));
                 sealing_right = max(ii(sealing_overlap));
                 sealing_west = min(jj(sealing_overlap));
@@ -165,16 +165,19 @@ classdef UtilFunctions
             end
             
             for i=1:numel(sealingFaces) % handle overlap for sealing faces
+                if isequal(sealingFaces{i}, bottom_faces)
+                   continue; % avoid checking the same sealing layer 
+                end
                 sealingF = sealingFaces{i};
                 sealingC = G.faces.neighbors(sealingF,:);
-                [~, col_idx] = max(kk(subcells), [], 2); % choose bottom neighbor, not top
+                [~, col_idx] = max(kk(sealingC), [], 2); % choose bottom neighbor, not top
                 sealingC = diag(sealingC(:, col_idx)); % choose from col-index corresponding to bottom neighbor
                 
                 sealing_overlap = sealingC(ismember(sealingC, subcells));
                 sealing_top = min(kk(sealing_overlap)); % last term necessary in case of no overlap
                 sealing_left = min(ii(sealing_overlap));
                 sealing_right = max(ii(sealing_overlap));
-                sealing_west = min(jj(sealing_overlap));
+                sealing_west = min(jj(sealing_overlap)); 
                 sealing_east = max(jj(sealing_overlap));
 
                 if ~isempty(sealing_overlap)
@@ -194,17 +197,17 @@ classdef UtilFunctions
             vecells = subcells(ve_mask); % only ve
             finecells = subcells(~ve_mask); % only fine            
                           
-            % extract separate grids
-            [Gss, cmaps, fmaps, nmaps] = extractSubgrid(G, vecells); % subgrid for VE regions under sealing layer
-            [Gsf, cmapf, fmapf, nmapf] = extractSubgrid(G, finecells); % subgrid for fine regions under sealing layer
-            
+%             % extract separate grids
+%             [Gss, cmaps, fmaps, nmaps] = extractSubgrid(G, vecells); % subgrid for VE regions under sealing layer
+%             [Gsf, cmapf, fmapf, nmapf] = extractSubgrid(G, finecells); % subgrid for fine regions under sealing layer
+%             
+%             Gs = {Gss, Gsf, Gs_tot};
+%             cmap = {cmaps, cmapf};
+%             fmap = {fmaps, fmapf};
+%             nmap = {nmaps, nmapf};
             % extract combined grid
-            [Gs_tot, ~, ~, ~] = extractSubgrid(G, subcells);
-            
-            Gs = {Gss, Gsf, Gs_tot};
-            cmap = {cmaps, cmapf};
-            fmap = {fmaps, fmapf};
-            nmap = {nmaps, nmapf};          
+            [Gs, cmap, fmap, nmap] = extractSubgrid(G, subcells);  
+            test = 0;
        end
        
        function [var] = initNanADI(ad_var)

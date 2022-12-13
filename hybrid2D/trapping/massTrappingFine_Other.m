@@ -90,10 +90,10 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     resStruc  = 0;      % trapped, res
     freeStruc = 0;                          % trapped, non-res
         
-    plumeSG = SG(SG > sr);
+    plumeSG = SG(SG > sr); % part of mobile plume
     freeRes   = sum(pv(SG > sr).*rhoCO2(SG > sr).*sr);                                     % non-trapped, flowing, rrrrres
     freeMov   = sum(pv(SG > sr).*rhoCO2(SG > sr).*max(plumeSG - sr, 0));                          % non-trapped, flowing, non-res 
-    resSG = SG(SG <= sr);          
+    resSG = SG(SG <= sr); % part of immobile plume       
     resTrap = sum(pv(SG <= sr) .* rhoCO2(SG <= sr) .* resSG);
     
     resDis    = fluidADI.rhoGS .* sum(pv.* (rs .* fluidADI.bW(p) .* SW)); % dissolved

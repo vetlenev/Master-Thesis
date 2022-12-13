@@ -30,14 +30,21 @@ nx = G.cartDims(1); ny = G.cartDims(2); nz = G.cartDims(3);
 
 mx = tand(4); % aquifer slope
 my = tand(2);
-%m = (k_range(2) - k_range(1)) / (i_range(2) - i_range(1));
+
+% G.nodes.coords(:,3) = G.nodes.coords(:,3) + mx*G.nodes.coords(:,1) + my*G.nodes.coords(:,2) + ...
+%                         + (nz/10)*sin(4*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
+%                         + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
+%                                     (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
+%                         + (nz/5).*sin(pi/3+2*pi*G.nodes.coords(:,2)/max(G.nodes.coords(:,2)));                                   
+%                     %+ exp(-G.nodes.coords(:,2)/max(G.nodes.coords(:,2))) .* 
+
+% For experimenting with trapping:                    
 G.nodes.coords(:,3) = G.nodes.coords(:,3) + mx*G.nodes.coords(:,1) + my*G.nodes.coords(:,2) + ...
-                        + (nz/10)*sin(4*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
+                        + (nz/10)*sin(2*pi*G.nodes.coords(:,1)/(0.4*max(G.nodes.coords(:,1)))) ...
                         + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
                                     (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
-                        + (nz/5).*sin(pi/3+2*pi*G.nodes.coords(:,2)/max(G.nodes.coords(:,2)));                                   
-                    %+ exp(-G.nodes.coords(:,2)/max(G.nodes.coords(:,2))) .* 
-
+                        + (nz/2).*sin(pi/3+pi*G.nodes.coords(:,2)/(0.4*max(G.nodes.coords(:,2)))); % (nz/5) (pi/3 + 2*pi)                                                        
+                    
 G = computeGeometry(G);
 
 [ii, jj, kk] = gridLogicalIndices(G);
@@ -51,20 +58,20 @@ setZeroTrans = zeros(G.faces.num, 1);
 sealingCellsPerm = 0.1*milli*darcy;
 
 %k_pos = [nz/2-1, nz/2+1];
-k_pos = [0, nz/15; ... % 0, nz/10
-         nz/5-1, nz/5+1; ... % nz/5, nz/4
-         nz/4-1, nz/4+nz/15; ... % nz/3, nz/2.5
-          nz/2-1, nz/2+1];
+k_pos = [nz/7-1, nz/7+1; ... % 0, nz/10
+         nz/3-1, nz/3+1; ... % nz/5, nz/4
+         nz/3-1, nz/3+nz/15; ... % nz/3, nz/2.5
+          3*nz/5-1, 3*nz/5+1];
 %i_range = [nx/2, nx];  
 i_range = [0, nx/2; ...
             nx/3, 3*nx/5; ...
             5*nx/6, nx; ...
             nx/2, nx];
         
-j_range = [0, ny/2; ...
-            ny/2, ny; ...
-            ny/4, 3*ny/4; ...
-            0, ny];
+j_range = [2*ny/7, 5*ny/7; ...
+            ny/4, 4*ny/7; ...
+            2*ny/5, 2*ny/3; ...
+            ny/5, 4*ny/5];
        
 allSealingFaces = {}; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
@@ -152,7 +159,7 @@ setZeroTrans(sealingFaces) = 1;
 setZeroTrans = logical(setZeroTrans); 
 
 G = computeGeometry(G); 
-[x, z] = deal(G.cells.centroids(:,1), G.cells.centroids(:,3));
+[x, y, z] = deal(G.cells.centroids(:,1), G.cells.centroids(:,2), G.cells.centroids(:,3));
 
 rock = makeRock(G, perm, 0.3);
 swr = 0.1;
@@ -208,11 +215,13 @@ horzWellDistRate = 0.1; % ratio of total horizontal length considered "close" to
 vertWellDistRate = 0.1;
 for i = 1:numel(W)
     c = W(i).cells(1);
-    hdist = abs(x - x(c));
-    vdist = abs(z - z(c));
+    xdist = abs(x - x(c));
+    ydist = abs(y - y(c));
+    zdist = abs(z - z(c));
     % store cells close to well, if fine-scale needed
-    nearWell(hdist < fix(horzWellDistRate*max(x)) & ...
-              vdist < fix(vertWellDistRate*max(z))) = true;
+    nearWell(xdist < fix(horzWellDistRate*max(x)) & ...
+             ydist < fix(horzWellDistRate*max(y)) & ...
+              zdist < fix(vertWellDistRate*max(z))) = true;
 end
 if ~isempty(bc)
     % all cells at dirichlet boundary conditions set to fine cells

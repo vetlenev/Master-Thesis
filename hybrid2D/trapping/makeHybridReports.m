@@ -1,9 +1,8 @@
-function reports = makeHybridReports(Gts_all, cmaps, fmaps, ...
-                                    Gtf_all, cmapf, fmapf, ...
+function reports = makeHybridReports(Gts_all, Gs_all, cmaps, fmaps, ...
                                     fine_rem, ...
                                     Gh, states, ...
                                     rock, fluid, schedule, ...
-                                    residual, trap_s, trap_f, dh)
+                                    residual, trap_s, dh)
 % NB: Change cmaps to cmaps
 % This function does intermediate processing of simulation data in order to
 % generate inventory plots using 'plotTrappingDistribution'.
@@ -67,22 +66,22 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
  
    % Get global unique cells for VE subgrids under semi-perm   
     cs_all = {};
-    for s=1:numel(Gts_all)
+    for s=1:numel(Gs_all)
        cs_all = cat(1, cs_all, cmaps{s});
-    end
+    end        
+    cmaps_all = vertcat(cmaps{:});
     
     %cmap_glob = setdiff(Gt.parent.cells.indexMap, vertcat(cs_all{:})); % extract all cells from 3D grid associated uniquely with Gt (i.e. cells not part of any Gti)    
     [~, ~, kk] = gridLogicalIndices(Gh.parent);
     
-    ph = Gh.partition;
+    ph = Gh.partition;        
     % Get topsurface-hybrid mapping
     % --- Alternative 1 ---
 %     kkt = find(kk == min(kk));
 %     ctf_glob = cmap_glob(ismember(cmap_glob, kkt)); % VE regions of global top surface
 %     cth_glob = ph(ctf_glob); % same but hybrid indices 
    
-    max_massVE = zeros(numel(Gts_all), 1); % max mass obtained in each VE top-surface subgrid
-    max_massFine = zeros(numel(Gtf_all), 1); % max mass obtained in each fine top-surface subgrid
+    max_massVE = zeros(numel(Gts_all), 1); % max mass obtained in each VE top-surface subgrid    
     
    for i = 1:numel(states)
 
@@ -192,18 +191,13 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       % THIRD, compute masses for VE subgrids under top surface
       for s=1:numel(Gts_all)
           Gs = Gts_all{s}; % top surface subgrid for semi-perm layer
-          cs = cmaps{s};
-          fs = fmaps{s};
+          c_sub = cmaps{s};
+          f_sub = fmaps{s};
           trap_i = trap_s{s};
-          Gts = sprintf('Gts%d', s);
-                                     
-          kkf = kk(cs);       
-          kkf = cs(kkf == min(kkf));          
-          csf = cs(ismember(cs, kkf));         
-          csh = ph(csf); % for new extraction of subgrid there will be no overlap for top surface subgids        
+          Gts = sprintf('Gts%d', s);                    
                 
           reports(i).(Gts).masses    = massTrappingDistributionHybridADI(Gs, Gh, ...
-                                                        csh,  ...
+                                                        c_sub,  ...
                                                         reports(i).sol.pressure , ...
                                                         reports(i).sol.s(:,2)   , ...
                                                         reports(i).sol.s(:,1)   , ...
@@ -219,59 +213,22 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                                                         cBottomHorz              , ...
                                                         rock                    , ...
                                                         fluid                   , ...
-                                                        trap_i                   , ...
+                                                        trap_i                  , ...
                                                         dh                      , ...
                                                         'rs', rs); %#ok
                                                     
           mass_i = reports(i).(Gts).masses; % individual masses for this subgrid
           max_massVE(s) = max(max_massVE(s), sum(mass_i)); % keep track of max mass reached in this subgrid
           if s == 1
-              mass_subVE = zeros(size(mass_i)); % separate masses to be summed over subgrids
+              mass_sub = zeros(size(mass_i)); % separate masses to be summed over subgrids
           end
-          mass_subVE = mass_subVE + mass_i; % individual masses summed over subgrids
+          mass_sub = mass_sub + mass_i; % individual masses summed over subgrids
           
           leaked_i = max_massVE(s) - sum(mass_i); % leaked out of each subgrid separately
           reports(i).(Gts).masses = [reports(i).(Gts).masses, leaked_i]; % 0 -> leaked_i
       end
            
-      mass_subFine = zeros(size(mass_subVE));      
-      % FOURTH, compute masses for fine regions under top surface subgrids
-      for s=1:numel(Gtf_all)
-          Gf = Gtf_all{s}; % top surface subgrid for semi-perm layer
-          cf = cmapf{s};
-          ff = fmapf{s};
-          trap_i = trap_f{s};
-          Gtf = sprintf('Gtf%d', s-1); % s-1 so global top surface gets 0-index
-                                     
-          kkf = kk(cf);       
-          kkf = cf(kkf == min(kkf));          
-          cff = cf(ismember(cf, kkf));         
-          cfh = ph(cff); % for new extraction of subgrid there will be no overlap for top surface subgids        
-                
-          reports(i).(Gtf).masses    = massTrappingFine_TopSurface(Gh, cfh,  ...
-                                                        reports(i).sol.pressure , ...
-                                                        reports(i).sol.s(:,2)   , ...
-                                                        reports(i).sol.s(:,1)   , ...                                                       
-                                                        rock                    , ...
-                                                        fluid                   , ...
-                                                        trap_i                   , ...              , ...
-                                                        'rs', rs); %#ok
-                                                    
-          mass_i = reports(i).(Gtf).masses;
-          max_massFine(s) = max(max_massFine(s), sum(mass_i));
-          mass_subFine = mass_subFine + mass_i;
-          
-          leaked_i = max_massFine(s) - sum(mass_i); % leaked out of each subgrid separately
-          reports(i).(Gtf).masses = [reports(i).(Gtf).masses, leaked_i];
-      end
-      % ------------------
-                                                    
-      % FIFTH, compute masses in fine parts of grid, not accounted for in
-      % calculations for top surface
-      kkf = kk(fine_rem);       
-      kkf = cf(kkf == min(kkf));          
-      cff = cf(ismember(cf, kkf));         
-      cfh_rem = ph(cff); % for new extraction of subgrid there will be no overlap for top surface subgids        
+      cfh_rem = ph(fine_rem);
 
       mass_fine = massTrappingFine_Other(Gh, cfh_rem, reports(i).sol.pressure, ...
                                                         reports(i).sol.s(:,2), ...
@@ -280,9 +237,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       
       
       % Sum up masses BEFORE adding leaked mass
-      reports(i).masses =  mass_subVE + ...
-                            mass_subFine + ...
-                            mass_fine;
+      reports(i).masses =  mass_sub + mass_fine;
                 
       %leaked = tot_inj - sum(reports(i).Gt.masses) - tot_mass_subgrids;
       leaked = tot_inj - sum(reports(i).Gh.masses);
