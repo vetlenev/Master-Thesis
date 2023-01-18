@@ -70,7 +70,7 @@ i_range = [0, nx/4; ...
 allSealingFaces = {}; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
 allSealingCells_faces = {}; % bounding faces for sealing cells
-allSealingBottom = {};
+allSealingBottom = {}; % bounding bottom faces for sealing cells
        
 if adaptiveSealing % Assign faces or cells based on thickness
     dz_eps = nz/20; % thickness threshold
@@ -168,9 +168,9 @@ krn_PI = @(s) fluid.krG(s); % primary imbibition
 
 %fluid.krG = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
                        
-tot_time = 400*year;
+tot_time = 300*year;
 inj_stop = 0.1; % 0.1
-pv_rate = 0.15; % 0.1
+pv_rate = 0.1; % 0.1
 
 pv = poreVolume(G, rock);
 inj_rate = pv_rate*sum(pv)/(inj_stop*tot_time); % inject pv_rate of total pore volume over injection time
@@ -230,7 +230,7 @@ T = getFaceTransmissibility(G, rock);
 
 isFine = struct;
 isFine.sealingCells = allSealingCells; % no sealing cells if only face constraint
-isFine.sealingCells_faces = allSealingCells_faces;
+isFine.sealingCells_faces = allSealingCells_faces; % bounding faces of sealing cells
 isFine.sealingBottom = allSealingBottom;
 isFine.well = nearWell;
 
