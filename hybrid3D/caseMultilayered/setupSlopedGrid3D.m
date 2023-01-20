@@ -44,7 +44,9 @@ G.nodes.coords(:,3) = G.nodes.coords(:,3) + mx*G.nodes.coords(:,1) + my*G.nodes.
                         + (exp(-3*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) * ...
                                     (nz/2)) .* cos(pi/2+6*pi*G.nodes.coords(:,1)/max(G.nodes.coords(:,1))) ...
                         + (nz/2).*sin(pi/3+pi*G.nodes.coords(:,2)/(0.4*max(G.nodes.coords(:,2)))); % (nz/5) (pi/3 + 2*pi)                                                        
-                    
+   
+min_z = min(G.nodes.coords(:,3));
+G.nodes.coords(:,3) = G.nodes.coords(:,3) - min(min_z, 0); % shift grid to be strictly positive (minimum depth =0)
 G = computeGeometry(G);
 
 [ii, jj, kk] = gridLogicalIndices(G);

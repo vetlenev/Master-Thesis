@@ -139,11 +139,12 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         pv_i = pv(fine_z_global);
         rho_pv = fluidADI.rhoGS.*pv_i;
         
-        % Is this correct !??
-        % I think zt is height/thickness while zt is depth ???
         strucTrapped_i = zi < zt{i};
-        freePlume_i = zi >= zt{i} & SG_i > sr; % cells in mobile plume
-        resPlume_i = zi >= zt{i} & SG_i <= sr; % cells in immobilized plume
+        % -----
+        res_buff = 1.1; % buffer factor for CO2 to be residually trapped (necessary since CO2 sat will converge towards sr at infinite time due to relperm going to zero)
+        % -----
+        freePlume_i = zi >= zt{i} & SG_i > res_buff*sr; % cells in mobile plume
+        resPlume_i = zi >= zt{i} & SG_i <= res_buff*sr; % cells in immobilized plume
         
         freeStruc = freeStruc + sum((max(SG_i, sr) - sr).*rho_pv.* strucTrapped_i); % structural plume
         resStruc = resStruc + sum(min(SG_i, sr).*rho_pv .* strucTrapped_i); % structural residual

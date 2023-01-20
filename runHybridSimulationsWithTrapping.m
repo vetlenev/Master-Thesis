@@ -29,6 +29,7 @@ useFaceConstraint = false;
 useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
 run3D = false;
 sloped = true;
+standard = false;
 
 trans_mult = 1e-5; % 1e-4
 trans_mult = ~useAdaptive*(useFaceConstraint*trans_mult + ~useFaceConstraint) ...
@@ -48,7 +49,7 @@ else
     if sloped
         [state0, models, schedule, ...
          isFineCells, sealingFaces, allSealingFaces] = setupSlopedGrid(useFaceConstraint, useAdaptive, ...
-                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
+                                                    [nx,ny,nz], [lx,ly,lz], trans_mult, standard);
     else
         [state0, models, schedule, ...
          isFineCells, sealingFaces] = setupHorizontalGrid(useFaceConstraint, useAdaptive, ...
@@ -326,12 +327,14 @@ fine_rem = setdiff(G.cells.indexMap, top_surface_cells);
 %% Plot trapping
 figure(15)
 %plotCellData(Gt, ones(Gt.cells.num,1), 'EdgeColor', 'none');
-plotCellData(Gts{5}, tas{5}.traps, 'EdgeColor', 'k')
+for i=1:numel(Gts)
+    plotCellData(Gts{i}, tas{i}.traps, 'EdgeColor', 'k')
+end
 view(vx, vz+45)
 axis equal tight
 %light('Position',[-1 0 -1]);lighting phong
 colorbar('horiz'); caxis([0 numel(unique(ta.traps))]);
-title('Traps for formation top surface')
+title('Traps for sealing top surfaces')
 daspect([2, 0.1, 1])
 
 %% Plot subgrids
@@ -349,7 +352,7 @@ for i=1:numel(Gs_all)
     else
         alpha = 1;
     end
-    plotGrid(Gs_all{i}, 'facecolor', cm(i,:), 'facealpha', alpha)
+    plotGrid(Gs_all{i}, 'facecolor', cm(numel(Gs_all)-i+1,:), 'facealpha', alpha)
 end
 
 view(vx, vz)
@@ -415,23 +418,26 @@ view(vx, vz)
 axis equal tight
 daspect([1, 0.1, 1])
 
-% Compare volumes in discretization regions connected to semi-perm layers
-[vols_hybrid, vols_fine] = Volumes.plotSealingLayersVols(model_hybrid, model_fine, ...
-                                                        states_hybrid_fs, states, ff);
-
 sn_f = states{end}.s(:,2); % fine saturations
 sn_h = states_hybrid{end}.s(:,2); % hybrid saturations
+ff = ff + 1;
+% VOLUME MISMATCH FOR COARSE REGIONS
+[diff_coarse, var_coarse] = Volumes.diffCO2SatCoarse(model_hybrid, model_fine, sn_h, sn_f, ff, plot_dir);
 
-[diff_coarse, var_coarse] = Volumes.diffCO2SatCoarse(model_hybrid, model_fine, sn_h, sn_f, 10, plot_dir);
-
-% VOLUME MISMATCH FOR FINE CELLS IN DIFFERENT DISCRETIZATION REGIONS
 sn_hf = states_hybrid_fs{end}.s(:,2);
-
-[diff_fine, var_fine] = Volumes.diffCO2SatFine(model_hybrid, sn_hf, sn_f, 11, plot_dir);
+ff = ff + 1;
+% VOLUME MISMATCH FOR FINE CELLS IN DIFFERENT DISCRETIZATION REGIONS
+[diff_fine, var_fine] = Volumes.diffCO2SatFine(model_hybrid, sn_hf, sn_f, ff, plot_dir);
 
 % COMPARE EXITED VOLUMES
+ff = ff + 1;
 [Vh_exit, Vf_exit] = Volumes.plotExitedVolumes(model_fine, states_hybrid_fs, states, ...
-                                            schedule, 12, plot_dir);
+                                            schedule, ff, plot_dir);
+
+% Compare volumes in discretization regions connected to semi-perm layers
+ff = ff + 1;
+[vols_hybrid, vols_fine] = Volumes.plotSealingLayersVols(model_hybrid, model_fine, ...
+                                                        states_hybrid_fs, states, ff);
 
 %% Plot CO2 saturation for each model
 fafa = find(sealingFaces | sealingCells_faces);

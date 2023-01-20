@@ -14,7 +14,7 @@ function [masses, masses0] = massTrappingDistributionHybridADI(Gt, Gh, c_sub, p,
 %
 % PARAMETERS:
 %   Gt         - Top surface grid
-%   ?Gti?        - cell array of semi-permeable top surface grids
+%   ?Gti?      - cell array of semi-permeable top surface grids
 %   Gh         - hybrid grid
 %   cmap       - cell array of local-to-global cell mapping for 3D grid corresponding to each Gti
 %   p          - pressure, one value per cell of grid
@@ -360,7 +360,7 @@ function [masses, masses_0] = massTrappingDistributionFine(Gt, Gh, c_fine, p, sG
     
     for i=1:numel(cols_u)
         cols_i = cols_u(i);
-        col_idx = cols == cols_i;
+        col_idx = cols == cols_i; % all cell connected to cols_i
         zi = z(col_idx); % extract depths for all fine cells in this ve column
         SG_i = SG(col_idx);
         SW_i = SW(col_idx);
@@ -370,8 +370,9 @@ function [masses, masses_0] = massTrappingDistributionFine(Gt, Gh, c_fine, p, sG
         
         % Is this correct !??       
         strucTrapped_i = zi < zt(i);
-        freePlume_i = zi >= zt(i) & SG_i > sr; % cells in mobile plume
-        resPlume_i = zi >= zt(i) & SG_i <= sr; % cells in immobilized plume
+        res_buff = 1.1; 
+        freePlume_i = zi >= zt(i) & SG_i > res_buff*sr; % cells in mobile plume
+        resPlume_i = zi >= zt(i) & SG_i <= res_buff*sr; % cells in immobilized plume
          
         freeStruc = freeStruc + sum((max(SG_i, sr) - sr).*rho_pv.* strucTrapped_i); % sum over all fine cells in column that ae structurally trapped
         resStruc = resStruc + sum(min(SG_i, sr).*rho_pv .* strucTrapped_i);
