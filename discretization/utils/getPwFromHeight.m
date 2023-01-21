@@ -37,16 +37,16 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
        
     if isempty(opt.res_type)
         pW_local = pW - rhog.*g.*h_below - rhow.*g.*(hmax_below + dz_below);
-    elseif strcmp(opt.res_type, 'full')
+    elseif strcmp(opt.res_type, 'full') % Not entered!
        pW_local = pW - rhog.*g.*((1-swr).*h_below + snr.*hmax_below) ...
                      - rhow.*g.*(swr.*h_below + (1-snr).*hmax_below + dz_below);
-    elseif strcmp(opt.res_type, 'mobile')
+    elseif strcmp(opt.res_type, 'mobile') % Not entered!
         % Omit residual pressure, only mobile zones:
         pW_local = pW - rhog.*g.*(1-swr).*h_below ...
                       - rhow.*g.*((1-snr).*hmax_below + dz_below);
     end
               
-    if any(opt.cNVE)
+    if any(opt.cNVE) % NB: Dummy old version, not entered!
        % Special treatment for NVEs where residual sat filled from below
        cNVE = opt.cNVE;
              

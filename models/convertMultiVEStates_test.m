@@ -41,7 +41,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
 end
 
-function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine, state_c, state0_c, sgMax_fine, snMaxVE_bottom, vG_any, i, cellsBH, varargin)
+function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine, state_c, state0_c, sgMax_fine, ...
+                                                                snMaxVE_bottom, vG_any, i, cellsBH, varargin)
     opt = struct('convert_flux', false, 'schedule', []);
     opt = merge_options(opt, varargin{:});
     
@@ -79,20 +80,22 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
     
     h = state_c.h;
     h_T = state_c.h_T;
-    h_B = state_c.h_B;
+    h_B = state_c.h_B;        
     
-    cHorz = cellsBH{2};
-    hHi = state_c.hHi;
-    Hi = state_c.Hi;
+    cHorz = cellsBH{2}; % VE cells with only horizontal fluxes from semi-perm layers
+    hHi = state_c.hHi; % top depth of plume originaing from horizontal flux of semi-permeable layer
+    Hi = state_c.Hi; % height from top of parent cell to semi-perm layer
     
-    cBottomHorz = cellsBH{3};
-    hBHi = state_c.hBHi;
+    cBottomHorz = cellsBH{3}; % VE cells with both horizontal and diffuse leakage up from semi-perm layers
+    hBHi = state_c.hBHi; % top depth of plume originating from horizontal OR upward flux from semi-perm layer
     BHi = state_c.BHi;
     
-    if i == 200
+    if i == 700
        test = 0; 
     end
-    sg = height2SatConvert_test(model, h, h_max, h_T, h_B, sG, sgMax, vG, i, cHorz, cBottomHorz, hHi, hBHi, Hi, BHi);  
+    
+    [a_M, a_R, sg] = getGasSatFromHeightFine(model, T, t, B, b, h(p), h_T(p), h_B(p), swr, snr, ...
+                                             cHorz, cBottomHorz, hHi, hBHi, Hi, BHi);
     % ---------------------------------------------------------------            
     
     state = state_c;
@@ -116,7 +119,7 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
     state_c.pressure(~isFine) = state_c.pressure(~isFine) + g.*rhow(~isFine).*CG.cells.height(~isFine)/2;    
     
     cz = (T + B)/2;
-    pressure = state_c.pressure(p); % fine-sclae pressures initially defined at top    
+    pressure = state_c.pressure(p); % fine-sclae pressures initially defined at bottom   
     rhow = rhow(p);
     rhog = rhog(p);
     %p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   

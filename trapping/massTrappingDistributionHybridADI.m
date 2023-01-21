@@ -132,7 +132,8 @@ function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW
     % Need to account for residual content originating from veBottom and
     % veHorizontal transition regions.
     ct_hybrid_height = Gh.cells.height(c_ve);
-    ct_hybrid_z = (Gh.cells.topDepth(c_ve) + Gh.cells.bottomDepth(c_ve))/2; % to get centroid
+    %ct_hybrid_z = (Gh.cells.topDepth(c_ve) + Gh.cells.bottomDepth(c_ve))/2; % to get centroid
+    ct_hybrid_z = Gh.cells.topDepth(c_ve);
         
     cB_idx = ismember(cB, c_ve); % index for arrays with one element per bottom cell cB (from hybrid indexes for full grid)
     cB_subidx = ismember(c_ve, cB); % index for arrays with one element per cell in subgrid (from hybrid indexes for full grid)    
@@ -206,10 +207,7 @@ function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW
     h_eff  = h - h_sub;
     hm_eff = h_max - hm_sub;
     
-    % --- Heights of remaining residual plumes --- 
-    % bottom: (h_B_all has one element per per VE cell in subgrid => index
-    % by cB_sub. h_B has one element per bottom cells cB of full grid =>
-    % index by cB_idx
+    % --- Heights of remaining residual plumes ---     
     h_B_struct = zeros(size(zt));
     h_B_free = zeros(size(zt));
     % hB = ct_hybrid_height (i.e. height of VE cell in subgrid)   
@@ -223,7 +221,7 @@ function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW
     h_H_freei = max(Hh(cH_idx), zt(cH_sub)) - max(h_H(cH_idx), zt(cH_sub));
 
     % bottom + horizontal:
-    h_BH_struct = zeros(size(zt)); % one fo each cell in subgrid - multiple values in cHorz cells to be accumulated
+    h_BH_struct = zeros(size(zt)); % one for each cell in hybrid grid - multiple values in cHorz cells to be accumulated
     h_BH_free = zeros(size(zt)); % heights of residual plume (for cHorz+cBottom) outside structural traps
     h_BH_structi = zt(cBH_sub) - min(zt(cBH_sub), h_BH(cBH_idx)) - max(zt(cBH_sub) - Hbh(cBH_idx), 0);        
     h_BH_freei = max(Hbh(cBH_idx), zt(cBH_sub)) - max(h_BH(cBH_idx), zt(cBH_sub));
@@ -370,7 +368,7 @@ function [masses, masses_0] = massTrappingDistributionFine(Gt, Gh, c_fine, p, sG
         
         % Is this correct !??       
         strucTrapped_i = zi < zt(i);
-        res_buff = 1.1; 
+        res_buff = 1.5; 
         freePlume_i = zi >= zt(i) & SG_i > res_buff*sr; % cells in mobile plume
         resPlume_i = zi >= zt(i) & SG_i <= res_buff*sr; % cells in immobilized plume
          

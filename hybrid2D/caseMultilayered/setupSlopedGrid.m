@@ -86,6 +86,7 @@ else
                 nx/6, 2*nx/5; ...
                 3*nx/7, 3*nx/5; ...
                 0, nx];
+end
        
 allSealingFaces = {}; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
@@ -188,7 +189,7 @@ krn_PI = @(s) fluid.krG(s); % primary imbibition
 
 %fluid.krG = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
                        
-tot_time = 300*year;
+tot_time = 400*year;
 inj_stop = 0.1; % 0.1
 pv_rate = 0.1; % 0.1
 
@@ -229,10 +230,11 @@ if ~isempty(bc)
     nearWell(sum(G.faces.neighbors(bc.face, :), 2)) = true;
 end
    
-nsteps_after_inj = 200;
-dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/250, 10);
+nsteps_before_inj = 250;
+nsteps_after_inj = 500;
+dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/nsteps_before_inj, 10);
 %dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
-dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/500, 20)];
+dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/nsteps_after_inj, 20)];
 
 times = cumsum(dt)/year();
 n_steps = numel(dt);

@@ -177,7 +177,7 @@ simulatePackedProblem(problem);
 
 %% Simple VE.
 % Simulate standard VE model, not accounting for sealing faces.
-model_ve = convertToMultiVEModel_res(model);
+model_ve = convertToMultiVEModel_test(model);
 schedule_ve = upscaleSchedule(model_ve, schedule);
 state0_ve = upscaleState(model_ve, model, state0);
 
@@ -189,11 +189,11 @@ problem_ve = packSimulationProblem(state0_ve, model_ve, schedule_ve, ...
 
 %[ws_ve, states_ve] = simulateScheduleAD(state0_ve, model_ve, schedule_ve, 'NonLinearSolver', nls);
 
-states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
+states_ve_fs = convertMultiVEStates_orig(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
 
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
-[model_hybrid, model_coarse] = convertToMultiVEModel_res(model, fineCells, ...
+[model_hybrid, model_coarse] = convertToMultiVEModel_test(model, fineCells, ...
                                             'sealingFaces', find(sealingFaces), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
                                             'sealingCells_faces', sealingCells_faces, ...
@@ -261,7 +261,7 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 [ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
 
 %% Simulate schedule hybrid
-[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+%[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
 
 %% Reconstruct fine states
 %states_hybrid_fs = convertMultiVEStates_res(model_hybrid, model_fine, states_hybrid, states);
@@ -357,7 +357,7 @@ end
 
 view(vx, vz)
 axis equal tight
-title({'VE regions under semi-perm layers', '(faded for caprock)'})
+title({'Top-surface subgrids under semi-perm layers', '(faded for caprock)'})
 daspect([1, 0.1, 1])
 
 % Plot remaining fine-perm regions

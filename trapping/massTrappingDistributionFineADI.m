@@ -141,7 +141,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         
         strucTrapped_i = zi < zt{i};
         % -----
-        res_buff = 1.1; % buffer factor for CO2 to be residually trapped (necessary since CO2 sat will converge towards sr at infinite time due to relperm going to zero)
+        res_buff = 1.5; % buffer factor for CO2 to be residually trapped (necessary since CO2 sat will converge towards sr at infinite time due to relperm going to zero)
         % -----
         freePlume_i = zi >= zt{i} & SG_i > res_buff*sr; % cells in mobile plume
         resPlume_i = zi >= zt{i} & SG_i <= res_buff*sr; % cells in immobilized plume

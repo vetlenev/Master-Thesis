@@ -1,4 +1,4 @@
-function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_B, swr, snr, varargin)
+function [a_Mob, a_R, sG] = getGasSatFromHeightFine(model, T, t, B, b, h, h_T, h_B, swr, snr, varargin)
     p = model.G.partition;
     
     z_RT = t + h_T; % bottom of residual part on TOP of col
@@ -42,8 +42,7 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_
             % ----------------------
             T_all = T(pcH);
             B_all = B(pcH);
-            
-            %a_RBi = zeros(nnz(pcH), 1);
+                      
             partly_below = (T_all >= hB_ik & T_all < H_ik ...
                             & B_all > H_ik); % fine cell is partly below bottom residual plume
             partly_above = (T_all < hB_ik & ...
@@ -56,15 +55,10 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_
                     (B_all - hB_ik).*partly_above + ...
                     (H_ik - hB_ik).*outside + ...
                     (B_all - T_all).*inside;  
-                
-            %no_intersect = (T_all >= H_ik | B_all <= hB_ik);
-            %a_RB = a_RB.*(~no_intersect); % zero out fine cells not intersecting bottom residual plume
+                            
             a_RB = a_RB./(B_all-T_all); % scale by fine cell height to get in range [0,1]
             a_RB = sum(a_RB, 2); % sum rowwise to get one residual factor per fine cell
-            
-            %a_RB_top = sum(min(max(B_all-H_ik', 0), B_all-T_all), 2); % transpose of H_ik to get array of plume heights for each fine cell
-            %a_RB_bottom = sum(min(max(hB_ik'-T_all, 0), B_all-T_all), 2); % transpose here as well
-            %a_RB = (B_all-T_all - a_RB_top - a_RB_bottom)./H(pcH);
+          
             a_M = a_Mob(pcH);
             a_RT = a_ResTop(pcH); 
             a_R_ = min(max(a_RT + a_RB, 0), 1).*(snr > 0);
@@ -72,26 +66,8 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_
             sG(pcH) = a_M.*(1-swr) + a_R_.*snr;
             % update residual factor, mobile factor same as before
             a_R(pcH) = a_R_;           
-        end
-        % -------------------------------------------
+        end       
         
-%         T_all = T(cHorz); T_u = T(cHorz_u);
-%         B_all = B(cHorz); B_u = B(cHorz_u);       
-%         H_all = H(cHorz); H_u = H(cHorz_u);
-%         
-%         a_M = a_Mob(cHorz_u);
-%         a_RB_top = accumarray(cHorz, min(max(hB_i - T_all, 0), B_all - T_all)); % remove fraction at top of virtual cell not part of residual plume
-%         a_RB_top = a_RB_top(cHorz_u);
-%         a_RB_bottom = accumarray(cHorz, min(max(B_all - H_i, 0), B_all - T_all)); % remove corresponding part from bottom
-%         a_RB_bottom = a_RB_bottom(cHorz_u);        
-%         a_RB = ((B_u - T_u) - a_RB_top - a_RB_bottom)./H_u;  
-%         
-%         a_RT = a_ResTop(cHorz_u);
-%         a_R = max(a_RT + a_RB, 0).*(snr > 0);
-%         
-%         sG(cHorz_u) = a_M.*(1-swr) + a_R.*snr;
-        % -----------------
-               
         % -- Specific reconstruction for veBottom AND veHorizontal ---        
         % --- Loop through each unique cBottomHorz ---
         for c=1:numel(cBH_u)
@@ -119,8 +95,6 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_
                     (H_ik - hB_ik).*outside + ...
                     (B_all - T_all).*inside;  
                 
-            %no_intersect = (T_all >= H_ik | B_all <= hB_ik);
-            %a_RB = a_RB.*(~no_intersect); % zero out fine cells not intersecting bottom residual plume
             a_RB = a_RB./(B_all-T_all);
             a_RB = min(sum(a_RB, 2), 1); % sum rowwise to get one residual factor per fine cell, and cap at 1 if fine cell covers multiple residual regions
                       
@@ -128,28 +102,8 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightMob(model, T, t, B, b, h, h_T, h_
             a_RT = a_ResTop(pcH);
             a_R_ = min(max(a_RT + a_RB, 0), 1-a_M).*(snr > 0);
             
-            %a_R_(a_M == 1) = 0; % force zero residual part in fully mobile zone
-        
             sG(pcH) = a_M.*(1-swr) + a_R_.*snr;
-            a_R(pcH) = a_R_;
-        end    
-        % --------------------------------------------
-       
-%         T = T(cBH);
-%         B = B(cBH);
-%         H = H(cBH);
-%         
-%         a_M = a_Mob(cBH);
-%         a_RB_top = min(max(hBH_i - T, 0), B-T); % remove fraction at top of virtual cell not part of residual plume
-%         %a_RB_top = a_RB_top(cHorz_u);
-%         a_RB_bottom = min(max(B - BH_i, 0), B-T); % remove corresponding part from bottom
-%         %a_RB_bottom = a_RB_bottom(cHorz_u);
-%         a_RB = ((B - T) - a_RB_top - a_RB_bottom)./H;  
-%         
-%         a_RT = a_ResTop(cBH);
-%         a_R = max(a_RT + a_RB, 0).*(snr > 0);
-%         
-%         sG(cBH) = a_M.*(1-swr) + a_R.*snr;
-        % --------------------
+            a_R(pcH) = a_R_; % update residual content for relaxed VE cells
+        end       
     end
 end

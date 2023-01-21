@@ -28,7 +28,7 @@ warning('off', 'Future:Deprecation');
 useFaceConstraint = false;
 useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
 run3D = false;
-sloped = false;
+sloped = true;
 
 trans_mult = 1e-5; % 1e-4
 trans_mult = ~useAdaptive*(useFaceConstraint*trans_mult + ~useFaceConstraint) ...
@@ -174,7 +174,7 @@ problem = packSimulationProblem(state0, model_fine, schedule, ...
 
 %% Simple VE.
 % Simulate standard VE model, not accounting for sealing faces.
-model_ve = convertToMultiVEModel_res(model);
+model_ve = convertToMultiVEModel_test(model);
 schedule_ve = upscaleSchedule(model_ve, schedule);
 state0_ve = upscaleState(model_ve, model, state0);
 
@@ -190,7 +190,7 @@ states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'sched
 
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
-[model_hybrid, model_coarse] = convertToMultiVEModel_res(model, fineCells, ...
+[model_hybrid, model_coarse] = convertToMultiVEModel_test(model, fineCells, ...
                                             'sealingFaces', find(sealingFaces), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
                                             'sealingCells_faces', sealingCells_faces, ...
@@ -338,27 +338,27 @@ c1 = [48, 37, 255]/255;
 c2 = [0, 255, 0]/255;
 cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 
-for i = 1:20:numel(states)
-    f1 = figure(1); clf
-    plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
-    plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
-    view(vx, vz); colormap(cc); caxis([0, 1-swr]);
-    axis tight off
-    title(['Fine-scale saturation, step:', num2str(i)])   
-    
-    saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
-    
-    if 0
-        f2 = figure(2); clf    
-        plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
-        plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-        view(0, 0); colormap(cc);
-        axis tight off
-        title(['Fine-scale capillary pressure, step:', num2str(i)])   
-
-        saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
-    end
-end
+% for i = 1:20:numel(states)
+%     f1 = figure(1); clf
+%     plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
+%     plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
+%     view(vx, vz); colormap(cc); caxis([0, 1-swr]);
+%     axis tight off
+%     title(['Fine-scale saturation, step:', num2str(i)])   
+%     
+%     saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
+%     
+%     if 0
+%         f2 = figure(2); clf    
+%         plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
+%         plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
+%         view(0, 0); colormap(cc);
+%         axis tight off
+%         title(['Fine-scale capillary pressure, step:', num2str(i)])   
+% 
+%         saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
+%     end
+% end
 
 for i = 1:20:numel(states_hybrid)
     f2 = figure(2); clf    
