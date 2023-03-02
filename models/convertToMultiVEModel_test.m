@@ -23,6 +23,10 @@ function [model_ve, model_coarse] = convertToMultiVEModel_test(model, varargin)
 %                           Are NOT assigned transmissibility multipler,
 %                           only used for categorization of hybrid grid.
 %
+%   setSubColumnsFine  - Boolean indicating if assigning all cells in
+%                           subcolumns of imposed fine cells to fine
+%                           (true) or only the imposed fine cells (false).
+%
 %   multiplier   - Weighting applied to sealing faces (default: zero)
 %
 %   
@@ -76,8 +80,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     else
         isFine = [];
     end
-    opt = struct('sealingFaces', [], 'sealingCells', [], 'sealingCells_faces', [], ...
-                'multiplier', 0, 'sumTrans', true, 'transThreshold', 0, 'pe_rest', 0);
+    opt = struct('remFineFaces', [], 'sealingFaces', [], 'sealingCells', [], 'sealingCells_faces', [], ...
+                    'setSubColumnsFine', true, 'multiplier', 0, 'sumTrans', true, ...
+                    'transThreshold', 0, 'pe_rest', 0);
     opt = merge_options(opt, varargin{:});
 
     G = model.G;
@@ -96,13 +101,21 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     % -----
     if ~isempty(opt.sealingCells_faces) % VE to Fine (horizontal or vertical)
         trans_category(opt.sealingCells_faces) = 0;
+    end   
+    if ~isempty(opt.remFineFaces) % Remaining fine cells (well, bc, ...). NB: transmissibility is NOT set to zero for these cells, only trans_category used to define different discretizations
+       trans_category(opt.remFineFaces) = 0;
     end
     % -----
     [categories, c_h] = findCategoriesMultiVE(G, trans_category);
     if ~isempty(isFine) % internal fine -> each fine cell is its own "column"
-        % Set category zero for sub-columns containing fine cells
-        categories(ismember(c_h, c_h(isFine))) = 0;
-    end
+        if opt.setSubColumnsFine
+            % Set category zero for sub-columns containing fine cells
+            categories(ismember(c_h, c_h(isFine))) = 0;
+        else
+            % Only set category zero to imposed fine cells
+            categories(isFine) = 0;
+        end
+    end  
     % Set up grids
     CG = generateCoarseGridMultiVE(G, categories);
     
@@ -134,11 +147,15 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
      
     % Copy operators over and create a new VE model
     if isa(model, 'TwoPhaseWaterGasModel') %|| isa(model, 'TwoPhaseWaterGasModelHys')
-        model_ve = WaterGasMultiVEModel_test(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, 'sealingCells', opt.sealingCells, 'pe_rest', opt.pe_rest);
+        model_ve = WaterGasMultiVEModel_test(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
+                                            'sealingCells', opt.sealingCells, 'pe_rest', opt.pe_rest);
     elseif isa(model, 'OverallCompositionCompositionalModel')
         model_ve = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'NaturalVariablesCompositionalModel')
         model_ve = NaturalVariablesMultiVEModel(CG, rock_c, fluid, model.EOSModel);
+    elseif isa(model, 'TwoPhaseWaterGasModelDissolution')
+        model_ve = WaterGasMultiVEModel_dissolution(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
+                                                    'sealingCells', opt.sealingCells, 'pe_rest', opt.pe_rest);
     else
         error(['VE not implemented for class ', class(model)]);
     end

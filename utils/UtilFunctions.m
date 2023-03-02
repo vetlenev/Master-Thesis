@@ -110,18 +110,47 @@ classdef UtilFunctions
                                                         nan(size(ad_var.jac{4})), nan(size(ad_var.jac{5}))});
        end
        
-       function fullfile = storeProblemSettings(data, folder, filename, reportname)
-           fullfile = strcat(folder, filename);
-           if ~isfile(fullfile) % file does not exist -> create table names
-               data1 = data{1};
-               data2 = data{2};
-               data3 = data{3};
-               T = table(data1,data2,data3);
-               writetable(T, fullfile);
+       function storeProblemSettings(data, tot_time_, median_time_, dirpath, sim_id, varargin)           
+           if nargin > 5
+               info = {varargin{1}};
+           else
+               info = {''};
+           end
+
+           if ~isfile(dirpath) % file does not exist -> create table names
+               id = {sim_id};
+               pe_sealing = data{1};
+               pe_rest = data{2};
+               perm_sealing = data{3};
+               perm_rest = data{4};              
+               trans_mult = data{5};               
+               swr = data{6};
+               snr = data{7};               
+               poro = data{8};
+               num_years = data{9};
+               inj_stop = data{10};
+               pv_rate = data{11};
+               nx = data{12};
+               ny = data{13};
+               nz = data{14};
+               n_sealing = data{15};
+               n_rel = data{16};
+               my_seed = data{17};
+               tot_time = tot_time_;
+               median_time = median_time_;               
+
+               T_new = table(id,pe_sealing,pe_rest,perm_sealing,perm_rest,trans_mult, ...
+                            swr,snr,poro,num_years,inj_stop,pv_rate, ...
+                            nx,ny,nz,n_sealing,n_rel,my_seed,tot_time,median_time,info);
+               writetable(T_new, dirpath);               
            else % file exists -> append to bottom
-               T = table(data{1},data{2},data{3});
-               %T = table(data{:});
-               writetable(T, fullfile, 'WriteMode', 'Append', 'WriteVariableNames', false);
+               T_new = table({sim_id},data{1},data{2},data{3},data{4},data{5}, ...
+                            data{6},data{7},data{8},data{9},data{10},data{11}, ...
+                            data{12},data{13},data{14},data{15},data{16},data{17},tot_time_,median_time_,info);
+               T = readtable(dirpath);
+               if ~any(strcmp(T.id,string(sim_id))) % only append if unique simulation not stored yet
+                   writetable(T_new, dirpath, 'WriteMode', 'Append', 'WriteVariableNames', false);
+               end
            end
             
        end

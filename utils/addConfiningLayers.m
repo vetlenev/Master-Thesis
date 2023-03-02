@@ -23,13 +23,15 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     opt = struct('type', 'faces', ...
                  'full_dim', false, ...
+                 'cells', [], ...
                  'i_range', [-inf, inf], ...
                  'j_range', [-inf, inf], ...
                  'k_range', [-inf, inf], ...
                  'x_range', [-inf, inf], ...
                  'y_range', [-inf, inf], ...
                  'z_range', [-inf, inf], ...
-                 'fraction', 1 ...
+                 'fraction', 1, ...
+                 'curved', [] ...
                  );
 
     opt = merge_options(opt, varargin{:});
@@ -37,7 +39,13 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     neighbors = G.faces.neighbors;
     act = all(neighbors > 0, 2);
     N = neighbors(act, :);
-    all_faces = find(act);  
+    all_faces = find(act);
+
+    if ~isempty(opt.cells)
+        opt.i_range = [min(ii(opt.cells)), max(ii(opt.cells))];        
+        opt.j_range = [min(jj(opt.cells)), max(jj(opt.cells))]; 
+        opt.k_range = [min(kk(opt.cells)), max(kk(opt.cells))]; 
+    end
     
     sealingCells = false(G.cells.num, 1);    
     
@@ -51,26 +59,32 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     coord_mask =  all(x >= opt.x_range(1), 2) & all(x <= opt.x_range(2), 2) & ...
                   all(y >= opt.y_range(1), 2) & all(y <= opt.y_range(2), 2) & ...
-                  all(z >= opt.z_range(1), 2) & all(z <= opt.z_range(2), 2);
+                  all(z >= opt.z_range(1), 2) & all(z <= opt.z_range(2), 2);   
               
-    mask = log_mask & coord_mask;   
+    mask = log_mask & coord_mask;    
     
     %if strcmp(opt.type, 'faces')
         mask = mask & kk(N(:, 1)) ~= kk(N(:, 2)); % omit faces in horizontal direction  
     %end
 
     faces = all_faces(mask);
+
+    curved_faces = [];
+    if ~isempty(opt.curved)  
+        for i=1:numel(opt.curved)
+            faces = gridCellFaces(G, opt.curved(i)); 
+            curved_faces = cat(1, curved_faces, faces);
+        end
+        faces = horzcat(curved_faces{:});
+    end
+
     if opt.fraction < 1 % only include a fraction of the sealing faces
         tmp = rand(size(faces));
         faces = faces(tmp < opt.fraction);
     end
     bottom_faces = [];
     
-    if strcmp(opt.type, 'cells')
-%         z_faces = G.faces.centroids(faces, 3);
-%         top_confining_faces = faces(z_faces == min(z_faces));
-%         bottom_confining_faces = faces(z_faces == max(z_faces));                      
-        
+    if strcmp(opt.type, 'cells') && isempty(opt.curved)
         sealing_N = G.faces.neighbors(faces,:);
         
         sealing_N1 = sealing_N(:,1); % upper neighbor
@@ -99,6 +113,43 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         sealingCellsIdx = G.cells.indexMap(sealingCells);    
 
         [faces, bottom_faces] = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx, 'full_dim', opt.full_dim);
+
+    elseif strcmp(opt.type, 'cells') && ~isempty(opt.curved)
+        faces = [];
+        for i=1:numel(opt.curved)
+            sealing_N = G.faces.neighbors(curved_faces(i),:);
+            
+            sealing_N1 = sealing_N(:,1); % upper neighbor
+            sealing_N2 = sealing_N(:,2); % lower neighbor
+            
+            top_boundary_idx = kk(sealing_N1) == min(kk);
+            bottom_boundary_idx = kk(sealing_N2) == max(kk);
+            
+            top_neighbors = (~ismember(sealing_N1, sealing_N2) + top_boundary_idx) == 1; % top layer of sealing cells, excluding top boundary (confining layer)          
+            top_neighbors_idx = sealing_N1(top_neighbors);
+            bottom_neighbors = (~ismember(sealing_N2, sealing_N1) + bottom_boundary_idx) == 1; % bottom layer of sealing cells, excluding bottom boundary (confining layer)
+            bottom_neighbors_idx = sealing_N2(bottom_neighbors);
+            
+            if all(abs(kk(sealing_N2) - kk(sealing_N1)) == 1) % unit-thickness face -> make cell one-layered
+                sealing_N(bottom_neighbors, 2) = nan; % only remove bottom neighbor, retain layer right above sealing face
+            else                
+                sealing_N(top_neighbors, 1) = nan; % get correct sealing faces         
+                sealing_N(bottom_neighbors, 2) = nan; % remove cell layer below bottom sealing face         
+            end
+            
+            sealing_N = sealing_N(~isnan(sealing_N));
+            sealingCells(sealing_N) = 1;  
+            sealingCells = logical(sealingCells);  
+    
+            % find bounding sealing faces
+            sealingCellsIdx = G.cells.indexMap(sealingCells);    
+    
+            [faces_i, bottom_faces_i] = UtilFunctions.localBoundaryFaces(G, sealingCellsIdx, 'full_dim', opt.full_dim);
+            faces = cat(1, faces, faces_i);
+            bottom_faces = cat(1, bottom_faces, bottom_faces_i);
+        end
+        faces = horzcat(faces{:});
+        bottom_faces = horzcat(bottom_faces{:});
     end
         
 end

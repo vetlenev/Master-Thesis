@@ -15,6 +15,13 @@ function [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid(G, Gh, bottom_faces, seali
       %     nmap: mappnig from nodes in subgrid to nodes in full grid
         [ii, jj, kk] = gridLogicalIndices(G);
         p = Gh.partition;
+
+        %bottom_faces = bottom_faces(~ismember(bottom_faces, bf_bc)); % remove cells on top surface part of open boundary
+        if isempty(bottom_faces)
+            Gs = [];
+            cmap = []; fmap = []; nmap = [];
+            return;
+        end
         subcells = G.faces.neighbors(bottom_faces,:);
 
         if ~any(all(subcells, 2)) % remove neighbors outside domain

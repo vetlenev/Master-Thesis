@@ -156,9 +156,10 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     %    h, h_T, h_B, hHi_state, hBHi_state] = computeHybridFluxesVEboundary(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsum_sMax, cB, veB, cH, veH);
     %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
     [vW, vG, mobW, mobG, upcw, upcg, ...
-        h, h_T, h_B, cellsBH, hHi_state, hBHi_state] = computeHybridFluxesVE_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsum_sMax, cB, veB, cH, veH);
+        h, h_max, h_T, h_B, cellsBH, hHi_state, hBHi_state] = computeHybridFluxesVE_test(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsum_sMax, cB, veB, cH, veH);
             
     state.h = h;
+    state.h_max = h_max;
     state.h_T = h_T;
     state.h_B = h_B;
     % NB: Change to only append store cells ONCE (no need to store the same

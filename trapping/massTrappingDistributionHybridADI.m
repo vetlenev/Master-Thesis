@@ -74,8 +74,13 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       c_ve = c_sub(ve_mask); % ve cells of top surface subgrid
       c_fine = c_sub(~ve_mask); % fine cells of top surface subgrid
 
-      ctrap_fine = ismember(Gt.cells.global, c_fine); % .global returns global index from full-dim grid
-      ctrap_ve = ~ctrap_fine;
+      fine_col = Gh.cells.columns(ph(c_fine)); % column index for fine cells part of top surface subgrid
+      ve_col = Gh.cells.columns(ph(c_ve)); % column index for ve cells part of top surface subgrid
+      top_surface_col = Gh.cells.columns(ph(Gt.cells.global)); % column index of cells definint top surface
+      
+      %ctrap_fine = ismember(Gt.cells.global, c_fine); % .global returns global index from full-dim grid
+      ctrap_fine = ismember(top_surface_col, fine_col);
+      ctrap_ve = ismember(top_surface_col, ve_col);
     
       % NB: only select top surface fine cells for ve regions. For fine
       % regions we need ALL fine cells
@@ -95,35 +100,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                                                              
     % sum up masses for ve parts and fine parts of current subgrid
      masses = masses_ve + masses_fine;
-     masses0 = cell2mat(masses_ve0) + cell2mat(masses_fine0);
-    
+     masses0 = cell2mat(masses_ve0) + cell2mat(masses_fine0);   
 end
 
-function [cH_sub] = extendIndexForDuplicates(cH, cH_u, cH_sub)
-    % Extend array for virtual cells connected to multiple semi-permeable
-    % layers by duplicating associated cell indices
-    cH_ctf = [cH_u, cH_sub]; % make matrix mapping from hybrid cell indices to associated local index of subgrid    
-    cH_ctf1 = cH_ctf(:,1);
-    cH_ctf2 = cH_ctf(:,2);
-
-    edges = min(cH):max(cH)+1; % +1 to include last index
-    [counts, values] = histcounts(cH, edges);
-    duplicates = values(counts > 1);
-    
-    cH_sub = zeros(size(cH));
-    idx_cH = ~ismember(cH, duplicates); % no duplicate indexes for cells cH
-    cH_no_duplicates = cH(idx_cH);
-    idx_ctf = ismember(cH_ctf1, cH_no_duplicates); % no duplicate indexes for cells ctf
-    cH_sub(idx_cH) = cH_ctf2(idx_ctf); % add no-duplicate elements by vectorization
-    
-    for i=1:numel(duplicates) % extend cH_sub sequentially with repeated cells
-        d = duplicates(i);       
-        d_idx_glob = ismember(cH, d); % logical index for duplicate
-        d_sub = cH_ctf2(ismember(cH_ctf1, d)); % mapped value
-               
-        cH_sub(d_idx_glob) = d_sub; % insert mapped value into associated position in cH_sub
-    end
-end
 
 function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW, h, h_max, ...
                                                                  h_B, h_H, h_BH, Hh, Hbh, cB, cH, cBH, ...
@@ -135,31 +114,9 @@ function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW
     %ct_hybrid_z = (Gh.cells.topDepth(c_ve) + Gh.cells.bottomDepth(c_ve))/2; % to get centroid
     ct_hybrid_z = Gh.cells.topDepth(c_ve);
         
-    cB_idx = ismember(cB, c_ve); % index for arrays with one element per bottom cell cB (from hybrid indexes for full grid)
-    cB_subidx = ismember(c_ve, cB); % index for arrays with one element per cell in subgrid (from hybrid indexes for full grid)    
-    cB_sub = find(cB_subidx); % global cell index
-           
-    cH_idx = ismember(cH, c_ve); % with duplicates    
-    cH_subidx = ismember(c_ve, cH);
-    cH = cH(cH_idx);
-    cH_sub = find(cH_subidx); % indices for cHorz cells in subgrid
-    [cH_u, ~, uHidx] = unique(cH); 
-    
-    if ~isempty(cH)
-        % For cells with multiple rising plumes we need to duplicate the
-        % index of the cell in the global list (c_ve)
-        cH_sub = extendIndexForDuplicates(cH, cH_u, cH_sub);
-    end
-        
-    cBH_idx = ismember(cBH, c_ve);
-    cBH_subidx = ismember(c_ve, cBH);
-    cBH = cBH(cBH_idx); 
-    cBH_sub = find(cBH_subidx);
-    [cBH_u, ~, uBHidx] = unique(cBH);
-    
-    if ~isempty(cBH)
-        cBH_sub = extendIndexForDuplicates(cBH, cBH_u, cBH_sub);
-    end
+    [cB_idx, cB_sub, ...
+          cH_idx, cH_sub, ...
+          cBH_idx, cBH_sub] = getRelaxedVEIndices(c_ve, cB, cH, cBH);    
     
     % Extracting relevant information from 'sol'
     sw=fluidADI.krPts.w(1);%liquid residual saturation (scalar)
@@ -207,61 +164,16 @@ function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW
     h_eff  = h - h_sub;
     hm_eff = h_max - hm_sub;
     
-    % --- Heights of remaining residual plumes ---     
-    h_B_struct = zeros(size(zt));
-    h_B_free = zeros(size(zt));
-    % hB = ct_hybrid_height (i.e. height of VE cell in subgrid)   
-    h_B_struct(cB_sub) = zt(cB_sub) - min(zt(cB_sub), h_B(cB_idx)) - max(zt(cB_sub) - ct_hybrid_height(cB_sub), 0);   
-    h_B_free(cB_sub) = max(ct_hybrid_height(cB_sub), zt(cB_sub)) - max(h_B(cB_idx), zt(cB_sub));
-    
-    % horizontal:
-    h_H_struct = zeros(size(zt)); % heights of residual plume (for cHorz) inside structural traps
-    h_H_free = zeros(size(zt)); % heights of residual plume (for cHorz) outside structural traps
-    h_H_structi = zt(cH_sub) - min(zt(cH_sub), h_H(cH_idx)) - max(zt(cH_sub) - Hh(cH_idx), 0); % heights for individual semi-perm layers
-    h_H_freei = max(Hh(cH_idx), zt(cH_sub)) - max(h_H(cH_idx), zt(cH_sub));
+    [h_res_struct, h_res_free] = computeTrappedHeightsRVE(zt, h_eff, hm_eff, ct_hybrid_height, ...
+                                                           h_B, h_H, h_BH, ...
+                                                           Hh, Hbh, ...
+                                                           cB, cB_idx, cB_sub, ...
+                                                           cH, cH_idx, cH_sub, ...
+                                                           cBH, cBH_idx, cBH_sub);
 
-    % bottom + horizontal:
-    h_BH_struct = zeros(size(zt)); % one for each cell in hybrid grid - multiple values in cHorz cells to be accumulated
-    h_BH_free = zeros(size(zt)); % heights of residual plume (for cHorz+cBottom) outside structural traps
-    h_BH_structi = zt(cBH_sub) - min(zt(cBH_sub), h_BH(cBH_idx)) - max(zt(cBH_sub) - Hbh(cBH_idx), 0);        
-    h_BH_freei = max(Hbh(cBH_idx), zt(cBH_sub)) - max(h_BH(cBH_idx), zt(cBH_sub));
-   
-    % sum up residual plume heights inside structural traps    
-    if ~isempty(cH)
-        [cH_sub_u,~,cH_sub_map] = unique(cH_sub);
-        
-        h_H_sum.struct = accumarray(cH_sub_map, h_H_structi); % use duplicated index cH_sub_map to accumulate for correct index
-        h_H_struct(cH_sub_u) = h_H_sum.struct;   
-        
-        h_H_sum.free = accumarray(cH_sub_map, h_H_freei);       
-        h_H_free(cH_sub_u) = h_H_sum.free; % add height of additional residual plumes       
-    end
-    
-    if ~isempty(cBH)
-        [cBH_sub_u,~,cBH_sub_map] = unique(cBH_sub);
-        
-        h_BH_sum.struct = accumarray(cBH_sub_map, h_BH_structi);
-        h_BH_struct(cBH_sub_u) = h_BH_sum.struct;  
-        
-        h_BH_sum.free = accumarray(cBH_sub_map, h_BH_freei);
-        h_BH_free(cBH_sub_u) = h_BH_sum.free;
-    end
-    % ------------------------------------------
-    h_res_free = max(hm_eff - max(h_eff, zt), 0) + ... % top residual plume below trap
-                 h_B_free + h_H_free + h_BH_free; % remaining residual plumes below trap
-    
-    % this requires that the fluid has a sharp interface relperm of normal type    
-    hdift     = max(min(zt, hm_eff) - min(zt, h_eff),0);    % trapped part of h_max-h (top plume) INSIDE structural trap
-    % --- Handle remaining residual plumes ---
-    % Not affected by subtraps ??  
-    hdift_B = max(h_B_struct, 0);          
-    hdift_H = max(h_H_struct, 0);      
-    hdift_BH = max(h_BH_struct, 0);
-    hdift_net = hdift + hdift_B + hdift_H + hdift_BH; % net trapped CO2 volumes inside structural traps -> accounts for parts of every plume that resides within a trap
-    
     strucVol  = sum(min(zt, h_eff) .* pv .* rhoCO2);             % trapped, flowing
     plumeVol  = sum(rhoCO2 .* h_eff.* pv) - strucVol;            % non-trapped, flowing
-    resStruc  = (strucVol + sum(hdift_net .* rhoCO2 .* pv)) * sr;      % trapped, res
+    resStruc  = (strucVol + sum(h_res_struct .* rhoCO2 .* pv)) * sr;      % trapped, res
     freeStruc = strucVol * (1 - sr - sw);                          % trapped, non-res
     freeRes   = plumeVol * sr;                                     % non-trapped, flowing, res
     freeMov   = plumeVol * (1 - sw - sr);                          % non-trapped, flowing, non-res
@@ -285,7 +197,7 @@ function [masses, masses_0] = massTrappingDistributionVE(Gt, Gh, c_ve, p, sG, sW
         % values one per cell of grid Gt
         strucVol_0  = min(zt, h_eff) .* pv .* rhoCO2;
         plumeVol_0  = rhoCO2 .*h_eff .* pv - strucVol_0;
-        resStruc_0  = (strucVol_0 + hdift.*rhoCO2.*pv) .* sr;
+        resStruc_0  = (strucVol_0 + h_res_struct.*rhoCO2.*pv) .* sr;
         freeStruc_0 = strucVol_0 .* (1-sr-sw);
         freeRes_0   = plumeVol_0 .* sr;
         freeMov_0   = plumeVol_0 .* (1-sr-sw);
@@ -409,3 +321,4 @@ function [masses, masses_0] = massTrappingDistributionFine(Gt, Gh, c_fine, p, sG
                     {freeStruc_0}, {subtrap_0}, {freeMov_0}]; % may be ADI vars
     end
 end
+

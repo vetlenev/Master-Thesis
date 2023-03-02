@@ -10,10 +10,14 @@ classdef WaterGasMultiVEModel_test < TwoPhaseWaterGasModel
             opt = struct('sealingFaces', [], 'sealingCells', [], 'pe_rest', 0);
             opt = merge_options(opt, varargin{:});
                        
+            % Update to be dependent on TwoPhaseWaterGasModelHys instead,
+            % since this is tailored for dissolution.
+            % Modify getEquations to use
+            % equationsWaterGasMultiVE_dissolution.
+            % Then modify some of the functions to be applicable for VE cells
             model = model@TwoPhaseWaterGasModel(G, rock, fluid, nan, nan, varargin{:});                      
-            %model.G.parent.sealingFaces = opt.sealingFaces;           
-            model.G.parent.sealingCells = opt.sealingCells;           
-            %model.G.sealingFaces = model.G.faces.fconn(model.G.faces.connPos(opt.sealingFaces):model.G.faces.connPos(opt.sealingFaces+1)-1);
+                      
+            model.G.parent.sealingCells = opt.sealingCells; 
             model.G.sealingCells = model.G.partition(opt.sealingCells);
                         
             model.fluid.hys = ~isempty(regexp(func2str(model.fluid.krG), 'Hysteresis', 'match'));
@@ -31,7 +35,8 @@ classdef WaterGasMultiVEModel_test < TwoPhaseWaterGasModel
             [problem, state] = equationsWaterGasMultiVE_test(model, state0, state , dt , ...
                 drivingForces, ...
                 varargin{:});
-        end
+        end       
+
     end
 end
 

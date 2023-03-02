@@ -71,11 +71,11 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     fine_cells_sub = cell(Gt.cells.num,1);    
     fine_z = cell(Gt.cells.num,1);
     %z_spill_loc = cell(Gt.cells.num,1);
+    if Gt.cells.num == 1
+        Gt.columns.cells = Gt.columns.cells'; % transpose if only one top surface cell
+    end
     for i=1:Gt.cells.num
-        fine_cells_sub{i} = Gt.columns.cells(Gt.cells.columnPos(i):Gt.cells.columnPos(i+1)-1, :); % fine cells part of column associated with cell i from top-surface grid
-        % fine_cells{i} does account for overlaps, so no need to intersect
-        % with c_fine
-        %fine_cells{i} = intersect(fine_cells{i}, c_fine); % NB: intersect required to omit overlapping top-surface grids                
+        fine_cells_sub{i} = Gt.columns.cells(Gt.cells.columnPos(i):Gt.cells.columnPos(i+1)-1, :); % fine cells part of column associated with cell i from top-surface grid             
         fine_z{i} = Gs.cells.centroids(fine_cells_sub{i}, 3); % z-coord of fine cells in column from SUBGRID
         % OR USE TOP OF CELL AND NOT CENTROID, AS IN MAKE_HYBRID ?!?
     end
@@ -144,13 +144,15 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         res_buff = 1.5; % buffer factor for CO2 to be residually trapped (necessary since CO2 sat will converge towards sr at infinite time due to relperm going to zero)
         % -----
         freePlume_i = zi >= zt{i} & SG_i > res_buff*sr; % cells in mobile plume
-        resPlume_i = zi >= zt{i} & SG_i <= res_buff*sr; % cells in immobilized plume
+        resPlume_i = zi >= zt{i} & SG_i <= res_buff*sr; % cells in immobilized plume   
+        free = zi >= zt{i};
         
         freeStruc = freeStruc + sum((max(SG_i, sr) - sr).*rho_pv.* strucTrapped_i); % structural plume
         resStruc = resStruc + sum(min(SG_i, sr).*rho_pv .* strucTrapped_i); % structural residual
         freeRes = freeRes + sum(sr.*rho_pv .* freePlume_i); % residual in plume (we know SG_i > sr, so residual value can be fixed at sr)
-        %freeMov = freeMov + sum((max(SG_i, sr) - sr).*rho_pv .* freePlume_i);
+        %freeRes = freeRes + sum(min(SG_i, sr).*rho_pv .* free);
         freeMov = freeMov + sum((SG_i - sr).*rho_pv .* freePlume_i); % free plume
+        %freeMov = freeMov + sum(max(SG_i-sr,0).*rho_pv .* free);
         resTrap = resTrap + sum(SG_i.*rho_pv .* resPlume_i); % we know that SG_i <= sr, so no need to compute min(SG_i, sr)
         resDis = resDis + sum(rho_pv.* (rs .* fluidADI.bW(p_i) .* SW_i));        
     end

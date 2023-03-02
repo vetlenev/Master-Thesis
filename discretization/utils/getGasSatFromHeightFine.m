@@ -10,8 +10,8 @@ function [a_Mob, a_R, sG] = getGasSatFromHeightFine(model, T, t, B, b, h, h_T, h
     a_RB = max(min((B - z_RB)./H, 1), 0); % changed from B - h_B to B - z_RB
     a_RT = 1 - a_M - min(max((B - z_RT)./H, 0), 1); % scaling factor for residual saturation
     
-    a_R = max(a_RT + a_RB, 0).*(snr > 0); % max to avoid potential negative saturations
-    sG = a_M.*(1 - swr) + a_R.*snr; % if below residual CO2 zone, sG = 0   
+    a_R = max(a_RT + a_RB, 0).*(snr > 0); % max to avoid potential negative saturations    
+    sG = a_M.*(1 - swr) + a_R.*snr; % residual part of mobile plume included in first term! 
     
     a_Mob = a_M;
     a_ResTop = a_RT;

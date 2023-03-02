@@ -133,15 +133,19 @@ rock = makeRock(G, perm, 0.3);
 % add compressibility ??
 swr = 0.1;
 snr = 0.1;
-%c = [1e-4/barsa, 1e-7/barsa];
-fluid = initSimpleADIFluid('phases', 'WG', ...
+c = [1e-4/barsa, 1e-7/barsa];
+fluid = initDissolutionADIFluid('phases', 'WG', ...
                            'mu', [8e-4 3e-5]*Pascal*second,...
                            'rho', [1100 700].* kilogram/meter^3, ... % simulate supercritical CO2
-                           'n', [2,2], ... % [2,2] !!
+                           'n', [1,1], ... % [2,2] !!                           
                            'smin', [swr, snr], ...                           
-                           'pRef', 100*barsa);
+                           'pRef', 100*barsa, ...
+                           'c', c, ... % NB: not included for test cases in master thesis!
+                           'dissolution', true, ...
+                           'dis_rate', 5e-11, ...
+                           'dis_max', 0.03);
 
-tot_time = 400*year;
+tot_time = 1*year; % 400*year
 inj_stop = 0.1;
 pv_rate = 0.1;
 
@@ -151,6 +155,7 @@ inj_rate = pv_rate*sum(pv)/(inj_stop*tot_time); % inject pv_rate of total pore v
 % Specify well information
 bc = [];
 nearWell = false(G.cells.num, 1);
+openBC = false(G.cells.num, 1);
 
 W = verticalWell([], G, rock, nx, 1, nz, ...
     'type', 'rate', ...  % inject at constant rate
@@ -170,7 +175,7 @@ bc = addBC(bc, west_faces_top, 'pressure', fluid.rhoWS*bfz(bfx == min(bfx) & z_s
 %bc = addBC(bc, east_faces_top, 'pressure', fluid.rhoWS*bfz(bfx == max(bfx) & z_stop)*norm(gravity), 'sat', [1,0]);
 
 horzWellDistRate = 0.1; % ratio of total horizontal length considered "close" to well
-vertWellDistRate = 0.1;
+vertWellDistRate = 0.2; % 0.1
 for i = 1:numel(W)
     c = W(i).cells(1);
     hdist = abs(x - x(c));
@@ -180,12 +185,12 @@ for i = 1:numel(W)
               vdist < fix(vertWellDistRate*max(z))) = true;
 end
 if ~isempty(bc)
-    nearWell(sum(G.faces.neighbors(bc.face, :), 2)) = true;
+    openBC(sum(G.faces.neighbors(bc.face, :), 2)) = true;
 end
    
-nsteps_after_inj = 150;
-dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/200, 10);
-dt_after_inj = rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/nsteps_after_inj, 8);
+nsteps_after_inj = 300; % 150
+dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/300, 10); % /200
+dt_after_inj = rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/nsteps_after_inj, 8); % 8
 %dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
 dt = [dt; dt_after_inj];
 
@@ -205,8 +210,9 @@ isFine.sealingCells = allSealingCells; % no sealing cells if only face constrain
 isFine.sealingCells_faces = allSealingCells_faces;
 isFine.sealingBottom = allSealingBottom;
 isFine.well = nearWell;
+isFine.bc = openBC;
 
-model = TwoPhaseWaterGasModel(G, rock, fluid, 1, 1, 'useCNVConvergence', true);
+model = TwoPhaseWaterGasModelDissolution(G, rock, fluid, 'useCNVConvergence', true);
 
 model.operators.T = T(model.operators.internalConn); % update internal transmissibility
 model.operators.T_all(model.operators.internalConn) = model.operators.T;
@@ -241,5 +247,8 @@ models.original = model;
 models.fine = model_fine;
 
 state0 = initResSol(G, fluid.rhoWS*norm(gravity)*z, [1,0]);
+state0.rs = zeros(G.cells.num, 1);
+state0.rv = [];
+state0.sGmax = state0.s(:,2);
 
 end
