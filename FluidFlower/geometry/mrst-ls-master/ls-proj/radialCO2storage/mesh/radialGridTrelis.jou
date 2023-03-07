@@ -1,0 +1,33 @@
+create surface circle radius 50000 zplane
+create surface circle radius 25000 zplane
+create surface circle radius 10000 zplane
+create surface circle radius 5000 zplane 
+create surface circle radius 1000 zplane
+create surface circle radius 500 zplane
+create surface circle radius 100 zplane
+create surface circle radius 50 zplane
+create surface circle radius 1 zplane
+
+imprint surface 1 with curve all
+delete body 2 3 4 5 6 7 8 9 
+
+surface 10 size 2
+surface 11 size 10
+surface 12 size 20
+surface 13 size 50
+surface 14 size 100
+surface 15 size 200
+surface 16 size 300
+surface 17 size 500
+surface 18 size 1000
+surface all scheme trimesh
+mesh surface all
+
+block 1 surface all
+block 1 element type tri
+block 1 name "domain"
+
+#export mesh "/home/lluis/radialTriangleMesh2D.exo" dimension 2 overwrite  #70012 els
+export mesh "/home/lluis/radialTriangleMesh2D_2.exo" dimension 2 overwrite  #43326 els
+
+

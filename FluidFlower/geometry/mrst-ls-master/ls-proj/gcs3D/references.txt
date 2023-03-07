@@ -1,0 +1,16 @@
+This is a list of tex references for convenience.
+0.This chapter
+
+1.CO2-brine props
+@article{hassanzadeh2008pvt,
+  title={Predicting {PVT} data for {CO$_2$}--brine mixtures for black-oil simulation of {CO$_2$} geological storage},
+  author={Hassanzadeh, Hassan and Pooladi-Darvish, Mehran and Elsharkawy, Adel M and Keith, David W and Leonenko, Yuri},
+  journal={international journal of greenhouse gas control},
+  volume={2},
+  number={1},
+  pages={65--77},
+  year={2008},
+  publisher={Elsevier},
+  doi={10.1016/S1750-5836(07)00010-2}
+} 
+

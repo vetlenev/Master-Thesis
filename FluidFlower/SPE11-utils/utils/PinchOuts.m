@@ -32,46 +32,13 @@ classdef PinchOuts < PolygonGrid
             poly.G.i = ii + max(ii_upper_overlap);
             poly.G.j = jj + min(jj_upper_overlap) - 1; % NB: for glueToLowerPolygon this will not work! Needs to be modified then!
         end
-
-        function [nodes, pts_overlap_A] = findOverlappingNodesPinch(poly, poly_A, poly_C, face)
-            pp = poly.p;
-            pp_A = poly_A.p;
-            pp_C = poly_C.p;
-            G_A = poly_A.G;
-            G_C = poly_C.G;
-
-            if strcmp(face, 'top')
-                pmask_A = poly_A.bottom_mask; % Yes, bottom_mask here, because we are choosing the face of the OTHER polygon
-                pmask_C = poly_C.bottom_mask;
-                %faces_other = poly_other.faces_bottom;
-            elseif strcmp(face, 'bottom')
-                pmask_A = poly_A.top_mask;
-                pmask_C = poly_C.top_mask;
-                %faces_other = poly_other.faces_top;
-            end
-
-            pts_overlap_A = pp(ismember(pp, pp_A, 'rows'), :);
-            pts_overlap_C = pp(ismember(pp, pp_C, 'rows'), :);
-            % Here we assume subgid 
-            min_overlap = min(pts_overlap_A(:,1));
-            max_overlap = max(pts_overlap_C(:,1));
-            G_A_mask = G_A.nodes.coords(pmask_A, :);
-            G_C_mask = G_C.nodes.coords(pmask_C, :);
-            
-            nodesA = G_A_mask(G_A_mask(:,1) >= min_overlap & ...
-                                 G_A_mask(:,1) <= max_overlap, :);
-            nodesC = G_C_mask(G_C_mask(:,1) >= min_overlap & ...
-                                 G_C_mask(:,1) <= max_overlap, :);
-
-            nodes = [nodesA; nodesC];
-            
-        end
+       
     end
 
 
    methods (Static)
        
-       function [poly_side, closest_mask] = separationPoint_pinchout(poly, poly_pts, G_glob, pinch)
+       function [poly_side, closest_mask] = separationPoint_pinchout(poly, poly_pts, G_glob)
             Nx = poly.G.cartDims(1);
             xs = poly_pts(:,1);
             zs = poly_pts(:,2);
@@ -152,6 +119,17 @@ classdef PinchOuts < PolygonGrid
        end
 
        function [polyA, z_sep_idx] = coordCorrectionSubgridA(polyA, top_nodesA, bottom_nodesA, pinch)
+           % Correct and interpolate coordinates of subgrid to the left of
+           % the pinch-out.
+           % Input:
+           %    polyA: instance of PolygonGrid representing subgrid to left
+           %            of pinch-out,
+           %    top_nodesA: nodes at top surface of polyA
+           %    bottom_nodesA: nodes at bottom surface of polyA
+           %    pinch: coordinate of pinch-out
+           % Output:
+           %    polyA: polyA with updated coordinates
+           %    z_sep_idx: local vertical index of separation point
             east_mask = polyA.G.nodes.coords(:,1) == max(polyA.G.nodes.coords(:,1)); % NB: can only extract right nodes BEFORE changing coords
             % 1. Change top and bottom sides
             bottom_mask = polyA.G.nodes.coords(:,2) == min(polyA.G.nodes.coords(:,2));
@@ -171,8 +149,8 @@ classdef PinchOuts < PolygonGrid
             polyA.G.nodes.coords(polyA_pinch_idx,:) = pinch;
         
             % 4. Interpolate nodes on east side to conform with pinch-point
-            start_i = polyA.G.cartDims(1)+1; % only interpolate east side
-            polyA = interpolateInternal(polyA, top_mask, bottom_mask, pinch, z_sep_idx);
+            %start_i = polyA.G.cartDims(1)+1; % only interpolate east side
+            polyA = interpolateInternal(polyA, top_mask, bottom_mask, pinch, z_sep_idx, polyA.G.cartDims(1)+1);
        end
 
        function polyB = coordCorrectionSubgridB(polyB, top_nodesB, bottom_nodesB, east_nodesA)
@@ -191,6 +169,41 @@ classdef PinchOuts < PolygonGrid
             polyB.G.nodes.coords(west_mask, :) = east_nodesA;
 
        end
+
+       function [nodes, pts_overlap] = findOverlappingNodesPinch(poly, poly_A, poly_C, face)
+            pp = poly.p;
+            pp_A = poly_A.p;
+            pp_C = poly_C.p;
+            G_A = poly_A.G;
+            G_C = poly_C.G;
+
+            if strcmp(face, 'top')
+                pmask_A = poly_A.bottom_mask; % Yes, bottom_mask here, because we are choosing the face of the OTHER polygon
+                pmask_C = poly_C.bottom_mask;
+                %faces_other = poly_other.faces_bottom;
+            elseif strcmp(face, 'bottom')
+                pmask_A = poly_A.top_mask;
+                pmask_C = poly_C.top_mask;
+                %faces_other = poly_other.faces_top;
+            end
+
+            pts_overlap_A = pp(ismember(pp, pp_A, 'rows'), :);
+            pts_overlap_C = pp(ismember(pp, pp_C, 'rows'), :);
+            pts_overlap = unique([pts_overlap_A; pts_overlap_C], 'rows');
+            % Here we assume subgid 
+            min_overlap = min(pts_overlap_A(:,1));
+            max_overlap = max(pts_overlap_C(:,1));
+            G_A_mask = G_A.nodes.coords(pmask_A, :);
+            G_C_mask = G_C.nodes.coords(pmask_C, :);
+            
+            nodesA = G_A_mask(G_A_mask(:,1) >= min_overlap & ...
+                                 G_A_mask(:,1) <= max_overlap, :);
+            nodesC = G_C_mask(G_C_mask(:,1) >= min_overlap & ...
+                                 G_C_mask(:,1) <= max_overlap, :);
+
+            nodes = unique([nodesA; nodesC], 'rows'); % to avoid selecting the overlapping node between A and C twice
+            
+        end
 
        function [top_pts, bottom_pts] = getSides_pinchout(poly_pinch, poly_num_pinch, poly_num)
             pp = poly_pinch.p;

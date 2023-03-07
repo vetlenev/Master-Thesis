@@ -113,10 +113,24 @@ poly = cell2struct(struct2cell(poly), {'p32'});
 
 [poly, nodes_overlap, pts_overlap] = gluePinchOut(polys, poly, 29, 32, 25, ...
                                                      nodes_overlap, pts_overlap, G_glob);
+% For polygon 19, upper neighbor contains pinch-out
+[poly, nodes_overlap, pts_overlap] = gluePinchOut(polys, poly, 19, 29, 25, ...
+                                                     nodes_overlap, pts_overlap, G_glob);
 
-% CONTINUE HERE:
-% [poly, nodes_overlap, pts_overlap] = gluePinchOut(polys, poly, 19, 29, 25, ...
-%                                                      nodes_overlap, pts_overlap, G_glob);
+%% Continue downwards until bottom of top two faults
+% For polygon 14, upper neighbor contains pinch-out
+[poly, nodes_overlap, pts_overlap] = glueToUpperPolygon(polys, poly, 14, 19, ...
+                                                        nodes_overlap, pts_overlap, G_glob);
+
+[poly, nodes_overlap, pts_overlap] = glueToUpperPolygon(polys, poly, 4, 14, ...
+                                                        nodes_overlap, pts_overlap, G_glob);
+
+%% Two upper polygons on either side of leftmost fault
+[poly, nodes_overlap, pts_overlap] = glueToUpperPolygon(polys, poly, 27, 6, ...
+                                                        nodes_overlap, pts_overlap, G_glob);
+
+[poly, nodes_overlap, pts_overlap] = glueToUpperPolygon(polys, poly, 17, 6, ...
+                                                        nodes_overlap, pts_overlap, G_glob);
 
 %% Plots / tests
 figure()
@@ -134,9 +148,12 @@ for i = 1:numel(overlap_idxs) % then plot overlapping nodes
     hold on
     plot(pts_overlap.(px)(:,1), pts_overlap.(px)(:,2), 'b.', 'markersize', 15)
     hold on
-    plot(poly.(px).bottom_side(:,1), poly.(px).bottom_side(:,2), 'b.', 'markersize', 15)
-    hold on
+%     plot(poly.(px).bottom_side(:,1), poly.(px).bottom_side(:,2), 'b.', 'markersize', 15)
+%     hold on
 end
+
+xlim([0, 2.8])
+ylim([0, 1.2])
 
 %% Handle pinch-outs (polygons 5-12, 19-25 and 29-25)
 
@@ -170,20 +187,37 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     end
 
     p_idx = strcat('p', string(poly_num));
-    p_idx_upper = strcat('p', string(poly_num_upper));
+    
+    p_name = fieldnames(poly_obj); 
+    is_pinch = 0;
+    for i=1:numel(p_name)
+        is_pinch = is_pinch + ~isempty(regexp(p_name{i}, strcat('p', string(poly_num_upper), '[ABC]'), 'match'));
+    end
+
+    if is_pinch
+        p_idx_upper = {strcat('p', string(poly_num_upper), 'A'), ...
+                        strcat('p', string(poly_num_upper), 'C')}; % subgrid A and C together comprise the bottom side of upper polygon
+        poly_upper = {poly_obj.(p_idx_upper{1}), ...
+                       poly_obj.(p_idx_upper{2})};
+    else
+        p_idx_upper = strcat('p', string(poly_num_upper));
+        poly_upper = poly_obj.(p_idx_upper);
+    end
 
     poly_obj.(p_idx) = PolygonGrid(all_polys, poly_num);           
-
-    poly = poly_obj.(p_idx); % dummy variable for readability
-    poly_upper = poly_obj.(p_idx_upper);
-    G_upper = poly_upper.G;
+    poly = poly_obj.(p_idx); % dummy variable for readability    
 
     Lx = max(G_glob.faces.centroids(:,1));
     Lz = max(G_glob.faces.centroids(:,1));
     N = G_glob.cartDims;
     Nx = N(1); Nz = N(2);   
     
-    [nodes_overlap.(p_idx), pts_overlap.(p_idx)] = findOverlappingNodes(poly, poly_upper, 'top'); % intersect at top face of CURRENT polygon (p18)
+    if numel(poly_upper) > 1 % Upper neighbor contains a pinch-out
+        [nodes_overlap.(p_idx), pts_overlap.(p_idx)] = PinchOuts.findOverlappingNodesPinch(poly, poly_upper{1}, poly_upper{2}, 'top');
+    else
+        [nodes_overlap.(p_idx), pts_overlap.(p_idx)] = findOverlappingNodes(poly, poly_upper, 'top'); 
+    end
+    
     num_x_overlap = size(nodes_overlap.(p_idx), 1);
     
     poly = cartesianSubgrid(poly, Lx, Lz, Nx, Nz, num_x_overlap);   
@@ -192,8 +226,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
         figure()
         plotGrid(poly.G)
         hold on
-        plotGrid(G_upper)
-        hold on
+        for i=1:numel(poly_upper)
+            plotGrid(poly_upper{i}.G)           
+            hold on
+        end
         plot(nodes_overlap.(p_idx)(:,1), nodes_overlap.(p_idx)(:,2), 'r.', 'markersize', 10)
         hold on
         plot(pts_overlap.(p_idx)(:,1), pts_overlap.(p_idx)(:,2), 'b.', 'markersize', 15)
@@ -216,8 +252,20 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     
     poly = interpolateZ_remaining(poly, closest_bottom, ...
                                     poly.bottom_mask, 'bottom', 'spline');
-    
+           
     poly = interpolateInternal(poly, poly.top_mask, poly.bottom_mask, []);
+    switch poly_num
+        case 14
+            fix_point = 5;
+            poly = interpolateSide(poly, fix_point, 'west');
+        case 4 % fix point on left side (at fault) 
+            %fix_point = poly.p(2,:);           
+            fix_point = 2;
+            poly = interpolateSide(poly, fix_point, 'west');            
+        case 6
+            fix_point = 3;
+            poly = interpolateSide(poly, fix_point, 'east');              
+    end
 
     % Get logical indices for new polygon
     poly = logicalIndicesUpperOverlap(poly, poly_upper);
@@ -238,7 +286,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     p_name = fieldnames(poly_obj); 
     is_pinch = 0;
     for i=1:numel(p_name)
-        is_pinch = is_pinch + regexp(p_name{i}, strcat(string(poly_num_upper), '[ABC]'));
+        is_pinch = is_pinch + ~isempty(regexp(p_name{i}, strcat('p', string(poly_num_upper), '[ABC]'), 'match'));
     end
 
     if is_pinch
@@ -274,9 +322,13 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     Lx_glob = max(G_glob.faces.centroids(:,1));
     Lz_glob = max(G_glob.faces.centroids(:,1));
     N = G_glob.cartDims;
-    Nx_glob = N(1); Nz_glob = N(2);   
-    
-    [nodes_overlap_pX, pts_overlap_pX] = findOverlappingNodes(poly, poly_upper, 'top');
+    Nx_glob = N(1); Nz_glob = N(2);          
+
+    if numel(poly_upper) > 1 % Upper neighbor contains a pinch-out
+        [nodes_overlap_pX, pts_overlap_pX] = PinchOuts.findOverlappingNodesPinch(poly, poly_upper{1}, poly_upper{2}, 'top');
+    else
+        [nodes_overlap_pX, pts_overlap_pX] = findOverlappingNodes(poly, poly_upper, 'top');
+    end
     top_side = nodes_overlap_pX;
     top_pts = pts_overlap_pX;
     num_x_overlap = size(top_side, 1);
@@ -298,7 +350,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
             bottom_pts = p(8:11, :);
     end
     
-    [bottom_side, closest_mask] = PinchOuts.separationPoint_pinchout(poly, bottom_pts, G_glob, pinch);
+    [bottom_side, closest_mask] = PinchOuts.separationPoint_pinchout(poly, bottom_pts, G_glob);
+
+    poly.bottom_mask = poly.G.nodes.coords(:,2) == min(poly.G.nodes.coords(:,2));
+    poly.top_mask = poly.G.nodes.coords(:,2) == max(poly.G.nodes.coords(:,2));           
 
     [z_new, rem_idx] = PinchOuts.interpolateZSide(bottom_pts, bottom_side, closest_mask, 'spline');
     bottom_side(rem_idx,2) = z_new;
@@ -322,6 +377,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
 
     polyA = PinchOuts(all_polys, poly_num, side_ptsA);
     polyA = cartesianSubgrid(polyA, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_pXA);     
+
+    polyA.bottom_mask = polyA.G.nodes.coords(:,2) == min(polyA.G.nodes.coords(:,2));
+    polyA.top_mask = polyA.G.nodes.coords(:,2) == max(polyA.G.nodes.coords(:,2));           
+
 
     % CHANGE COORDS (pXA)
     [polyA, z_sep_idx] = PinchOuts.coordCorrectionSubgridA(polyA, top_nodesA, bottom_nodesA, pinch);    
@@ -358,7 +417,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     NzB = NzA - z_sep_idx; % NB: number of CELLS not NODES
     polyB = cartesianSubgrid(polyB, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_pXB, NzB);
 
-    [bottom_nodesB, closest_mask] = PinchOuts.separationPoint_pinchout(polyB, bottom_ptsB, G_glob, pinch);
+    polyB.bottom_mask = polyB.G.nodes.coords(:,2) == min(polyB.G.nodes.coords(:,2));
+    polyB.top_mask = polyB.G.nodes.coords(:,2) == max(polyB.G.nodes.coords(:,2));           
+
+    [bottom_nodesB, closest_mask] = PinchOuts.separationPoint_pinchout(polyB, bottom_ptsB, G_glob);
 
     [z_new, rem_idx] = PinchOuts.interpolateZSide(bottom_ptsB, bottom_nodesB, closest_mask, 'spline');
     bottom_nodesB(rem_idx,2) = z_new;
@@ -389,7 +451,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     polyC = PinchOuts(all_polys, poly_num, side_ptsC);            
     polyC = cartesianSubgrid(polyC, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_pXC, NzC);
 
-    [top_nodesC, closest_mask] = PinchOuts.separationPoint_pinchout(polyC, top_ptsC, G_glob, pinch);
+    polyC.bottom_mask = polyC.G.nodes.coords(:,2) == min(polyC.G.nodes.coords(:,2));
+    polyC.top_mask = polyC.G.nodes.coords(:,2) == max(polyC.G.nodes.coords(:,2));           
+
+    [top_nodesC, closest_mask] = PinchOuts.separationPoint_pinchout(polyC, top_ptsC, G_glob);
 
     [z_new, rem_idx] = PinchOuts.interpolateZSide(top_ptsC, top_nodesC, closest_mask, 'spline');
     top_nodesC(rem_idx,2) = z_new;

@@ -1,0 +1,260 @@
+#################################### Reservoir
+block 1 surface 15 18
+block 1 element type tri
+block 1 name "res_LM2"
+
+block 2 surface 2
+block 2 element type tri
+block 2 name "res_LM2_left"
+
+block 3 surface 3
+block 3 element type tri
+block 3 name "res_LM2_ref"
+
+block 4 surface 48
+block 4 element type tri
+block 4 name "res_LM2_refl"
+
+###################################### Fault
+block 5 surface 45
+block 5 element type tri
+block 5 name "f_LM2"
+
+block 6 surface 5
+block 6 element type tri
+block 6 name "f_amp1"
+
+block 7 surface 4
+block 7 element type tri
+block 7 name "f_amp2"
+
+block 8 surface 24
+block 8 element type tri
+block 8 name "f_amp3"
+
+block 9 surface 6
+block 9 element type tri
+block 9 name "f_amp4"
+
+block 10 surface 7
+block 10 element type tri
+block 10 name "f_amp5"
+
+block 11 surface 8
+block 11 element type tri
+block 11 name "f_amp6"
+
+block 12 surface 47
+block 12 element type tri
+block 12 name "f_MMUM"
+
+block 13 surface 9
+block 13 element type tri
+block 13 name "f_young"
+
+######################################## Amph b
+block 14 surface 46
+block 14 element type tri
+block 14 name "Ar1"
+
+block 15 surface 25
+block 15 element type tri
+block 15 name "Ar2"
+
+block 16 surface 26
+block 16 element type tri
+block 16 name "Ar3"
+
+block 17 surface 27
+block 17 element type tri
+block 17 name "Ar4"
+
+block 18 surface 28
+block 18 element type tri
+block 18 name "Ar5"
+
+block 19 surface 29
+block 19 element type tri
+block 19 name "Ar6"
+
+block 20 surface 30
+block 20 element type tri
+block 20 name "Ar7"
+
+block 21 surface 31
+block 21 element type tri
+block 21 name "Ar8"
+
+block 22 surface 32
+block 22 element type tri
+block 22 name "Ar9"
+
+block 23 surface 33
+block 23 element type tri
+block 23 name "Ar10"
+
+block 24 surface 34
+block 24 element type tri
+block 24 name "Ar11"
+
+block 25 surface 35
+block 25 element type tri
+block 25 name "Ar12"
+
+block 26 surface 36
+block 26 element type tri
+block 26 name "Ar13"
+
+block 27 surface 37
+block 27 element type tri
+block 27 name "Ar14"
+
+block 28 surface 38
+block 28 element type tri
+block 28 name "Ar15"
+
+block 29 surface 39
+block 29 element type tri
+block 29 name "Ar16"
+
+block 30 surface 40
+block 30 element type tri
+block 30 name "Ar17"
+
+block 31 surface 41
+block 31 element type tri
+block 31 name "Ar18"
+
+block 32 surface 42
+block 32 element type tri
+block 32 name "Ar19"
+
+block 33 surface 43
+block 33 element type tri
+block 33 name "Ar20"
+
+block 34 surface 44
+block 34 element type tri
+block 34 name "Ar21"
+
+
+block 35 surface 49
+block 35 element type tri
+block 35 name "Al1"
+
+block 36 surface 50
+block 36 element type tri
+block 36 name "Al2"
+
+block 37 surface 51
+block 37 element type tri
+block 37 name "Al3"
+
+block 38 surface 52
+block 38 element type tri
+block 38 name "Al4"
+
+block 39 surface 53
+block 39 element type tri
+block 39 name "Al5"
+
+block 40 surface 54
+block 40 element type tri
+block 40 name "Al6"
+
+block 41 surface 55
+block 41 element type tri
+block 41 name "Al7"
+
+block 42 surface 56
+block 42 element type tri
+block 42 name "Al8"
+
+block 43 surface 57
+block 43 element type tri
+block 43 name "Al9"
+
+block 44 surface 58
+block 44 element type tri
+block 44 name "Al10"
+
+block 45 surface 59
+block 45 element type tri
+block 45 name "Al11"
+
+block 46 surface 60
+block 46 element type tri
+block 46 name "Al12"
+
+block 47 surface 61
+block 47 element type tri
+block 47 name "Al13"
+
+block 48 surface 62
+block 48 element type tri
+block 48 name "Al14"
+
+block 49 surface 63
+block 49 element type tri
+block 49 name "Al15"
+
+block 50 surface 64
+block 50 element type tri
+block 50 name "Al16"
+
+block 51 surface 65
+block 51 element type tri
+block 51 name "Al17"
+
+block 52 surface 66
+block 52 element type tri
+block 52 name "Al18"
+
+block 53 surface 67
+block 53 element type tri
+block 53 name "Al19"
+
+block 54 surface 68
+block 54 element type tri
+block 54 name "Al20"
+
+block 55 surface 69
+block 55 element type tri
+block 55 name "Al21"
+
+
+block 56 surface 17 20
+block 56 element type tri
+block 56 name "AmphB"
+
+block 57 surface 72
+block 57 element type tri
+block 57 name "AmphB_left"
+
+
+########################################### Others
+block 58 surface 19 21
+block 58 element type tri
+block 58 name "MMUM"
+
+block 59 surface 70
+block 59 element type tri
+block 59 name "MMUM_left"
+
+block 60 surface 10 71
+block 60 element type tri
+block 60 name "Younger"
+
+block 61 surface 11
+block 61 element type tri
+block 61 name "Older"
+
+block 62 surface 12 14 22
+block 62 element type tri
+block 62 name "res_LM1"
+
+block 63 surface 13 16 23
+block 63 element type tri
+block 63 name "MargA"
+
+

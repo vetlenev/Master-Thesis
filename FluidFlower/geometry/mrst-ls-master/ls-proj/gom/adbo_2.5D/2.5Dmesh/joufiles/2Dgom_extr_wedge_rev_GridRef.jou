@@ -1,0 +1,600 @@
+# GOM representative 2D mesh
+reset
+${Units('si')}
+
+#################### GEOMETRY#####################################################
+############# 	boundaries		##############################
+create vertex x { 0*m} y {0*m}
+${idtopleft=Id("vertex")}
+create vertex x { 45000*m} y {0*m}
+${idtopright=Id("vertex")}
+create vertex x { 45000*m} y { -8000.0*m}
+${idbotright=Id("vertex")}
+create vertex x { 0*m} y { -8000.0*m}
+${idbotleft=Id("vertex")}
+
+create surface vertex all 
+
+###########	 CT fault     		###############################
+create vertex x { 11500.8610306891*m} y { 0*m}
+${idCT_top=Id("vertex")}
+create vertex x { 11742.4724956572*m} y { -547.852821580879*m}
+${idCT_topmiol=Id("vertex")}
+#create vertex x { 11762.0150550087*m} y { -582.763066547654*m}
+#${idCT_topmior=Id("vertex")}
+
+#create vertex x { 11962.554057*m} y { -979.754881*m}
+create vertex x { 11850*m} y { -750*m}
+create vertex x { 12000*m} y { -1000*m}
+create vertex x { 12110*m} y { -1150*m}
+create vertex x { 12277.9386218877*m} y { -1352.37528513339*m}
+${idCT_topamphbl=Id("vertex")}
+create vertex x { 12370.6797915460*m} y { -1450.27967866706*m}
+${idCT_topamphbr=Id("vertex")}
+create vertex x { 12570} y { -1650*m}
+create vertex x { 12805.5877243775*m} y { -1871.66517901418*m}
+${idCT_botamphbl=Id("vertex")}
+create vertex x { 12920.2374059062*m} y { -1973.54408410195*m}
+${idCT_botamphbr=Id("vertex")}
+
+create vertex x { 13203.2374059062*m} y { -2173.54408410195*m}
+create vertex x { 13653.2374059062*m} y { -2473.54408410195*m}
+create vertex x { 14153.2374059062*m} y { -2773.54408410195*m}
+
+create vertex x { 14586.5662999421*m} y { -2988.39631062184*m}
+${idCT_topmargal=Id("vertex")}
+create vertex x { 15007.3827446439*m} y { -3169.69156005157*m}
+${idCT_topmargar=Id("vertex")}
+create vertex x { 15112.9125651419*m} y { -3212.53595160171*m}
+${idCT_botmargal=Id("vertex")}
+create vertex x { 16127.8228141285*m} y { -3554.49766934444*m}
+${idCT_botmargar=Id("vertex")}
+
+create vertex x { 17669.0793283150*m} y { -4014.67817117921*m}
+${idCT_botLM1=Id("vertex")}
+create vertex x { 18426.0277938622*m} y { -4195.18000595061*m}
+create vertex x { 19593.3700057904*m} y { -4434.39452543886*m}
+create vertex x { 20398.5234510712*m} y { -4574.43221263513*m}
+create vertex x { 21796.4678633468*m} y { -4760.88465734404*m}
+create vertex x { 22965.1129125651*m} y { -4883.46722205693*m}
+create vertex x { 24017.8054429647*m} y { -4941.78319944461*m}
+create vertex x { 25204.6902142444*m} y { -5000.09917683229*m}
+create vertex x { 26718.5871453387*m} y { -5052.46454428246*m}
+create vertex x { 27809.0619571511*m} y { -5056.43161757414*m}
+create vertex x { 29035.0318471338*m} y { -5104.82991173262*m}
+create vertex x { 30318.3265778807*m} y { -5163.14588912030*m}
+create vertex x { 31410.1042269832*m} y { -5209.95735396211*m}
+create vertex x { 31927.3306311523*m} y { -5240.90052563721*m}
+create vertex x { 33477.7070063694*m} y { -5314.68808886244*m}
+create vertex x { 35029.3862188767*m} y { -5396.40979867103*m}
+create vertex x { 36676.1725535611*m} y { -5478.13150847962*m}
+${idCT_bot=Id("vertex")}
+
+create curve spline vertex {idCT_top} to {idCT_bot}
+curve {Id("curve")} name "CT_fault"
+
+###########	 copy CT fault (left)     		###############################
+create curve offset curve CT_fault distance 50 direction x
+create curve offset curve CT_fault distance 20 direction x
+create curve offset curve CT_fault distance 10 direction x
+create curve offset curve CT_fault distance 7 direction x
+
+########### 		create the actual CTl_fault 		###############
+create vertex x { 11493*m} y { 0*m}
+${idCTl_top=Id("vertex")}
+#create vertex on curve CT_fault@C fraction 0 from vertex 43
+create vertex on curve CT_fault@D fraction 0 from vertex 45
+create vertex on curve CT_fault@C fraction 0.0222 from vertex 43
+#create vertex on curve CT_fault@C fraction 0.0305 from vertex 43
+create vertex x {11834*m} y { -747.232435*m}
+create vertex on curve CT_fault@C fraction 0.0417 from vertex 43
+create vertex on curve CT_fault@C fraction 0.0485 from vertex 43
+#create vertex on curve CT_fault@C fraction 0.0585 from vertex 43
+create vertex x {12260*m} y {-1354.977270*m}
+create vertex on curve CT_fault@B fraction 0.0632 from vertex 41
+create vertex on curve CT_fault@B fraction 0.0857 from vertex 41
+#create vertex on curve CT_fault@B fraction 0.0917 from vertex 41
+create vertex x {12890.432017*m} y { -1978.884468*m}
+#create vertex on curve CT_fault@B fraction 0.11 from vertex 41
+create vertex x {13280*m} y { -2259.909259*m}
+#create vertex on curve CT_fault@B fraction 0.13 from vertex 41
+create vertex x {13720*m} y { -2555.357501*m}
+#create vertex on curve CT_fault@B fraction 0.15 from vertex 41
+create vertex x {14170*m} y {-2824.831184*m}
+#create vertex on curve CT_fault@B fraction 0.164 from vertex 41
+create vertex on curve CT_fault@A fraction 0.1622 from vertex 39
+#create vertex on curve CT_fault@A fraction 0.17 from vertex 39
+#create vertex on curve CT_fault@A fraction 0.18 from vertex 39
+#create vertex on curve CT_fault@A fraction 0.1831 from vertex 39
+${idCTl_bot=Id("vertex")}
+
+delete curve CT_fault@A CT_fault@B CT_fault@C CT_fault@D
+create curve spline vertex {idCTl_top} to {idCTl_bot}
+curve {Id("curve")} name "CTl_fault"
+
+################## 	Synthetic  fault 	########################
+#create vertex x { 25990.3011001737*m} y { -524.447089159972*m}
+#${idS_top=Id("vertex")}
+create vertex x { 26056.7458019687*m} y { -606.168798968561*m}
+${idS_topmiol=Id("vertex")}
+#create vertex x { 26076.2883613202*m} y { -626.400872756124*m}
+#${idS_topmior=Id("vertex")}
+
+create vertex x { 26593.5147654893*m} y { -1623.72309828424*m}
+${idS_topamphbl=Id("vertex")}
+create vertex x { 26650.8396062536*m} y { -1705.44480809283*m}
+${idS_topamphbr=Id("vertex")}
+create vertex x { 27071.6560509554*m} y { -2200.93226222354*m}
+${idS_botamphbl=Id("vertex")}
+create vertex x { 27202*m} y { -2325*m}
+${idS_botamphbr=Id("vertex")}
+
+create vertex x { 28150*m} y { -3060*m}
+${idS_topmargal=Id("vertex")}
+create vertex x { 28350*m} y { -3230*m}
+${idS_topmargar=Id("vertex")}
+create vertex x { 28470*m} y { -3320*m}
+${idS_botmargal=Id("vertex")}
+create vertex x { 28739.5*m} y { -3540*m}
+${idS_botmargar=Id("vertex")}
+create vertex x { 29600.4632310365*m} y { -4241.99147079242*m}
+create vertex x { 29949.6236247829*m} y { -4441.53525736388*m}
+${idS_botLM1=Id("vertex")}
+create vertex x { 30236.2478286045*m} y { -4610.92928691858*m}
+create vertex x { 30638.8245512449*m} y { -4795.79490231082*m}
+create vertex x { 30969.7452229299*m} y { -4925.51819894873*m}
+create vertex x { 31453.0978575565*m} y { -5088.96161856590*m}
+create vertex x { 31927.3306311523*m} y { -5240.90052563721*m}
+${idS_bot=Id("vertex")}	
+
+create curve spline vertex {idS_topmiol} to {idS_bot}
+curve {Id("curve")} name "S_fault"
+
+################## 	Top Miocene 	#######################
+#create vertex x { 0*m} y { -542.298918972528*m}
+#${idMiotl_l=Id("vertex")}
+#create vertex x { 11731.210539*m} y {-547.707464*m}
+#${idMiotl_r=Id("vertex")}
+create vertex x { 11742.4724956572*m} y { -547.852821580879*m}
+${idMiotm_l=Id("vertex")}
+create vertex x { 26056.7458019687*m} y { -606.168798968561*m}
+${idMiotm_r=Id("vertex")}
+#create vertex x { 26076.2883613202*m} y { -626.400872756124*m}
+#${idMiotr_l=Id("vertex")}
+create vertex x { 45000*m} y { -687.493801447981*m}
+${idMiotr_r=Id("vertex")}
+
+create vertex x { 0*m} y { -542.298918972528*m}
+${idextraleft=Id("vertex")}
+create vertex x { 11731.210539*m} y { -547.707464*m}
+${idextraright=Id("vertex")}
+create curve vertex {idextraleft} to {idextraright}
+curve {Id("curve")} name "Mio_top_left"
+
+#create curve vertex {idMiotl_l} to {idMiotl_r}
+#curve {Id("curve")} name "extramio"
+create curve vertex {idMiotm_l} to {idMiotm_r}
+curve {Id("curve")} name "Mio_top_mid"
+create curve vertex {idMiotm_r} to {idMiotr_r}
+curve {Id("curve")} name "Mio_top_right"		
+		
+################## 	Top Amph B 	#######################
+create vertex x { 0*m} y { -1352.37528513339*m}
+${idAmphtl_l=Id("vertex")}
+create vertex x { 12260.000000*m} y { -1354.977270*m}
+${idAmphtl_r=Id("vertex")}
+
+create vertex x { 12370.6797915460*m} y { -1450.27967866706*m}
+${idAmphtm_l=Id("vertex")}
+create vertex x { 12868.1239143023*m} y { -1416.24516512943*m}
+create vertex x { 13480.4574406485*m} y { -1412.27809183775*m}
+create vertex x { 14030.2547770701*m} y { -1416.64187245859*m}
+create vertex x { 14514.9102489867*m} y { -1435.68382425865*m}
+create vertex x { 15505.0665894615*m} y { -1485.27224040464*m}
+create vertex x { 16591.6328894036*m} y { -1534.86065655063*m}
+create vertex x { 16856.1088592936*m} y { -1533.27382723396*m}
+create vertex x { 17908.8013896931*m} y { -1547.95199841317*m}
+create vertex x { 19143.8911407064*m} y { -1568.18407220073*m}
+create vertex x { 21059.0619571511*m} y { -1603.49102449668*m}
+create vertex x { 21882.4551244933*m} y { -1612.21858573837*m}
+create vertex x { 24621.0191082803*m} y { -1617.77248834672*m}
+create vertex x { 26593.5147654893*m} y { -1623.72309828424*m}
+${idAmphtm_r=Id("vertex")}
+
+create vertex x { 26650.8396062536*m} y { -1705.44480809283*m}
+${idAmphtr_l=Id("vertex")}
+create vertex x { 27000*m} y { -1670*m}
+create vertex x { 28000*m} y { -1645*m}
+create vertex x { 28748.4076433121*m} y { -1652.68273331350*m}
+create vertex x { 29724.2327735958*m} y { -1647.12883070515*m}
+create vertex x { 31064.8523451071*m} y { -1652.68273331350*m}
+create vertex x { 34340.1852924146*m} y { -1699.49419815531*m}
+create vertex x { 39414.7365373480*m} y { -1740.35505305961*m}
+create vertex x { 45000*m} y { -1769.31468808886*m}
+${idAmphtr_r=Id("vertex")}	
+
+create curve vertex {idAmphtl_l} to {idAmphtl_r}
+curve {Id("curve")} name "Amphb_top_left"
+create curve spline vertex {idAmphtm_l} to {idAmphtm_r}
+curve {Id("curve")} name "Amphb_top_mid"
+create curve spline vertex {idAmphtr_l} to {idAmphtr_r}
+curve {Id("curve")} name "Amphb_top_right"
+
+################## 	Bot Amph B 	#######################
+create vertex x { 0*m} y { -1856.98700783497*m}
+${idAmphbl_l=Id("vertex")}
+create vertex x {12775.881936*m} y {-1871.458405*m}
+${idAmphbl_r=Id("vertex")}
+
+create vertex x { 12920.2374059062*m} y { -1973.54408410195*m}
+${idAmphbm_l=Id("vertex")}
+create vertex x { 13287.6375217140*m} y { -1906.97213131013*m}
+create vertex x { 13870.0057903880*m} y { -1888.72359416840*m}
+create vertex x { 14628.2570932252*m} y { -1921.65030248934*m}
+create vertex x { 15265.3445280834*m} y { -1948.22969354359*m}
+create vertex x { 15718.7319050376*m} y { -1970.84201130616*m}
+create vertex x { 16504.3427909670*m} y { -2016.46335416047*m}
+create vertex x { 16930.3705848292*m} y { -2026.77774471883*m}
+create vertex x { 19069.6294151708*m} y { -2072.00238024397*m}
+create vertex x { 22008.8303416329*m} y { -2121.59079638996*m}
+create vertex x { 24743.4858135495*m} y { -2162.84835862343*m}
+create vertex x { 27071.6560509554*m} y { -2200.93226222354*m}
+${idAmphbm_r=Id("vertex")}
+
+create vertex x { 27202*m} y { -2325*m}
+${idAmphbr_l=Id("vertex")}
+create vertex x { 27500*m} y {-2290*m}
+create vertex x { 28000*m} y { -2260*m}
+create vertex x { 28500*m} y {-2270*m}
+create vertex x { 29380.2837290098*m} y {-2280*m}
+create vertex x { 31141.7197452229*m} y {-2300*m}
+create vertex x { 32731.1812391430*m} y { -2320*m}
+create vertex x { 35106.2536189925*m} y {-2340*m}
+create vertex x { 38362.0440069485*m} y {-2360*m}
+create vertex x { 42498.5524030110*m} y {-2380*m}
+create vertex x { 45000*m} y { -2400*m}
+${idAmphbr_r=Id("vertex")}
+
+create curve vertex {idAmphbl_l} to {idAmphbl_r}
+curve {Id("curve")} name "Amphb_bot_left"
+create curve spline vertex {idAmphbm_l} to {idAmphbm_r}
+curve {Id("curve")} name "Amphb_bot_mid"
+create curve spline vertex {idAmphbr_l} to {idAmphbr_r}
+curve {Id("curve")} name "Amphb_bot_right"
+
+################## 	Top Marg A		#######################
+create vertex x { 0*m} y { -2988.39631062184*m}
+${idMargatl_l=Id("vertex")}
+create vertex x {14471.534154*m} y {-2990.176740*m}
+${idMargatl_r=Id("vertex")}
+
+create vertex x { 15007.3827446439*m} y { -3169.69156005157*m}
+${idMargatm_l=Id("vertex")}
+create vertex x { 15420.3821656051*m} y { -3061.78716651790*m}
+create vertex x { 16368.8477127968*m} y { -2970*m}
+create vertex x { 16930.3705848292*m} y { -2980*m}
+create vertex x { 17512.7388535032*m} y { -2990*m}
+create vertex x { 18414.3022582513*m} y { -3000*m}
+create vertex x { 18921.1059640996*m} y { -3010*m}
+create vertex x { 19455.2692530400*m} y { -3020*m}
+create vertex x { 20776.3462651998*m} y { -3040*m}
+create vertex x { 21358.7145338738*m} y { -3070*m}
+create vertex x { 22434.8581354951*m} y { -3110*m}
+create vertex x { 23430.2258251303*m} y { -3100*m}
+create vertex x { 24925.8830341633*m} y { -3090*m}
+create vertex x { 25887.3769542559*m} y { -3080*m}
+create vertex x { 26924.4354371743*m} y { -3070*m}
+create vertex x { 27570.6427330631*m} y { -3060*m}
+create vertex x { 28150*m} y { -3060*m}
+${idMargatm_r=Id("vertex")}
+
+
+create vertex x { 28350*m} y { -3230*m}
+${idMargatr_l=Id("vertex")}
+create vertex x { 28570*m} y {-3210*m}
+create vertex x { 28800*m} y {-3190*m}
+create vertex x { 29427.1858714534*m} y {-3180*m}
+create vertex x { 30313.1152287203*m} y {-3170*m}
+create vertex x { 31012.7388535032*m} y { -3160*m}
+create vertex x { 32041.9803126810*m} y {-3190*m}
+create vertex x { 34114.7944412276*m} y {-3250*m}
+create vertex x { 35631.2970469021*m} y { -3280*m}
+create vertex x { 36984.9449913144*m} y { -3310*m}
+create vertex x { 40275.9119861031*m} y {-3330*m}
+create vertex x { 45000*m} y {-3350*m}
+${idMargatr_r=Id("vertex")}
+
+create curve vertex {idMargatl_l} to {idMargatl_r}
+curve {Id("curve")} name "Marga_top_left"
+create curve spline vertex {idMargatm_l} to {idMargatm_r}
+curve {Id("curve")} name "Marga_top_mid"
+create curve spline vertex {idMargatr_l} to {idMargatr_r}
+curve {Id("curve")} name "Marga_top_right"	
+
+################## 	Bot Marg A		#######################	
+create vertex x { 0*m} y { -3212.53595160171*m}
+${idMargabl_l=Id("vertex")}
+create vertex x {15112.912570*m} y {-3212.535952*m}
+${idMargabl_r=Id("vertex")}
+
+create vertex x { 16127.8228141285*m} y { -3554.49766934444*m}
+${idMargabm_l=Id("vertex")}
+create vertex x { 16456.1378112334*m} y { -3470*m}
+create vertex x { 16828.7492762015*m} y { -3410*m}
+create vertex x { 17153.1557614360*m} y { -3380*m}
+create vertex x { 17566.1551823972*m} y { -3370*m}
+create vertex x { 18304.8639258830*m} y { -3330*m}
+create vertex x { 18921.1059640996*m} y { -3300*m}
+create vertex x { 19455.2692530400*m} y { -3310*m}
+create vertex x { 20776.3462651998*m} y { -3320*m}
+create vertex x { 21358.7145338738*m} y { -3350*m}
+create vertex x { 22434.8581354951*m} y { -3390*m}
+create vertex x { 23430.2258251303*m} y { -3380*m}
+create vertex x { 24925.8830341633*m} y { -3350*m}
+create vertex x { 25887.3769542559*m} y { -3350*m}
+create vertex x { 26924.4354371743*m} y { -3340*m}
+create vertex x { 27570.6427330631*m} y { -3330*m}
+create vertex x { 28470*m} y { -3320*m}
+${idMargabm_r=Id("vertex")}
+
+create vertex x { 28739.5*m} y { -3540*m}
+${idMargabr_l=Id("vertex")}
+create vertex x { 29000*m} y { -3470*m}
+create vertex x { 29300*m} y {-3440*m}
+create vertex x { 30313.1152287203*m} y {-3410*m}
+create vertex x { 31012.7388535032*m} y { -3430*m}
+create vertex x { 32041.9803126810*m} y {-3450*m}
+create vertex x { 34114.7944412276*m} y {-3490*m}
+create vertex x { 35631.2970469021*m} y { -3520*m}
+create vertex x { 36984.9449913144*m} y { -3560*m}
+create vertex x { 40275.9119861031*m} y {-3580*m}
+create vertex x { 45000*m} y {-3600*m}
+${idMargabr_r=Id("vertex")}	
+
+create curve vertex {idMargabl_l} to {idMargabl_r}
+curve {Id("curve")} name "Marga_bot_left"
+create curve spline vertex {idMargabm_l} to {idMargabm_r}
+curve {Id("curve")} name "Marga_bot_mid"
+create curve spline vertex {idMargabr_l} to {idMargabr_r}
+curve {Id("curve")} name "Marga_bot_right"	
+
+################## 	Bot LM1		#######################		
+create vertex x { 0*m} y { -4014.67817117921*m}
+${idLM1bl_l=Id("vertex")}
+create vertex x { 17669.079330*m} y {-4014.678171*m}
+${idLM1bl_r=Id("vertex")}
+	
+create vertex x { 29949.6236247829*m} y { -4441.53525736388*m}
+${idLM1br_l=Id("vertex")}
+create vertex x { 30000*m} y {-4410*m}
+create vertex x {30100*m} y { -4380*m}
+create vertex x { 30500*m} y {-4330*m}
+create vertex x { 31012.7388535032*m} y { -4340*m}
+create vertex x { 32041.9803126810*m} y {-4350*m}
+create vertex x { 34114.7944412276*m} y {-4390*m}
+create vertex x { 35631.2970469021*m} y { -4420*m}
+create vertex x { 36984.9449913144*m} y { -4460*m}
+create vertex x { 40275.9119861031*m} y {-4480*m}
+create vertex x { 45000*m} y {-4500*m}
+${idLM1br_r=Id("vertex")}	
+	
+create curve vertex {idLM1bl_l} to {idLM1bl_r}
+curve {Id("curve")} name "LM1_bot_left"
+create curve spline vertex {idLM1br_l} to {idLM1br_r}
+curve {Id("curve")} name "LM1_bot_right"
+
+###############                         fault divide ###############################
+create vertex x { 14985.197161*m} y {-3214.629194*m}
+${idfaultdivbot1=Id("vertex")}
+create vertex x { 15112.912570*m} y {-3212.535952*m}
+${idfaultdivbot2=Id("vertex")}
+
+create curve vertex {idfaultdiv1} to {idfaultdiv2}
+curve {Id("curve")} name "fault_div_bot"
+
+create vertex x {11731.210539*m} y {-547.707464*m}
+${idmiotl=Id("vertex")}
+create vertex x { 11742.472500*m} y {-547.852822*m}
+${idmiotr=Id("vertex")}
+
+create curve vertex {idmiotl} to {idmiotr}
+curve {Id("curve")} name "fault_div_miot"
+
+create vertex x {12260.000000*m} y {-1354.977270*m}
+${idamphtl_l=Id("vertex")}
+create vertex x { 12277.938620*m} y {-1352.375285*m}
+${idamphtr_l=Id("vertex")}
+
+create curve vertex {idamphtl_l} to {idamphtr_l}
+curve {Id("curve")} name "fault_div_amphbtl"
+
+create vertex x {12343.803443*m} y {-1451.303729*m}
+${idamphtl_r=Id("vertex")}
+create vertex x {12370.679790*m} y {-1450.279679*m}
+${idamphtr_r=Id("vertex")}
+
+create curve vertex {idamphtl_r} to {idamphtr_r}
+curve {Id("curve")} name "fault_div_amphbtr"
+
+create vertex x {12775.881936*m} y {-1871.458405*m}
+${idamphbl_l=Id("vertex")}
+create vertex x {12805.587720*m} y {-1871.665179*m}
+${idamphbr_l=Id("vertex")}
+
+create curve vertex {idamphbl_l} to {idamphbr_l}
+curve {Id("curve")} name "fault_div_amphbbl"
+
+create vertex x {12890.432020*m} y {-1978.884468*m}
+${idamphbl_r=Id("vertex")}
+create vertex x {12920.237410*m} y {-1973.544084*m}
+${idamphbr_r=Id("vertex")}
+
+create curve vertex {idamphbl_r} to {idamphbr_r}
+curve {Id("curve")} name "fault_div_amphbbr"
+
+create vertex x {14471.534154*m} y {-2990.176740*m}
+${idmargatl_l=Id("vertex")}
+create vertex x { 14586.566300*m} y {-2988.396311*m}
+${idmargatr_l=Id("vertex")}
+
+create curve vertex {idmargatl_l} to {idmargatr_l}
+curve {Id("curve")} name "fault_div_margatl"
+
+
+############### 		SPLIT & MERGE    	###############################
+split CTl_fault crossing Mio_top_left Amphb_top_left fault_div_amphbtr  Amphb_bot_left fault_div_amphbbr Marga_top_left fault_div_bot #LM1_bot_left
+split CT_fault crossing curve Mio_top_mid fault_div_amphbtl Amphb_top_mid fault_div_amphbbl Amphb_bot_mid fault_div_margatl Marga_top_mid Marga_bot_left Marga_bot_mid LM1_bot_left S_fault
+split S_fault crossing curve Mio_top_mid Mio_top_right Amphb_top_mid Amphb_top_right Amphb_bot_mid Amphb_bot_right Marga_top_mid Marga_top_right Marga_bot_mid Marga_bot_right LM1_bot_right
+
+############### correct thickness of CT fault at the top ######################
+delete curve CTl_fault CT_fault
+create vertex x { 11500.8610306891*m} y { 0*m}
+${idCT_top=Id("vertex")}
+create vertex x { 11742.472500*m} y {-547.852822*m}
+${idmiotr=Id("vertex")}
+create curve vertex {idCT_top} to {idmiotr}
+curve {Id("curve")} name "CT_fault"
+
+create vertex x { 11493*m} y { 0*m}
+${idCTl_top=Id("vertex")}
+create vertex x {11731.210539*m} y {-547.707464*m}
+${idmiotl=Id("vertex")}
+create curve vertex {idCTl_top} to {idmiotl}
+curve {Id("curve")} name "CTl_fault"
+
+############### division line for grid refinement within LM2 ######################
+create vertex x { 14153.2374059062*m} y { -2773.54408410195*m}
+${idCT_divRef1=Id("vertex")}
+create vertex x { 15265.3445280834*m} y { -1948.22969354359*m}
+${id_divRef2=Id("vertex")}
+create curve vertex {idCT_divRef1} to {id_divRef2}
+curve {Id("curve")} name "GridRefine"
+
+imprint surface 1 with curve all
+Merge Tolerance 0.1
+merge all
+
+# delete free vertices
+delete free vertex all
+
+#delete free curves 
+#delete free curve Mio_top_mid
+#delete free curve CTl_fault@F
+delete free Amphb_bot_mid
+delete free CT_fault@E
+	
+###############################		MESH		##########################################
+surface all scheme trimesh
+surface 2 size 10	# reservoir ref
+surface 12 size 100	# reservoir mid
+surface 14 size 200	#amph b mid
+surface 5 6 8 16 size 800
+surface 7 10 11 13 17 24 size 500
+surface 9 15 23 26 size 300
+surface 4 25 size 500
+surface 18 size 40
+surface 19 20 size 20
+surface 21 22 size 15
+surface 3 size 10
+mesh surface all
+
+# improve mesh quality by smoothing
+#surface all smooth scheme condition number beta 1.5 cpu 10
+#smooth surface all	
+	
+###############################	 	MATERIAL BLOCKS		##################################
+block 1 surface 9 12
+block 1 element type tri
+block 1 name "res_LM2"
+
+block 2 surface 6 8 16
+block 2 element type tri
+block 2 name "res_LM1"
+
+block 3 surface 7 10 17
+block 3 element type tri
+block 3 name "Marga"
+
+block 4 surface 11 14 24
+block 4 element type tri
+block 4 name "Amphb"
+
+block 5 surface 5
+block 5 element type tri
+block 5 name "older"
+
+block 6 surface 13 15 26
+block 6 element type tri
+block 6 name "MM_UM"
+
+block 7 surface 4 25
+block 7 element type tri
+block 7 name "younger"
+
+#block 8 surface 17 18 19 20 21 2
+#block 8 element type tri
+#block 8 name "fault"
+block 8 surface 18
+block 8 element type tri
+block 8 name "f_LM2"
+
+block 9 surface 19
+block 9 element type tri
+block 9 name "f_LM2_amp"
+
+block 10 surface 20
+block 10 element type tri
+block 10 name "f_amp"
+
+block 11 surface 21
+block 11 element type tri
+block 11 name "f_amp_MMUM"
+
+block 12 surface 22
+block 12 element type tri
+block 12 name "f_MMUM"
+
+block 13 surface 3
+block 13 element type tri
+block 13 name "f_young"
+
+block 14 surface 23
+block 14 element type tri
+block 14 name "res_LM2_left"
+
+block 15 surface 2
+block 15 element type tri
+block 15 name "res_LM2_ref"
+
+###############################	NODESETS FOR FAULT AND BOUNDARIES		###########################
+
+group "topboundary" add node in curve 70 73 138
+nodeset 2 group topboundary 
+nodeset 2 name "topboundary"
+
+group "leftboundary" add node in curve  80 115 117 131 133 137 139
+nodeset 3 group leftboundary 
+nodeset 3 name "leftboundary"
+
+group "rightboundary" add node in curve 74 79 86 90 96 103 109
+nodeset 4 group rightboundary 
+nodeset 4 name "rightboundary"
+
+group "bottomboundary" add node in curve 3
+nodeset 5 group bottomboundary 
+nodeset 5 name "bottomboundary"
+
+group "fault_CT" add node in curve CT_fault CT_fault@A CT_fault@B CT_fault@C CT_fault@D 67 106 CT_fault@F CT_fault@G CT_fault@H CT_fault@I CT_fault@J CT_fault@K
+nodeset 6 group fault_CT
+nodeset 6 name "fault_CT"
+
+group "fault_S" add node in curve S_fault@I S_fault@H S_fault@G S_fault@F S_fault@E S_fault@D S_fault@C S_fault@B S_fault@A S_fault
+nodeset 7 group fault_S
+nodeset 7 name "fault_S"
+
+export mesh "/home/lluis/gom_mz_tri_fdiv_ref10.exo" dimension 2 overwrite  #11934els
+#export mesh "/home/lluis/gom_mz_tri.exo" dimension 2 overwrite  #11934els
+
+
+
+

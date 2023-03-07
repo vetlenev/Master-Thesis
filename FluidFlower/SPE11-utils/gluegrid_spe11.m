@@ -12,7 +12,7 @@ polys = polyPoints(pts, loops, facies);
 % THAT BOTTOM RED IS HIGH-PERM !?)
 % Dark blue (facies 1): 7, 8, 9, 32
 % Green (facies 5): 2, 3, 4, 5, 6
-p1 = polys{19}{2}(:,1:2); % 13
+p1 = polys{20}{2}(:,1:2); % 13
 p2 = polys{30}{2}(:,1:2); % 18
 figure()
 for i=1:size(p1,1)

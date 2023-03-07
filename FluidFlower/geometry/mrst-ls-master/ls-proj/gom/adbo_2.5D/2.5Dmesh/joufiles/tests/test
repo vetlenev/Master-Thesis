@@ -1,0 +1,46 @@
+# GOM representative 2D mesh
+reset
+${Units('si')}
+
+#################### GEOMETRY#####################################################
+############# 	boundaries		##############################
+create vertex x { 0*m} y {0*m}
+${idtopleft=Id("vertex")}
+create vertex x { 45000*m} y {0*m}
+${idtopright=Id("vertex")}
+create vertex x { 45000*m} y { -8000.0*m}
+${idbotright=Id("vertex")}
+create vertex x { 0*m} y { -8000.0*m}
+${idbotleft=Id("vertex")}
+
+create surface vertex all 
+
+create vertex x {10000*m} y {0*m}
+${a=Id("vertex")}
+create vertex x {12000*m} y {-1100*m}
+create vertex x {13000*m} y {-1300*m}
+create vertex x {15000*m} y {-2000*m}
+${b=Id("vertex")}
+
+create curve spline vertex {a} to {b}
+curve {Id("curve")} name "curv"
+
+create vertex x {15000*m} y {-2000*m}
+${c=Id("vertex")}
+create vertex x {18000*m} y {0*m}
+${d=Id("vertex")}
+
+create curve spline vertex {c} to {d}
+curve {Id("curve")} name "curv2"
+
+imprint surface 1 6 with curve all
+Merge Tolerance 0.1
+merge all
+
+surface all size 500
+mesh surface all
+
+
+sweep surface all vector 0 0 1 distance 5000
+sweep surface all perpendicular distance 5000 include_mesh
+

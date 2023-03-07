@@ -1,0 +1,111 @@
+******************************************
+* Case "bo_extr" (GenericBlackOilModel)  *
+* Description: "GenericBlackOilModel"    *
+******************************************
+-> Partial output found, starting from step 20 of 329...
+*****************************************************************
+********** Starting simulation:   329 steps, 36524 days *********
+*****************************************************************
+Validating model...
+Model has been validated.
+Checking state functions and dependencies...
+All internal and external dependencies are met for group of class FlowPropertyFunctions.
+All internal and external dependencies are met for group of class PVTPropertyFunctions.
+All internal and external dependencies are met for group of class FlowDiscretization.
+All internal and external dependencies are met for group of class FacilityFlowDiscretization.
+All checks ok. Model ready for simulation.
+Preparing schedule for simulation...
+All steps ok. Schedule ready for simulation.
+Validating initial state...
+Initial state ok. Ready to begin simulation.
+Solving timestep 020/329: 1 Year, 121 Days, 17.94 Hours -> 1 Year, 152 Days, 4.42 Hours
+AMGCL solver converged to 7.005e-04 in 41 iterations after 4.13 seconds.
+==============================================================================================================
+| It # | CNV_O    | CNV_G    | MB_O     | MB_G     | oilWells (perf) | gasWells (perf) | closureWells (well) |
+==============================================================================================================
+|    1 | 1.49e-01 | 3.37e-01 |*4.92e-24 |*1.84e-15 |*0.00e+00        |*4.82e-15        |*0.00e+00            |
+AMGCL solver converged to 6.766e-04 in 32 iterations after 3.64 seconds.
+|    2 | 1.42e-01 | 7.03e-01 |*1.16e-17 |*6.99e-17 |*0.00e+00        |*2.32e-06        |*0.00e+00            |
+AMGCL solver converged to 6.279e-04 in 40 iterations after 4.05 seconds.
+|    3 | 1.71e-01 | 4.15e-01 |*1.47e-17 |*9.05e-17 |*0.00e+00        |*1.64e-10        |*0.00e+00            |
+AMGCL solver converged to 5.770e-04 in 27 iterations after 3.41 seconds.
+|    4 | 5.97e-02 | 2.24e-01 |*8.91e-19 |*7.35e-18 |*0.00e+00        |*2.20e-10        |*0.00e+00            |
+AMGCL solver converged to 8.289e-04 in 41 iterations after 4.18 seconds.
+|    5 | 8.53e-03 | 5.35e-02 |*9.52e-20 |*7.02e-19 |*0.00e+00        |*5.38e-13        |*0.00e+00            |
+AMGCL solver converged to 8.031e-04 in 25 iterations after 3.32 seconds.
+|    6 | 1.23e-02 | 3.77e-02 |*1.20e-19 |*7.33e-19 |*0.00e+00        |*2.67e-14        |*0.00e+00            |
+AMGCL solver converged to 8.687e-04 in 43 iterations after 4.39 seconds.
+|    7 |*4.15e-05 | 2.05e-03 |*1.96e-20 |*2.24e-21 |*0.00e+00        |*1.90e-14        |*0.00e+00            |
+AMGCL solver converged to 9.497e-04 in 20 iterations after 3.00 seconds.
+|    8 |*6.32e-07 | 1.55e-03 |*1.35e-22 |*4.18e-23 |*0.00e+00        |*6.92e-17        |*0.00e+00            |
+AMGCL solver converged to 8.197e-04 in 22 iterations after 3.15 seconds.
+|    9 |*6.41e-07 | 2.05e-03 |*6.15e-23 |*1.21e-22 |*0.00e+00        |*1.25e-16        |*0.00e+00            |
+AMGCL solver converged to 7.159e-04 in 20 iterations after 2.98 seconds.
+|   10 |*6.30e-07 | 1.55e-03 |*2.26e-23 |*9.87e-24 |*0.00e+00        |*5.54e-17        |*0.00e+00            |
+AMGCL solver converged to 7.597e-04 in 15 iterations after 2.75 seconds.
+|   11 |*6.51e-07 | 2.05e-03 |*2.53e-23 |*1.62e-22 |*0.00e+00        |*1.38e-17        |*0.00e+00            |
+AMGCL solver converged to 9.557e-04 in 20 iterations after 2.97 seconds.
+|   12 |*6.00e-07 | 1.55e-03 |*2.21e-22 |*2.88e-22 |*0.00e+00        |*1.38e-17        |*0.00e+00            |
+AMGCL solver converged to 5.641e-04 in 20 iterations after 3.05 seconds.
+|   13 |*6.72e-07 | 2.05e-03 |*9.69e-23 |*2.85e-22 |*0.00e+00        |*1.25e-16        |*0.00e+00            |
+AMGCL solver converged to 4.633e-04 in 21 iterations after 3.08 seconds.
+|   14 |*6.35e-07 | 1.55e-03 |*1.60e-23 |*9.31e-23 |*0.00e+00        |*0.00e+00        |*0.00e+00            |
+AMGCL solver converged to 9.788e-04 in 20 iterations after 3.04 seconds.
+|   15 |*6.51e-07 | 2.05e-03 |*2.11e-24 |*6.42e-23 |*0.00e+00        |*6.92e-17        |*0.00e+00            |
+AMGCL solver converged to 9.457e-04 in 17 iterations after 2.88 seconds.
+|   16 |*6.10e-07 | 1.55e-03 |*9.90e-23 |*2.96e-22 |*0.00e+00        |*0.00e+00        |*0.00e+00            |
+AMGCL solver converged to 9.991e-04 in 15 iterations after 2.70 seconds.
+|   17 |*6.61e-07 | 2.05e-03 |*5.53e-23 |*2.42e-22 |*0.00e+00        |*2.77e-17        |*0.00e+00            |
+AMGCL solver converged to 9.426e-04 in 20 iterations after 2.97 seconds.
+|   18 |*7.20e-07 | 1.55e-03 |*2.73e-22 |*4.18e-22 |*0.00e+00        |*4.15e-17        |*0.00e+00            |
+AMGCL solver converged to 9.220e-04 in 15 iterations after 2.69 seconds.
+|   19 |*6.80e-07 | 2.05e-03 |*4.32e-23 |*2.14e-22 |*0.00e+00        |*1.38e-17        |*0.00e+00            |
+AMGCL solver converged to 9.973e-04 in 20 iterations after 3.03 seconds.
+|   20 |*7.45e-07 | 1.55e-03 |*2.37e-22 |*3.76e-22 |*0.00e+00        |*1.11e-16        |*0.00e+00            |
+AMGCL solver converged to 2.886e-04 in 22 iterations after 3.15 seconds.
+|   21 |*6.48e-07 | 2.05e-03 |*9.01e-24 |*1.10e-23 |*0.00e+00        |*1.52e-16        |*0.00e+00            |
+AMGCL solver converged to 7.829e-04 in 15 iterations after 2.75 seconds.
+|   22 |*6.28e-07 | 1.55e-03 |*4.24e-24 |*5.86e-23 |*0.00e+00        |*9.69e-17        |*0.00e+00            |
+AMGCL solver converged to 6.861e-04 in 13 iterations after 2.65 seconds.
+|   23 |*6.45e-07 | 2.06e-03 |*1.75e-22 |*2.28e-22 |*0.00e+00        |*1.38e-17        |*0.00e+00            |
+AMGCL solver converged to 5.012e-04 in 21 iterations after 3.11 seconds.
+|   24 |*6.41e-07 | 1.55e-03 |*1.47e-22 |*1.59e-22 |*0.00e+00        |*6.92e-17        |*0.00e+00            |
+AMGCL solver converged to 4.065e-04 in 22 iterations after 3.15 seconds.
+|   25 |*6.54e-07 | 2.05e-03 |*1.82e-25 |*5.09e-23 |*0.00e+00        |*0.00e+00        |*0.00e+00            |
+|   26 |*6.38e-07 | 1.55e-03 |*4.60e-23 |*1.35e-22 |*0.00e+00        |*8.30e-17        |*0.00e+00            |
+Solver did not converge in 25 iterations for timestep of length 30 Days, 10 Hours, 1745 Seconds, 999 Milliseconds. Cutting timestep.
+Solving ministep : 15 Days, 5 Hours, 872 Seconds, 999 Milliseconds (50.00 % of control step, control step currently 0.00 % complete)
+AMGCL solver converged to 5.127e-04 in 28 iterations after 3.45 seconds.
+==============================================================================================================
+| It # | CNV_O    | CNV_G    | MB_O     | MB_G     | oilWells (perf) | gasWells (perf) | closureWells (well) |
+==============================================================================================================
+|    1 | 7.47e-02 | 1.69e-01 |*9.83e-24 |*1.84e-15 |*0.00e+00        |*4.82e-15        |*0.00e+00            |
+AMGCL solver converged to 9.220e-04 in 30 iterations after 3.62 seconds.
+|    2 | 3.27e-02 | 1.41e-01 |*4.04e-18 |*2.92e-17 |*0.00e+00        |*6.31e-07        |*0.00e+00            |
+AMGCL solver converged to 5.896e-04 in 31 iterations after 3.69 seconds.
+|    3 | 3.47e-02 | 1.14e-01 |*5.38e-18 |*3.34e-17 |*0.00e+00        |*1.26e-11        |*0.00e+00            |
+AMGCL solver converged to 8.840e-04 in 31 iterations after 3.66 seconds.
+|    4 | 2.46e-03 | 5.05e-03 |*1.34e-20 |*9.38e-21 |*0.00e+00        |*2.33e-11        |*0.00e+00            |
+|    5 |*4.79e-05 |*1.70e-04 |*3.98e-21 |*3.54e-21 |*0.00e+00        |*9.94e-15        |*0.00e+00            |
+==============================================================================================================
+Solving ministep : 15 Days, 5 Hours, 872 Seconds, 999 Milliseconds (50.00 % of control step, control step currently 50.00 % complete)
+AMGCL solver converged to 5.643e-04 in 28 iterations after 3.46 seconds.
+==============================================================================================================
+| It # | CNV_O    | CNV_G    | MB_O     | MB_G     | oilWells (perf) | gasWells (perf) | closureWells (well) |
+==============================================================================================================
+|    1 | 8.09e-02 | 1.81e-01 |*1.77e-30 |*1.84e-15 |*0.00e+00        |*9.94e-15        |*0.00e+00            |
+AMGCL solver converged to 4.464e-04 in 33 iterations after 3.77 seconds.
+|    2 | 2.47e-02 | 1.40e-01 |*5.53e-18 |*4.10e-17 |*0.00e+00        |*5.74e-07        |*0.00e+00            |
+AMGCL solver converged to 8.657e-04 in 33 iterations after 3.80 seconds.
+|    3 | 2.80e-02 | 9.33e-02 |*7.69e-18 |*4.73e-17 |*0.00e+00        |*1.53e-11        |*0.00e+00            |
+AMGCL solver converged to 9.129e-04 in 26 iterations after 3.36 seconds.
+|    4 | 1.17e-03 | 3.92e-03 |*4.18e-20 |*1.99e-19 |*0.00e+00        |*4.02e-11        |*0.00e+00            |
+|    5 |*2.82e-06 |*3.23e-06 |*1.33e-21 |*1.62e-22 |*0.00e+00        |*1.37e-15        |*0.00e+00            |
+==============================================================================================================
+Solved timestep with 2 accepted ministeps (Iterations: 1 rejected, 34 total, 14 Seconds, 400 Milliseconds each)
+Completed 34 iterations in 489.65 seconds (14.40s per iteration)
+
+Writing data to C:\Users\lsalo\matlab\mrst-dev\mrst-core\output\bo_extr\GenericBlackOilModel\state20.mat
+Writing data to C:\Users\lsalo\matlab\mrst-dev\mrst-core\output\bo_extr\GenericBlackOilModel\wellSols20.mat
+Writing data to C:\Users\lsalo\matlab\mrst-dev\mrst-core\output\bo_extr\GenericBlackOilModel\report20.mat
+Solving timestep 021/329: 1 Year, 152 Days, 4.42 Hours -> 1 Year, 182 Days, 14.91 Hours

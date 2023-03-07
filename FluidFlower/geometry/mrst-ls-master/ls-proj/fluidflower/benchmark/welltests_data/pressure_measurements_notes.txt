@@ -1,0 +1,16 @@
+
+Notes pressure measurements
+
+Alle pressures in [bar] and temperature in [Celcius]
+
+Note that some ports have multiple pressure transducers
+The range of each pressure transducer is listed in the heading (e.g. 0-2.5 bar)
+
+Accuracy (NLHR) ±0.15% of span BFSL (NLHR = non-linearity, hysteresis and repeatability; BFSL = Best Fit Straight Line)
+
+Day 1
+Welltest port (17,7): pressure logging started 4:54pm and injection started 5:19pm
+Welltest 1 port (9,3): pressure logging started 8:47pm and injection started 8:52pm
+
+Next day
+Welltest 2 port (9,3): pressure logging started 2:29pm and injection started 2:48pm
