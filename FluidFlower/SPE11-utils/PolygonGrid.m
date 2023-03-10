@@ -78,7 +78,7 @@ classdef PolygonGrid
                 Nz = ceil(fac * Nz_glob);
             end
         
-            obj.G = cartGrid([Nx, 1, Nz], [Lx_new, 0.01, 1]); % unit depth
+            obj.G = cartGrid([Nx, Nz], [Lx_new, 1]); % unit depth
 
             % Make nodes comply with global grid
             g_nodes_xpos = reshape(obj.G.nodes.coords(:,1), Nx+1, []);
@@ -673,7 +673,7 @@ classdef PolygonGrid
             x_global = x_min + cumsum(repmat(dx, Nx+1, 1)) - dx;
             z_global = z_min + cumsum(repmat(dz, Nz+1, 1)) - dz;           
 
-            G = cartGrid([Nx, 1, Nz], [Lx, 0.01, Lz]); % global background grid -> basis for gluing
+            G = cartGrid([Nx, Nz], [Lx, Lz]); % global background grid -> basis for gluing
             G = computeGeometry(G);
         end
     end

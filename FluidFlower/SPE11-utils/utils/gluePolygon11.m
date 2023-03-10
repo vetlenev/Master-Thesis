@@ -14,7 +14,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePolygon11(all_polys, poly_
     poly = PolygonGrid(all_polys, poly_num);               
 
     Lx_glob = max(G_glob.faces.centroids(:,1));
-    Lz_glob = max(G_glob.faces.centroids(:,1));
+    Lz_glob = max(G_glob.faces.centroids(:,2));
     N_glob = G_glob.cartDims;
     Nx_glob = N_glob(1); Nz_glob = N_glob(2);   
 

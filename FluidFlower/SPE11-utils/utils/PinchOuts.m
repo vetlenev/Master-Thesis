@@ -110,19 +110,16 @@ classdef PinchOuts < PolygonGrid
            % Output:
            %    polyA: polyA with updated coordinates
            %    z_sep_idx: local vertical index of separation point
-            east_mask = polyA.G.nodes.coords(:,1) == max(polyA.G.nodes.coords(:,1)); % NB: can only extract right nodes BEFORE changing coords
-            % 1. Change top and bottom sides
-            bottom_mask = polyA.G.nodes.coords(:,2) == min(polyA.G.nodes.coords(:,2));
-            top_mask = polyA.G.nodes.coords(:,2) == max(polyA.G.nodes.coords(:,2));
-            polyA.G.nodes.coords(bottom_mask, :) = bottom_nodesA;
-            polyA.G.nodes.coords(top_mask, :) = top_nodesA;
+            % 1. Change top and bottom sides            
+            polyA.G.nodes.coords(polyA.bottom_mask, :) = bottom_nodesA;
+            polyA.G.nodes.coords(polyA.top_mask, :) = top_nodesA;
         
             % 2. Change interior points
-            polyA = interpolateInternal(polyA, top_mask, bottom_mask, []);
+            polyA = interpolateInternal(polyA, polyA.top_mask, polyA.bottom_mask, []);
         
             % 3. Change node closest to pinch to have coordinate of pinch
             z_pinch = pinch(2);
-            polyA_east = polyA.G.nodes.coords(east_mask, :);
+            polyA_east = polyA.G.nodes.coords(polyA.east_mask, :);
             [~, z_sep_idx] = min(abs(polyA_east(:,2) - z_pinch));
             polyA_pinch = polyA_east(z_sep_idx, :);
             polyA_pinch_idx = ismember(polyA.G.nodes.coords, polyA_pinch, 'rows');
@@ -130,23 +127,19 @@ classdef PinchOuts < PolygonGrid
         
             % 4. Interpolate nodes on east side to conform with pinch-point
             %start_i = polyA.G.cartDims(1)+1; % only interpolate east side
-            polyA = interpolateInternal(polyA, top_mask, bottom_mask, pinch, z_sep_idx, polyA.G.cartDims(1)+1);
+            polyA = interpolateInternal(polyA, polyA.top_mask, polyA.bottom_mask, pinch, z_sep_idx, polyA.G.cartDims(1)+1);
        end
 
-       function polyB = coordCorrectionSubgridB(polyB, top_nodesB, bottom_nodesB, east_nodesA)
+       function polyBC = coordCorrectionSubgridBC(polyBC, top_nodesB, bottom_nodesB, east_nodesA)
             % 1. Change top and bottom sides
-            bottom_mask = polyB.G.nodes.coords(:,2) == min(polyB.G.nodes.coords(:,2));
-            top_mask = polyB.G.nodes.coords(:,2) == max(polyB.G.nodes.coords(:,2));
-            west_mask = polyB.G.nodes.coords(:,1) == min(polyB.G.nodes.coords(:,1)); 
-
-            polyB.G.nodes.coords(bottom_mask, :) = bottom_nodesB;
-            polyB.G.nodes.coords(top_mask, :) = top_nodesB;
+            polyBC.G.nodes.coords(polyBC.bottom_mask, :) = bottom_nodesB;
+            polyBC.G.nodes.coords(polyBC.top_mask, :) = top_nodesB;
         
             % 2. Change interior points
-            polyB = interpolateInternal(polyB, top_mask, bottom_mask, []);
+            polyBC = interpolateInternal(polyBC, polyBC.top_mask, polyBC.bottom_mask, []);
 
             % 3. Let nodes of west side equal the intersecting nodes of pXA
-            polyB.G.nodes.coords(west_mask, :) = east_nodesA;
+            polyBC.G.nodes.coords(polyBC.west_mask, :) = east_nodesA;
 
        end
 

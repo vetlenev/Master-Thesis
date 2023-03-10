@@ -2,7 +2,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
                                                                            nodes_overlap, pts_overlap, G_glob, varargin)  
 
     Lx_glob = max(G_glob.faces.centroids(:,1));
-    Lz_glob = max(G_glob.faces.centroids(:,1));
+    Lz_glob = max(G_glob.faces.centroids(:,2));
     N_glob = G_glob.cartDims;
     Nx_glob = N_glob(1); Nz_glob = N_glob(2);
 
@@ -147,7 +147,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
         poly_left.G.nodes.coords(1+Nx_left*(Nz_small-1):Nx_left:Nx_left*Nz_left, 2) = z_interp;
     elseif poly_num == 2
         poly_left = interpolateSide(poly_left);
-        poly_left = interpolateHorizontal(poly_left);
+        %poly_left = interpolateHorizontal(poly_left);
     end    
     poly_left = logicalIndicesUpperOverlap(poly_left, poly_upper{1});
     poly_obj.(p_idx_left) = poly_left;
@@ -191,7 +191,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
 
     poly_mid = interpolateInternal(poly_mid, poly_mid.top_mask, poly_mid.bottom_mask, []); 
 
-    poly_mid = interpolateHorizontal(poly_mid);
+    %poly_mid = interpolateHorizontal(poly_mid);
 
     poly_mid = logicalIndicesUpperOverlap(poly_mid, poly_upper{2});
     poly_obj.(p_idx_mid) = poly_mid;
@@ -227,7 +227,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
 
     poly_right = interpolateInternal(poly_right, poly_right.top_mask, poly_right.bottom_mask, []); 
 
-    poly_right = interpolateHorizontal(poly_right);
+    %poly_right = interpolateHorizontal(poly_right);
 
     poly_right = logicalIndicesUpperOverlap(poly_right, poly_upper{3});
     poly_obj.(p_idx_right) = poly_right;

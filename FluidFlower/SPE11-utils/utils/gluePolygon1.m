@@ -1,7 +1,7 @@
 function [poly_obj, nodes_overlap, pts_overlap] = gluePolygon1(all_polys, poly_obj, poly_num, poly_num_upper, ...
                                                                   nodes_overlap, pts_overlap, G_glob, varargin)  
    Lx_glob = max(G_glob.faces.centroids(:,1));
-    Lz_glob = max(G_glob.faces.centroids(:,1));
+    Lz_glob = max(G_glob.faces.centroids(:,2));
     N_glob = G_glob.cartDims;
     Nx_glob = N_glob(1); Nz_glob = N_glob(2);
 

@@ -22,9 +22,9 @@ gravity reset on
 [G_glob, x_glob, z_glob] = PolygonGrid.globalCartGrid(pts, 200, 150); % nx=200, nz=150
 
 Lx = max(G_glob.faces.centroids(:,1));
-Lz = max(G_glob.faces.centroids(:,1));
+Lz = max(G_glob.faces.centroids(:,2));
 N = G_glob.cartDims;
-Nx = N(1); Nz = N(3);
+Nx = N(1); Nz = N(2);
 
 %% Organize polygons
 polys = PolygonGrid.polyPoints(pts, loops, facies);
@@ -274,7 +274,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     end
 
     Lx = max(G_glob.faces.centroids(:,1));
-    Lz = max(G_glob.faces.centroids(:,1));
+    Lz = max(G_glob.faces.centroids(:,2));
     N = G_glob.cartDims;
     Nx = N(1); Nz = N(2);   
     
@@ -383,7 +383,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     x_pinch = p(pin_idx, 1);
 
     Lx_glob = max(G_glob.faces.centroids(:,1));
-    Lz_glob = max(G_glob.faces.centroids(:,1));
+    Lz_glob = max(G_glob.faces.centroids(:,2));
     N = G_glob.cartDims;
     Nx_glob = N(1); Nz_glob = N(2);          
 
@@ -481,7 +481,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     [z_new, rem_idx] = PinchOuts.interpolateZSide(bottom_ptsB, bottom_nodesB, closest_mask, 'spline');
     bottom_nodesB(rem_idx,2) = z_new;
 
-    polyB = PinchOuts.coordCorrectionSubgridB(polyB, top_nodesB, bottom_nodesB, east_nodesAB);    
+    polyB = PinchOuts.coordCorrectionSubgridBC(polyB, top_nodesB, bottom_nodesB, east_nodesAB);    
     polyB = interpolateHorizontal(polyB);
 
     polyB = logicalIndicesUpperOverlap(polyB, poly_upper);      
@@ -511,7 +511,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOut(all_polys, poly_o
     [z_new, rem_idx] = PinchOuts.interpolateZSide(top_ptsC, top_nodesC, closest_mask, 'spline');
     top_nodesC(rem_idx,2) = z_new;
 
-    polyC = PinchOuts.coordCorrectionSubgridB(polyC, top_nodesC, bottom_nodesC, east_nodesAC);    
+    polyC = PinchOuts.coordCorrectionSubgridBC(polyC, top_nodesC, bottom_nodesC, east_nodesAC);    
     polyC = interpolateHorizontal(polyC);
 
     polyC = logicalIndicesWestOverlap(polyC, polyA);           
