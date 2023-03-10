@@ -11,7 +11,27 @@ classdef PinchOuts < PolygonGrid
 %             obj.p = polys{poly_num}{2}(:,1:2);
 %             obj.p_orig = obj.p;
 %             obj.p = obj.p(1:end-1,:);
-        end      
+        end
+
+        function poly = logicalIndicesWestOverlap(poly, poly_west)
+            poly.G = computeGeometry(poly.G);
+            G_west = poly_west.G;
+            G_west = computeGeometry(G_west);
+            fc = poly.G.faces.centroids;
+            fc_other = G_west.faces.centroids;
+            N_other = G_west.faces.neighbors;    
+            cells_west = N_other(ismembertol(fc_other, fc, 'ByRows', true), :);            
+            cells_west_overlap = unique(cells_west(cells_west ~= 0));
+        
+            % Logical indices of bounding cells from western subgrid
+            ii_upper_overlap = poly_west.G.i(cells_west_overlap);
+            jj_upper_overlap = poly_west.G.j(cells_west_overlap);
+        
+            [ii, jj] = gridLogicalIndices(poly.G);
+            jj = max(jj) - jj + 1;
+            poly.G.i = ii + max(ii_upper_overlap);
+            poly.G.j = jj + min(jj_upper_overlap) - 1; % NB: for glueToLowerPolygon this will not work! Needs to be modified then!
+        end
        
     end
 
@@ -167,8 +187,8 @@ classdef PinchOuts < PolygonGrid
                 %faces_other = poly_other.faces_top;
             end
 
-            pts_overlap_A = pp(ismembertol(pp, pp_A, 'ByRows', true), :);
-            pts_overlap_C = pp(ismembertol(pp, pp_C, 'ByRows', true), :);
+            pts_overlap_A = pp(ismembertol(pp, pp_A, 'rows'), :);
+            pts_overlap_C = pp(ismembertol(pp, pp_C, 'rows'), :);
             pts_overlap = unique([pts_overlap_A; pts_overlap_C], 'rows');
             % Here we assume subgid 
             min_overlap = min(pts_overlap_A(:,1));
@@ -194,12 +214,8 @@ classdef PinchOuts < PolygonGrid
             min_overlap = inf;
             max_overlap = 0;
 
-            for i=1:numel(poly_upper)  
-                if strcmp(face, 'top')
-                    pp_upper = poly_upper{i}.bottom_side;
-                elseif strcmp(face, 'bottom')
-                    pp_upper = poly_upper{i}.top_side;
-                end                
+            for i=1:numel(poly_upper)   
+                pp_upper = poly_upper{i}.p;
                 pts_overlap{i} = pp(ismembertol(pp, pp_upper, 'ByRows', true), :);                
                 % Here we assume subgid 
                 min_overlap = min(min_overlap, min(pts_overlap{i}(:,1)));

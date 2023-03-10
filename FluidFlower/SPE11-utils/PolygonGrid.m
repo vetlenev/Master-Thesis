@@ -7,13 +7,20 @@ classdef PolygonGrid
     
     properties
         facies
-        p
+        p_idx % index of polygon
+        p % data points of polygon
+        p_bt % points on top and bottom faces
+        p_we % points on west and east faces
+        p_added % added polygonal points for gluing
+        we % boolean if p_we is on west (true) or east (false) face
         p_orig
         G
         top_side % nodes at top curve of polygon
         bottom_side
         top_mask % logical mask of top nodes
         bottom_mask
+        west_mask
+        east_mask
         faces_top % faces connected to top_side nodes
         faces_bottom
     end
@@ -30,6 +37,7 @@ classdef PolygonGrid
             obj.p = polys{poly_num}{2}(:,1:2);
             obj.p_orig = obj.p;
             obj.p = obj.p(1:end-1,:);
+            obj.p_added = [];
         end
         
         function obj = cartesianSubgrid(obj, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_nodes_overlap, varargin)
@@ -57,18 +65,20 @@ classdef PolygonGrid
             Lx_new = Nx * dx_glob;
             % -----------            
         
-            Lz_min = min(poly(:,2)); % 2D -> second element is depth-coord
-            Lz_max = max(poly(:,2));
+            poly_b = obj.bottom_side;
+            poly_t = obj.top_side;
+            Lz_min = mean(poly_b(:,2)); % 2D -> second element is depth-coord
+            Lz_max = mean(poly_t(:,2));
             Lz = Lz_max - Lz_min;
-            fac = Lz/Lz_glob;
-            %Nz = ceil(fac * Nz_glob);
+
             if nargin > 6
                 Nz = varargin{1};
             else
-                Nz = 5;
+                fac = Lz/Lz_glob;
+                Nz = ceil(fac * Nz_glob);
             end
         
-            obj.G = cartGrid([Nx, Nz], [Lx_new, 1]); % unit depth
+            obj.G = cartGrid([Nx, 1, Nz], [Lx_new, 0.01, 1]); % unit depth
 
             % Make nodes comply with global grid
             g_nodes_xpos = reshape(obj.G.nodes.coords(:,1), Nx+1, []);
@@ -88,35 +98,55 @@ classdef PolygonGrid
                 % of neighboring nodes
                 obj.G.nodes.coords(Nxx-1:Nxx:Nxx*Nzz, 1) = 0.5*(eastmost_x + third_eastmost_x);
             end
+
+            obj.bottom_mask = obj.G.nodes.coords(:,2) == min(obj.G.nodes.coords(:,2));
+            obj.top_mask = obj.G.nodes.coords(:,2) == max(obj.G.nodes.coords(:,2));
+            obj.west_mask = obj.G.nodes.coords(:,1) == min(obj.G.nodes.coords(:,1));
+            obj.east_mask = obj.G.nodes.coords(:,1) == max(obj.G.nodes.coords(:,1));
         end
 
         function [obj, split_points] = reorderPts(obj, edge_case)
             % Reorder points pts, starting from point with lowest x-value.
             % Returns separate arrays for monotonically increasing/decreasing
-            % connected cells.
+            % connected cells.            
             pts = obj.p;
+            mean_x = mean(pts, 1);
+            mean_x = mean_x(1);
 
             switch edge_case
                 case 20
-                    rem_idx = 2:3; % remove points along fault
-                    rem_side = 
+                    rem_idx = 2:3; % remove points along fault                                        
                 case 6
-                    rem_idx = 4:5;
+                    rem_idx = 3:5; % 4:5
                 case 5
                     rem_idx = 25;
-%                 case 14
-%                     pts(5,:) = [];
+                case 14
+                    rem_idx = 5;
                 case 4
-                    rem_idx = [2, 7:9];                                     
+                    rem_idx = [2:3, 7:9];                                     
                 case 27
                     rem_idx = 12;
+                case 17
+                    rem_idx = 1;
+                case 11
+                    rem_idx = 1:2; 
+                case 8
+                    rem_idx = 1;
+                case 3
+                    rem_idx = 1;
+                case 7
+                    rem_idx = 23:25;
+                case 2
+                    rem_idx = 16:20;
                 otherwise % no removals
                     rem_idx = [];
             end
+            rem_side = pts(rem_idx, 1) < mean_x; % if false, points are on east side, if true they are on west side
             pts_we = pts(rem_idx, :);
             pts(rem_idx, :) = []; 
 
             obj.p_we = pts_we; % to store points along west and east sides
+            obj.we = rem_side;
             
             x_pts = pts(:,1);
             y_pts = pts(:,2);
@@ -147,10 +177,10 @@ classdef PolygonGrid
              pts_new(1:end-bnd_idx+1,:) = pts_start;
              pts_new(end-bnd_idx+2:end,:) = pts_stop;
 
-             stop = size(pts_new, 1);
-             pts_map = [[1:stop-bnd_idx+1, stop-bnd_idx+2:stop]; [bnd_idx:stop, 1:bnd_idx-1]]';             
+             %stop = size(pts_new, 1);
+             %pts_map = [[1:stop-bnd_idx+1, stop-bnd_idx+2:stop]; [bnd_idx:stop, 1:bnd_idx-1]]';             
 
-            if ismember(edge_case, [100]) % [4,6,14]
+            if ismember(edge_case, [2,3,4,10,14]) % [4,6,14]
                 obj.p_bt = pts; % don't reorder for these edge-cases
             else
                 obj.p_bt = pts_new; % ordered points from top and bottom surface
@@ -183,20 +213,29 @@ classdef PolygonGrid
              
                 num_splits = numel(split_pts) - 1; % -1 to get number of split intervals
                 %pts = obj.p;
-                pts = obj.p_bt;
+                pts = obj.p_bt;                
                 p_idx = strcat('p', string(edge_case));
     
                 switch edge_case
-                    case 111%14
+                    case 14
                         p_top = pts(1:4,:);
-                        p_bottom = pts(6:end,:);
+                        p_bottom = pts(5:end,:);
                         % NB: original indexing changes after this!
-                    case 222%4
+                    case 4
                         p_top = [pts(end, :); pts(1, :)];
-                        p_bottom = pts(3:5, :);
-                    case 333%6
-                        p_top = pts(17:end, :);
-                        p_bottom = pts(4:16, :);
+                        p_bottom = pts(2:4, :);
+%                     case 6
+%                         p_top = pts(17:end, :);
+%                         p_bottom = pts(4:16, :);
+                    case 10
+                        p_top = pts(1:5, :);
+                        p_bottom = pts(6:end, :);
+                    case 3
+                        p_top = pts(1:4, :);
+                        p_bottom = pts(5:9, :);
+                    case 2
+                        p_top = pts(21:end, :);
+                        p_bottom = pts(1:15, :);                        
                     otherwise
                         p_xsub = cell(num_splits, 1);
                         p_zsub = cell(num_splits, 1);
@@ -362,28 +401,45 @@ classdef PolygonGrid
             
             if ~isempty(pinch) % Only interpolate in vertical for x-index located at pinch
                 Nzb = varargin{1};
+                [Nzb, sort_idx] = sort(Nzb);
+                Nzb_all = [1; Nzb; Nz];
+                pinch = pinch(sort_idx, :);
                 ix = varargin{2};
-                Nzt = Nz - Nzb + 1; % +1 to include pinch-point in upper interval as well
-                xb = x_bottom(ix); xt = x_top(ix);
-                xp = pinch(1);
-                zb = z_bottom(ix); zt = z_top(ix);
-                zp = pinch(2);
-                dx_b = (xp - xb)/(Nzb-1); dz_b = (zp - zb)/(Nzb-1);
-                dx_t = (xt - xp)/(Nzt-1); dz_t = (zt - zp)/(Nzt-1);
-                x_interp_b = xb + cumsum(repmat(dx_b, Nzb, 1)) - dx_b;
-                z_interp_b = zb + cumsum(repmat(dz_b, Nzb, 1)) - dz_b;
-                x_interp_t = xp + cumsum(repmat(dx_t, Nzt, 1)) - dx_t;
-                z_interp_t = zp + cumsum(repmat(dz_t, Nzt, 1)) - dz_t;
+                xb_all = [x_bottom(ix); pinch(:,1)];
+                xt_all = [pinch(:,1); x_top(ix)];
+                zb_all = [z_bottom(ix); pinch(:,2)];
+                zt_all = [pinch(:,2); z_top(ix)];
+                for i=1:size(pinch, 1)              
+                    Nzb_m = Nzb_all(i); % previous Nzb
+                    Nzb = Nzb_all(i+1) - Nzb_all(i) + 1;
+                    Nzb_p = Nzb_all(i+2); % next Nzb
+                    Nzt = Nzb_all(i+2) - Nzb_all(i+1) + 1; % +1 to include pinch-point in upper interval as well
+                    xb = xb_all(i); zb = zb_all(i);
+                    xt = xt_all(i+1); zt = zt_all(i+1);
+                    xp = pinch(i,1); zp = pinch(i,2);
+%                     xb = x_bottom(ix); xt = x_top(ix);
+%                     xp = pinch(1);
+%                     zb = z_bottom(ix); zt = z_top(ix);
+%                     zp = pinch(2);
 
-                %obj.G.nodes.coords(Nx:Nx:Nx*Nzb, 1) = x_interp_b;
-                %obj.G.nodes.coords(Nx:Nx:Nx*Nzb, 2) = z_interp_b;
-                %obj.G.nodes.coords(Nx*Nzb:Nx:Nx*Nz, 1) = x_interp_t;
-                %obj.G.nodes.coords(Nx*Nzb:Nx:Nx*Nz, 2) = z_interp_t;
-
-                obj.G.nodes.coords(ix:Nx:Nx*Nzb, 1) = x_interp_b;
-                obj.G.nodes.coords(ix:Nx:Nx*Nzb, 2) = z_interp_b;
-                obj.G.nodes.coords(ix+Nx*(Nzb-1):Nx:Nx*Nz, 1) = x_interp_t;
-                obj.G.nodes.coords(ix+Nx*(Nzb-1):Nx:Nx*Nz, 2) = z_interp_t;
+                    dx_b = (xp - xb)/(Nzb-1); dz_b = (zp - zb)/(Nzb-1);
+                    dx_t = (xt - xp)/(Nzt-1); dz_t = (zt - zp)/(Nzt-1);
+                    x_interp_b = xb + cumsum(repmat(dx_b, Nzb, 1)) - dx_b;
+                    z_interp_b = zb + cumsum(repmat(dz_b, Nzb, 1)) - dz_b;
+                    x_interp_t = xp + cumsum(repmat(dx_t, Nzt, 1)) - dx_t;
+                    z_interp_t = zp + cumsum(repmat(dz_t, Nzt, 1)) - dz_t;
+                   
+%                     obj.G.nodes.coords(ix:Nx:Nx*Nzb, 1) = x_interp_b;
+%                     obj.G.nodes.coords(ix:Nx:Nx*Nzb, 2) = z_interp_b;
+%                     obj.G.nodes.coords(ix+Nx*(Nzb-1):Nx:Nx*Nz, 1) = x_interp_t;
+%                     obj.G.nodes.coords(ix+Nx*(Nzb-1):Nx:Nx*Nz, 2) = z_interp_t;
+                    lower_slice = ix+Nx*(Nzb_m-1) : Nx : Nx*Nzb_all(i+1);
+                    upper_slice = ix+Nx*(Nzb_all(i+1)-1) : Nx : Nx*Nzb_p;
+                    obj.G.nodes.coords(lower_slice, 1) = x_interp_b;
+                    obj.G.nodes.coords(lower_slice, 2) = z_interp_b;
+                    obj.G.nodes.coords(upper_slice, 1) = x_interp_t;
+                    obj.G.nodes.coords(upper_slice, 2) = z_interp_t;
+                end
 
             else % Interpolate in x+z direction for each top-bottom pair
                 for i=1:Nx
@@ -400,70 +456,99 @@ classdef PolygonGrid
             end
         end
 
-        function obj = interpolateSide(obj, fix_point, west_or_east)
-            fix_point = obj.p(fix_point,:);
+        function obj = interpolateHorizontal(obj)
             Nx = obj.G.cartDims(1)+1;
             Nz = obj.G.cartDims(2)+1;
 
-            if strcmp(west_or_east, 'west')
-                ix = 1;
-            elseif strcmp(west_or_east, 'east')
-                ix = Nx;
-            end
-            % Interpolate points lying on x-plane of fix-point
-            side = obj.G.nodes.coords(ix:Nx:Nx*Nz, :);
-            [~, fix_idx] = min(abs(side(:,2) - fix_point(2)));
-            obj = interpolateInternal(obj, obj.top_mask, obj.bottom_mask, fix_point, fix_idx, ix);
-
-            % Interpolate x-points in internal to conform with shifted boundary                         
             for i=2:Nz-1
-                side_point = obj.G.nodes.coords(ix+Nx*(i-1), :); % (fix_idx - 1) -> (i-1)
-                x_side = side_point(1); z_side = side_point(2);
-                %x_side = fix_point(1); z_side = fix_point(2);
-                other_point = obj.G.nodes.coords((Nx-ix+1)+Nx*(i-1), :); % point on other side with same z-index                 
-                x_other = other_point(1); z_other = other_point(2);
+                %side_point = obj.G.nodes.coords(ix+Nx*(i-1), :); % (fix_idx - 1) -> (i-1)
+                west_point = obj.G.nodes.coords(1+Nx*(i-1), :);
+                x_west = west_point(1); z_west = west_point(2);
+                %east_point = obj.G.nodes.coords((Nx-ix+1)+Nx*(i-1), :); % point on other side with same z-index                 
+                east_point = obj.G.nodes.coords(Nx+Nx*(i-1), :);
+                x_east = east_point(1); z_east = east_point(2);
     
-                dx = (x_other - x_side)/(Nx-1);
-                dz = (z_other - z_side)/(Nx-1);
-                x_interp = x_side + cumsum(repmat(dx, Nx, 1)) - dx;
-                z_interp = z_side + cumsum(repmat(dz, Nx, 1)) - dz;
-    
-                if strcmp(west_or_east, 'east') % flip vector to be ordered from west to east
-                    x_interp = flip(x_interp);
-                    z_interp = flip(z_interp);
-                end
+                dx = (x_east - x_west)/(Nx-1);
+                dz = (z_east - z_west)/(Nx-1);
+                x_interp = x_west + cumsum(repmat(dx, Nx, 1)) - dx;
+                z_interp = z_west + cumsum(repmat(dz, Nx, 1)) - dz;                    
                 
                 obj.G.nodes.coords(Nx*(i-1)+1:Nx*i, 1) = x_interp;
                 %obj.G.nodes.coords(Nx*(fix_idx-1)+1:Nx*fix_idx, 2) = z_interp;
             end
         end
 
+        function obj = interpolateSide(obj)
+            Nx = obj.G.cartDims(1)+1;
+            Nz = obj.G.cartDims(2)+1;
+
+            % Interpolate points lying on x-plane of fix-point                        
+            west_points = obj.p_we.*obj.we;
+            west_points = west_points(any(west_points, 2),:);
+            fix_idxs = zeros(size(west_points,1), 1);
+            ix = 1;
+            for i=1:size(west_points,1)
+                fix_point = west_points(i,:);                
+                                                                  
+                side = obj.G.nodes.coords(ix:Nx:Nx*Nz, :);
+                [~, fix_idx] = min(abs(side(:,2) - fix_point(2)));                
+                fix_idxs(i) = min(max(2, fix_idx), Nz-1);                
+            end
+            if ~isempty(west_points)
+                obj = interpolateInternal(obj, obj.top_mask, obj.bottom_mask, west_points, fix_idxs, ix);
+            end
+
+            east_points = obj.p_we.*(~obj.we);
+            east_points = east_points(any(east_points, 2),:);
+            fix_idxs = zeros(size(east_points,1), 1);
+            ix = Nx;
+            for i=1:size(east_points,1)
+                fix_point = east_points(i,:);               
+                                                                  
+                side = obj.G.nodes.coords(ix:Nx:Nx*Nz, :);
+                [~, fix_idx] = min(abs(side(:,2) - fix_point(2)));
+                fix_idxs(i) = fix_idx;                
+            end       
+            if ~isempty(east_points)
+                obj = interpolateInternal(obj, obj.top_mask, obj.bottom_mask, east_points, fix_idxs, ix);
+            end                  
+        end
+
         function [nodes, pts_overlap] = findOverlappingNodes(poly, poly_other, face)
-            pp = poly.p;
-            pp_other = poly_other.p;
-            G_other = poly_other.G;
+            pp = poly.p;           
+            G_other = poly_other.G;          
+            pp_other = [poly_other.p; poly_other.p_we; poly_other.p_added]; % include ALL poly points of neighbor
 
             if strcmp(face, 'top')
                 pmask_other = poly_other.bottom_mask; % Yes, bottom_mask here, because we are choosing the face of the OTHER polygon
-                %faces_other = poly_other.faces_bottom;
+                %pp_other = poly_other.bottom_side;
+                x_or_z = 1;
             elseif strcmp(face, 'bottom')
                 pmask_other = poly_other.top_mask;
-                %faces_other = poly_other.faces_top;
+                %pp_other = poly_other.top_side;
+                x_or_z = 1;
+            elseif strcmp(face, 'west')
+                pmask_other = poly_other.east_mask;
+                x_or_z = 2;
+            elseif strcmp(face, 'east')
+                pmask_other = poly_other.west_mask;
+                x_or_z = 2;
             end
 
-            pts_overlap = pp(ismember(pp, pp_other, 'rows'), :);
-            min_overlap = min(pts_overlap(:,1));
-            max_overlap = max(pts_overlap(:,1));
+            pts_overlap = pp(ismembertol(pp, pp_other, 'ByRows', true), :);
+            min_overlap = min(pts_overlap(:,x_or_z));
+            max_overlap = max(pts_overlap(:,x_or_z));
             G_other_mask = G_other.nodes.coords(pmask_other, :);
             
-            nodes = G_other_mask(G_other_mask(:,1) >= min_overlap & ...
-                                 G_other_mask(:,1) <= max_overlap, :);
+            nodes = G_other_mask(G_other_mask(:,x_or_z) >= min_overlap-eps & ...
+                                 G_other_mask(:,x_or_z) <= max_overlap+eps, :);
             
         end
 
         function poly = logicalIndicesUpperOverlap(poly, poly_upper)            
+            % CONSIDER REMOVING THIS !
             poly.G = computeGeometry(poly.G);
-            fc = poly.G.faces.centroids;            
+            fc = poly.G.faces.centroids;              
 
             if numel(poly_upper) > 1 
                 G = struct; fcu = struct; N = struct;
@@ -493,7 +578,7 @@ classdef PolygonGrid
                 fc_other = G_upper.faces.centroids;
                 N_other = G_upper.faces.neighbors;
 
-                cells_upper = N_other(ismember(fc_other, fc, 'rows'), :);            
+                cells_upper = N_other(ismembertol(fc_other, fc, 'ByRows', true), :);            
                 cells_upper_overlap = unique(cells_upper(cells_upper ~= 0));        
 
                 % Logical indices of bounding cells from upper subgrid
@@ -506,7 +591,58 @@ classdef PolygonGrid
             poly.G.i = ii + min(ii_upper_overlap) - 1;
             poly.G.j = jj + max(jj_upper_overlap); % NB: for glueToLowerPolygon this will not work! Needs to be modified then!
         end
+
+        function poly = logicalIndicesUpperOverlapNew(poly, poly_upper)            
+            poly.G = computeGeometry(poly.G);
+            fc = poly.G.faces.centroids;   
+
+            ii_upper_overlap = [];
+            jj_upper_overlap = [];
+
+            for i=1:numel(poly_upper)
+                Gi = poly_upper{i}.G;
+                fcui = Gi.faces.centroids;
+                Ni = Gi.faces.neighbors;
+
+                cells_i = Ni(ismember(fcui, fc, 'rows'), :);
+
+                cells_i_overlap = unique(cells_i(cells_i ~= 0));
+
+                ii_i_overlap = Gi.i(cells_i_overlap);
+                jj_i_overlap = Gi.j(cells_i_overlap);
+
+                ii_upper_overlap = [ii_upper_overlap; ii_i_overlap];
+                jj_upper_overlap = [jj_upper_overlap; jj_i_overlap];            
+            end                       
+        
+            [ii, jj] = gridLogicalIndices(poly.G);
+            jj = max(jj) - jj + 1;
+            poly.G.i = ii + min(ii_upper_overlap) - 1;
+            poly.G.j = jj + max(jj_upper_overlap); % NB: for glueToLowerPolygon this will not work! Needs to be modified then!
+        end
+
+        function poly = logicalIndicesWestOverlap(poly, poly_west)
+            poly.G = computeGeometry(poly.G);
+            G_west = poly_west.G;
+            G_west = computeGeometry(G_west);
+            fc = poly.G.faces.centroids;
+            fc_other = G_west.faces.centroids;
+            N_other = G_west.faces.neighbors;    
+            cells_west = N_other(ismembertol(fc_other, fc, 'ByRows', true), :);            
+            cells_west_overlap = unique(cells_west(cells_west ~= 0));
+        
+            % Logical indices of bounding cells from western subgrid
+            ii_west_overlap = poly_west.G.i(cells_west_overlap);
+            jj_west_overlap = poly_west.G.j(cells_west_overlap);
+        
+            [ii, jj] = gridLogicalIndices(poly.G);
+            jj = max(jj) - jj + 1;
+            poly.G.i = ii + max(ii_west_overlap);
+            poly.G.j = jj + min(jj_west_overlap) - 1; % NB: for glueToLowerPolygon this will not work! Needs to be modified then!
+        end
     end
+
+      
 
     methods (Static)
         function polys = polyPoints(pts, loops, facies)
@@ -537,7 +673,7 @@ classdef PolygonGrid
             x_global = x_min + cumsum(repmat(dx, Nx+1, 1)) - dx;
             z_global = z_min + cumsum(repmat(dz, Nz+1, 1)) - dz;           
 
-            G = cartGrid([Nx, Nz], [Lx, Lz]); % global background grid -> basis for gluing
+            G = cartGrid([Nx, 1, Nz], [Lx, 0.01, Lz]); % global background grid -> basis for gluing
             G = computeGeometry(G);
         end
     end
