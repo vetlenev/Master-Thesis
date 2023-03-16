@@ -18,7 +18,7 @@ classdef PinchOuts < PolygonGrid
 
    methods (Static)
        
-       function [poly_side, closest_mask] = separationPoint_pinchout(poly, poly_pts, G_glob)
+       function [poly_side, closest_mask, xs_new] = separationPoint_pinchout(poly, poly_pts, G_glob)
             Nx = poly.G.cartDims(1);
             xs = poly_pts(:,1);
             zs = poly_pts(:,2);
@@ -33,16 +33,19 @@ classdef PinchOuts < PolygonGrid
         
             num_poly_pts = numel(xs);
             closest_mask = zeros(num_poly_pts, 1);
+            xs_new = xs;
+
             for i=1:num_poly_pts
                 x_diff = abs(xs(i) - poly_side(:,1));
                 closest_mask(i) = find(x_diff == min(x_diff)); % & boundary mask)
+                xs_new(i) = poly_side(closest_mask(i),1);
             end
           
-            poly_side(closest_mask, 1) = xs;
+            %poly_side(closest_mask, 1) = xs;
             poly_side(closest_mask, 2) = zs;
             x_side = poly_side(:,1);
         
-            if min(xs) > min(x_side) % left poly-boundary point is INSIDE subgrid -> change boundary of subgrid to conform with this
+            if min(xs) > min(x_side)+1e-10 % left poly-boundary point is INSIDE subgrid -> change boundary of subgrid to conform with this
                 [xs_sort, sort_idx] = sort(xs);
                 zs_sort = zs(sort_idx);
         
@@ -60,7 +63,7 @@ classdef PinchOuts < PolygonGrid
                 poly_side(closest_mask(sort_idx(1)), 2) = zs_sort(1); % conform z-value of end-node with depth of surface point
             end
         
-            if max(xs) < max(x_side) % right poly-boundary point is INSIDE subgrid -> change boundary of subgrid to conform with this
+            if max(xs) < max(x_side)-1e-10 % right poly-boundary point is INSIDE subgrid -> change boundary of subgrid to conform with this
                 [xs_sort, sort_idx] = sort(xs);
                 zs_sort = zs(sort_idx);
         
@@ -79,11 +82,6 @@ classdef PinchOuts < PolygonGrid
                 poly_side(closest_mask(sort_idx(end)), 2) = zs_sort(end);
             end
         
-            %x_pinch = pinch(:,1);
-            %[~, pin_idx] = min(abs(poly_side(:,1) - x_pinch));
-            %xb = nnz(poly_side(poly_side(:,1) <= poly_side(pin_idx,1), 1));
-            %xt = nnz(top_side(top_side(:,1) <= sep_point_top(:,1), 1));
-            %sep_point = poly_side(pin_idx,:);
        end
 
        function [z_new, remaining_idx] = interpolateZSide(poly_side, nodes_side, closest_idx, interp_method)           
@@ -123,10 +121,14 @@ classdef PinchOuts < PolygonGrid
             [~, z_sep_idx] = min(abs(polyA_east(:,2) - z_pinch));
             polyA_pinch = polyA_east(z_sep_idx, :);
             polyA_pinch_idx = ismember(polyA.G.nodes.coords, polyA_pinch, 'rows');
-            polyA.G.nodes.coords(polyA_pinch_idx,:) = pinch;
+
+            if true % Old: change both coordinates                
+                polyA.G.nodes.coords(polyA_pinch_idx,:) = pinch;            
+            else % New: only change x-coords, so nodes on east side remains uniform in vertical
+                %polyA.G.nodes.coords(polyA_pinch_idx,1) = pinch(1);
+            end
         
             % 4. Interpolate nodes on east side to conform with pinch-point
-            %start_i = polyA.G.cartDims(1)+1; % only interpolate east side
             polyA = interpolateInternal(polyA, polyA.top_mask, polyA.bottom_mask, pinch, z_sep_idx, polyA.G.cartDims(1)+1);
        end
 
@@ -183,35 +185,57 @@ classdef PinchOuts < PolygonGrid
             %pmask = cell(numel(poly_upper), 1);
             pts_overlap = cell(numel(poly_upper), 1);
             nodes = cell(numel(poly_upper), 1);
+            pp_upper = cell(numel(poly_upper), 1);
+            pmask_upper = cell(numel(poly_upper), 1);
 
             min_overlap = inf;
             max_overlap = 0;
 
+            if strcmp(face, 'top')
+                x_or_z = 1;
+            elseif strcmp(face, 'bottom')
+                x_or_z = 1;
+            elseif strcmp(face, 'west')
+                x_or_z = 2;
+            elseif strcmp(face, 'east')
+                x_or_z = 2;
+            end     
+
             for i=1:numel(poly_upper)  
                 if strcmp(face, 'top')
-                    pp_upper = poly_upper{i}.bottom_side;
+                    pp_upper{i} = poly_upper{i}.bottom_side;
+                    pmask_upper{i} = poly_upper{i}.bottom_mask;
                 elseif strcmp(face, 'bottom')
-                    pp_upper = poly_upper{i}.top_side;
+                    pp_upper{i} = poly_upper{i}.top_side;
+                    pmask_upper{i} = poly_upper{i}.top_mask;
+                elseif strcmp(face, 'west')
+                    pp_upper{i} = poly_upper{i}.east_side;
+                    pmask_upper{i} = poly_upper{i}.east_mask;
+                elseif strcmp(face, 'east')
+                    pp_upper{i} = poly_upper{i}.west_side;
+                    pmask_upper{i} = poly_upper{i}.west_mask;
                 end                
-                pts_overlap{i} = pp(ismembertol(pp, pp_upper, 'ByRows', true), :);                
+                pts_overlap{i} = pp(ismembertol(pp, pp_upper{i}, 'ByRows', true), :);                
                 % Here we assume subgid 
-                min_overlap = min(min_overlap, min(pts_overlap{i}(:,1)));
-                max_overlap = max(max_overlap, max(pts_overlap{i}(:,1)));               
+                min_overlap = min(min_overlap, min(pts_overlap{i}(:,x_or_z)));
+                max_overlap = max(max_overlap, max(pts_overlap{i}(:,x_or_z)));               
             end
             
             pts_overlap_all = unique(vertcat(pts_overlap{:}), 'rows');
 
             for i=1:numel(poly_upper)
-                G_upper = poly_upper{i}.G;
-                if strcmp(face, 'top')
-                    pmask_upper = poly_upper{i}.bottom_mask; % Yes, bottom_mask here, because we are choosing the face of the OTHER polygon                    
-                elseif strcmp(face, 'bottom')
-                    pmask_upper = poly_upper{i}.top_mask;
-                end
-                G_upper_mask = G_upper.nodes.coords(pmask_upper, :);                
+                G_upper = poly_upper{i}.G;                  
+                G_upper_mask = G_upper.nodes.coords(pmask_upper{i}, :);                
                 
-                nodes{i} = G_upper_mask(G_upper_mask(:,1) >= min_overlap & ...
-                                     G_upper_mask(:,1) <= max_overlap, :);
+                nodes{i} = G_upper_mask(G_upper_mask(:,x_or_z) >= min_overlap & ...
+                                     G_upper_mask(:,x_or_z) <= max_overlap, :);
+
+                % Include closest nodes outside of overlap
+                [~, westmost_idx] = min(abs(G_upper_mask(:,x_or_z) - min_overlap)); 
+                nodes{i} = [G_upper_mask(westmost_idx, :); nodes{i}];
+                [~, eastmost_idx] = min(abs(G_upper_mask(:,x_or_z) - max_overlap));
+                nodes{i} = [nodes{i}; G_upper_mask(eastmost_idx, :)];
+                nodes{i} = unique(nodes{i}, 'rows');
             end
             
             nodes_all = unique(vertcat(nodes{:}), 'rows'); % to avoid selecting the overlapping node between A and C twice            

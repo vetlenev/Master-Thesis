@@ -20,17 +20,18 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
         poly.top_side = poly.p_bt(3:4,:);
         poly.bottom_side = poly.p_bt(1:2,:);
     
-        poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, []); % no overlap with upper polygon, determine dimensions from sizes            
+        poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, fix(Nx_glob/100)); % no overlap with upper polygon, fix a very small horizontal dimension (to not get too tight cells)            
     
-        [poly, bottom_idx] = correct_dx_poly(poly, G_glob, poly.bottom_mask, 'bottom');
-        [poly, top_idx] = correct_dx_poly(poly, G_glob, poly.top_mask, 'top');
+        [poly, bottom_idx] = correct_dx_poly_new(poly, G_glob, poly.bottom_mask, 'bottom');
+        [poly, top_idx] = correct_dx_poly_new(poly, G_glob, poly.top_mask, 'top');
     
-        poly = interpolateZ_remaining(poly, bottom_idx, poly.bottom_mask, 'bottom', 'spline');
-        poly = interpolateZ_remaining(poly, top_idx, poly.top_mask, 'top', 'spline');
+        poly = interpolateZ_remaining_new(poly, bottom_idx, poly.bottom_mask, 'bottom', 'linear');
+        poly = interpolateZ_remaining_new(poly, top_idx, poly.top_mask, 'top', 'linear');
     
         poly = interpolateInternal(poly, poly.top_mask, poly.bottom_mask, []);    
         poly = interpolateSide(poly);
         poly = interpolateHorizontal(poly);
+        %poly = interpolatePartlyHorizontal(poly, 0.2);
     
         Nx_small = poly.G.cartDims(1)+1;
         Nz_small = poly.G.cartDims(2)+1;
@@ -77,10 +78,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
     poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_overlap);           
     poly.bottom_mask = poly.G.nodes.coords(:,2) == min(poly.G.nodes.coords(:,2));
     % Create bottom nodes for parent polygon (this is queried later)
-    [poly, closest_bottom] = correct_dx_poly(poly, G_glob, ...
+    [poly, closest_bottom] = correct_dx_poly_new(poly, G_glob, ...
                                                 poly.bottom_mask, 'bottom'); % manually define nodes on bottom side
-    poly = interpolateZ_remaining(poly, closest_bottom, ...
-                                    poly.bottom_mask, 'bottom', 'spline');   
+    poly = interpolateZ_remaining_new(poly, closest_bottom, ...
+                                    poly.bottom_mask, 'bottom', 'linear');   
 
     %% Handle LEFT part
     p_idx_left = strcat(p_idx, 'left');
@@ -119,9 +120,9 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
     poly_left.bottom_side = [poly_left.bottom_side; bottom_left_end]; % add endpoint to be used for interpolation on bottom side
     poly_left.p_added = [poly_left.p_added; bottom_left_end];
     % Set bottom nodes (by interpolation up to east end of left polygon)
-    [poly_left, closest_bottom] = correct_dx_poly(poly_left, G_glob, poly_left.bottom_mask, 'bottom');
-    poly_left = interpolateZ_remaining(poly_left, closest_bottom, ...
-                                        poly_left.bottom_mask, 'bottom', 'spline');
+    [poly_left, closest_bottom] = correct_dx_poly_new(poly_left, G_glob, poly_left.bottom_mask, 'bottom');
+    poly_left = interpolateZ_remaining_new(poly_left, closest_bottom, ...
+                                        poly_left.bottom_mask, 'bottom', 'linear');
     
     poly_left = interpolateInternal(poly_left, poly_left.top_mask, poly_left.bottom_mask, []);    
 
@@ -185,9 +186,9 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
     poly_mid.bottom_side = [bottom_left_end; poly_mid.bottom_side; bottom_right_start]; % add endpoint to be used for interpolation on bottom side
     poly_mid.p_added = [poly_mid.p_added; bottom_left_end; bottom_right_start];
     % Set bottom nodes (by interpolation up to pinch point)
-    [poly_mid, closest_bottom] = correct_dx_poly(poly_mid, G_glob, poly_mid.bottom_mask, 'bottom');
-    poly_mid = interpolateZ_remaining(poly_mid, closest_bottom, ...
-                                        poly_mid.bottom_mask, 'bottom', 'spline');
+    [poly_mid, closest_bottom] = correct_dx_poly_new(poly_mid, G_glob, poly_mid.bottom_mask, 'bottom');
+    poly_mid = interpolateZ_remaining_new(poly_mid, closest_bottom, ...
+                                        poly_mid.bottom_mask, 'bottom', 'linear');
 
     poly_mid = interpolateInternal(poly_mid, poly_mid.top_mask, poly_mid.bottom_mask, []); 
 
@@ -221,9 +222,9 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
     poly_right.bottom_side = [bottom_right_start; poly_right.bottom_side]; % add endpoint to be used for interpolation on bottom side
     poly_right.p_added = [poly_right.p_added; bottom_right_start];
     
-    [poly_right, closest_bottom] = correct_dx_poly(poly_right, G_glob, poly_right.bottom_mask, 'bottom');
-    poly_right = interpolateZ_remaining(poly_right, closest_bottom, ...
-                                        poly_right.bottom_mask, 'bottom', 'spline');
+    [poly_right, closest_bottom] = correct_dx_poly_new(poly_right, G_glob, poly_right.bottom_mask, 'bottom');
+    poly_right = interpolateZ_remaining_new(poly_right, closest_bottom, ...
+                                        poly_right.bottom_mask, 'bottom', 'linear');
 
     poly_right = interpolateInternal(poly_right, poly_right.top_mask, poly_right.bottom_mask, []); 
 

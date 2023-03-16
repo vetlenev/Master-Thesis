@@ -28,8 +28,8 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePolygon1(all_polys, poly_o
 %     [poly, bottom_idx] = correct_dx_poly(poly, G_glob, poly.bottom_mask, 'bottom');
 %     [poly, top_idx] = correct_dx_poly(poly, G_glob, poly.top_mask, 'top');
 % 
-%     poly = interpolateZ_remaining(poly, bottom_idx, poly.bottom_mask, 'bottom', 'spline');
-%     poly = interpolateZ_remaining(poly, top_idx, poly.top_mask, 'top', 'spline');
+%     poly = interpolateZ_remaining(poly, bottom_idx, poly.bottom_mask, 'bottom', 'linear');
+%     poly = interpolateZ_remaining(poly, top_idx, poly.top_mask, 'top', 'linear');
 % 
 %     poly = interpolateInternal(poly, poly.top_mask, poly.bottom_mask, []);    
 %     poly = interpolateSide(poly);
@@ -76,10 +76,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePolygon1(all_polys, poly_o
     % Create (dummy) subgrid for full polygon
     poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_overlap);
     % Create bottom nodes for parent polygon (this is queried later)
-    [poly, closest_bottom] = correct_dx_poly(poly, G_glob, ...
+    [poly, closest_bottom] = correct_dx_poly_new(poly, G_glob, ...
                                                 poly.bottom_mask, 'bottom'); % manually define nodes on bottom side
-    poly = interpolateZ_remaining(poly, closest_bottom, ...
-                                    poly.bottom_mask, 'bottom', 'spline');   
+    poly = interpolateZ_remaining_new(poly, closest_bottom, ...
+                                    poly.bottom_mask, 'bottom', 'linear');   
 
     %% Handle LEFT part
     p_idx_left = strcat(p_idx, 'left');
