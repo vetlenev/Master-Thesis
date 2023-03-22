@@ -14,7 +14,9 @@ classdef PolygonGrid
         p_added % added polygonal points for gluing
         we % boolean if p_we is on west (true) or east (false) face
         p_orig
-        G
+        bnodes
+        cell_range
+        G        
 
         top_side % data points at top curve of polygon
         bottom_side
@@ -640,7 +642,7 @@ classdef PolygonGrid
                 fcui = Gi.faces.centroids;
                 Ni = Gi.faces.neighbors;
 
-                cells_i = Ni(ismember(fcui, fc, 'rows'), :);
+                cells_i = Ni(ismembertol(fcui, fc, 'ByRows',true), :);
 
                 cells_i_overlap = unique(cells_i(cells_i ~= 0));
 

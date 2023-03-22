@@ -13,23 +13,23 @@ colors = {[0 0.4470 0.7410],
           [0.6350 0.0780 0.1840]};
 
 % plot result
-figure;
+figure(1);
 for f_ix = 1:numel(facies)
     facie = facies{f_ix};
     
     for poly_ix = facie'
         
-        poly = pts(loops{poly_ix}, :);
-        poly = [poly; poly(1,:)];
-        patch(poly(:,1), poly(:,2), colors{f_ix}); hold on
+        polyg = pts(loops{poly_ix}, :);
+        polyg = [polyg; polyg(1,:)];
+        patch(polyg(:,1), polyg(:,2), colors{f_ix}); hold on
     end
 end
 
 for f_ix = 1:numel(facies)
     facie = facies{f_ix};   
     for poly_ix = facie'        
-        poly = pts(loops{poly_ix}, :);
-        poly = [poly; poly(1,:)];       
-        text(mean(poly(:,1)), mean(poly(:,2)), string(poly_ix)); hold on
+        polyg = pts(loops{poly_ix}, :);
+        polyg = [polyg; polyg(1,:)];       
+        text(mean(polyg(:,1)), mean(polyg(:,2)), string(poly_ix)); hold on
     end
 end

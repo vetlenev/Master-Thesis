@@ -69,4 +69,37 @@ function [poly_obj, external_nodes] = bottomFaultBoundary(all_polys, poly_obj, p
        internal_nodes = [internal_nodes; poly.p];
 
     end
+
+    %% Then separate out individual polygons in fault
+    poly_obj.pBFPEBI = Faults.globalSubgrid(poly_obj.pBFPEBI, Lx, Lz, Nx, Nz, []);
+    
+    %% Plot bottom fault
+    figure()
+    pBFG = poly_obj.pBFPEBI.G;
+    bneighbors = unique(pBFG.faces.neighbors(pBFG.faces.tag, :));
+    bcells = zeros(pBFG.cells.num, 1);
+    bcells(bneighbors) = 1;
+    plotGrid(pBFG);
+    plotCellData(pBFG, bcells)
+    
+    %% Fixing ...
+    poly_obj.pBFPEBI = Faults.cellsInsideFault(poly_obj.pBFPEBI);
+    [poly_obj.pBFPEBI, bneighbors] = Faults.assignFacies(poly_obj.pBFPEBI, poly_neighbors);
+    pBFGF = poly_obj.pBFPEBI.G_fault;
+    
+    %% New
+    tip_faces = find(pBFGF.faces.centroids(:,1) > 0.53);
+    tip_faces = setdiff(tip_faces, boundaryFaces(pBFGF));
+    
+    edge_case_faces = find(pBFGF.faces.centroids(:,1) > 0.485 & ...
+                            pBFGF.faces.centroids(:,1) < 0.490 & ...
+                            pBFGF.faces.centroids(:,2) > 0.746);
+    
+    edge_case_faces = [edge_case_faces; find(pBFGF.faces.centroids(:,1) > 0.478 & ...
+                                            pBFGF.faces.centroids(:,2) > 0.615 & ...
+                                            pBFGF.faces.centroids(:,2) < 0.618)];
+    
+    tip_faces = [tip_faces; edge_case_faces];
+    
+    poly_obj.pBFPEBI = Faults.removeRedundantFaces(poly_obj.pBFPEBI, bneighbors, tip_faces);
 end

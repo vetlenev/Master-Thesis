@@ -182,31 +182,15 @@ function [poly_obj, nodes_overlap, pts_overlap, ...
     %% Finish triangular part
     [nodes_overlap_all, pts_overlap_all] = findOverlappingNodes(poly_tri, poly_upper{4}, 'top'); 
     top_nodes = nodes_overlap_all;
-    num_x_overlap = size(top_nodes,1);
-    Nz_right = poly_rightC.G.cartDims(2);
-
-    poly_tri = cartesianSubgrid(poly_tri, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_overlap, Nz_right);
-
-    poly_tri.G.nodes.coords(poly_tri.top_mask,:) = top_nodes;    
-
     west_nodes = poly_rightC.G.nodes.coords(poly_rightC.east_mask, :);
-    poly_tri.G.nodes.coords(poly_tri.west_mask,:) = west_nodes;
-    east_nodes = repmat(top_nodes(top_nodes(:,1) == max(top_nodes(:,1)), :), Nz_right+1, 1);
-    poly_tri.G.nodes.coords(poly_tri.east_mask,:) = east_nodes;
-
     xmax = max(top_nodes(:,1));
     xmin = min(top_nodes(:,1));
-    Nx_tri = poly_tri.G.cartDims(1);
-    dx = (xmax - xmin)/Nx_tri;
-    x = xmin + cumsum(repmat(dx, Nx_tri+1, 1)) - dx;
+    Lx_tri = xmax - xmin; 
+    Nx_tri_bottom = round((Lx_tri/Lx_glob) * Nx_glob);
+    dx = (xmax - xmin)/Nx_tri_bottom;
+    x = xmin + cumsum(repmat(dx, Nx_tri_bottom+1, 1)) - dx;
     z = zeros(numel(x), 1);
-
     bottom_nodes = [x,z];   
-    poly_tri.G.nodes.coords(poly_tri.bottom_mask,:) = bottom_nodes;
-
-    poly_tri = interpolateInternal(poly_tri, poly_tri.top_mask, poly_tri.bottom_mask, []); 
-
-    poly_tri = logicalIndicesUpperOverlap(poly_tri, poly_upper{4}); 
 
     tri_bnodes = [flip(top_nodes); flip(west_nodes); bottom_nodes];       
     [~, unique_idx] = uniquetol(tri_bnodes, 'ByRows', true); % stable to give in same order as list of neighbors

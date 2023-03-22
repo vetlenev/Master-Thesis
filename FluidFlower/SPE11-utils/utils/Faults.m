@@ -1,25 +1,31 @@
 classdef Faults < PolygonGrid
 
     properties
-        bsize
-        bnodes
+        fac_scale
         bfacies
         multiple
+
+        internal_top
+        internal_bottom
+        internal_west
+        internal_east
 
         G_fault
         gc
         gf
-        gn
+        gn       
     end
 
     methods
-        function obj = Faults(polys, poly_num, bsize, multiple_polys) % obj = poly_num
+        function obj = Faults(polys, poly_num, fac_scale, multiple_polys) % obj = poly_num
             %POLYGONGRID Discretized geometry of polygon with id poly_num
             % Input:
             %   polys: polygon data from spe11 case
-            %   poly_num: id of polygon to discretize                       
+            %   poly_num: id of polygon to discretize  
+            %   fac_scale: scale fraction for resolution size (should have
+            %   value > 1 to give finer cells inside fault
             obj = obj@PolygonGrid(polys, poly_num);
-            obj.bsize = bsize;
+            obj.fac_scale = fac_scale;
             obj.multiple = multiple_polys;
             if multiple_polys
                 obj.p = [];
@@ -372,5 +378,129 @@ classdef Faults < PolygonGrid
             pt2 = pt - p1;
             d = sqrt(sum(cross(line,pt2,2).^2,2)) ./ sqrt(sum(line.^2,2));
         end
+
+        function pts_inside = uniformPointDistribution(poly, num_pts)
+            % Uniform distribution of points inside polygon bounded by
+            % bnodes of grid G.            
+            G = poly.G;
+            p = poly.bnodes;
+
+            G = computeGeometry(G);
+            x_min = min(G.cells.centroids(:,1));
+            x_max = max(G.cells.centroids(:,1));
+            z_min = min(G.cells.centroids(:,2));
+            z_max = max(G.cells.centroids(:,2));
+            xx = linspace(x_min, x_max, num_pts);
+            zz = linspace(z_min, z_max, num_pts);
+            
+            [X, Z] = meshgrid(xx,zz);
+            points = [X(:), Z(:)];
+
+            inpoly = inpolygon(points(:,1), points(:,2), p(:,1), p(:,2));
+            pts_inside = [points(inpoly,1), points(inpoly,2)];
+        end
+    
+        function [poly, distributed_pts] = QuasiRandomPointDistribution(poly, fault_polys, G_glob, node_density, do_plot, varargin)
+            % Make quasi-random distribution of points inside triangle
+            % grid, distributed based on fractional size of individual
+            % triangles.
+            % PARAMETERS:
+            %   poly: instance of PolygonGrid
+            %   fault_polys: number index for fault to distribute point in
+            %   G_glob: global, virtual background grid
+            %   node_density: scaling factor to adjust number of additional generating points inside faults
+            %   do_plot: whether to plot resulting triangulated grid
+            %           (true/false)
+            % RETURNS:
+            %   poly: updated polygon instance
+            %   distributed_pts: coordinated of all distributed points
+            A_tot = sum(G_glob.cells.volumes); % total area
+            nodes_tot = G_glob.nodes.num;          
+
+            distributed_pts = [];            
+            if do_plot
+                figure()
+                if nargin > 5
+                    colors = varargin{1};
+                else
+                    colors = rand(7,3);
+                end
+            end
+            for i=1:numel(fault_polys)
+                p = fault_polys(i);
+                if isstring(p)
+                    p_idx = fault_polys;
+                else
+                    p_idx = strcat('p', string(p), 'PEBI');
+                end
+                poly_internal = poly.(p_idx);
+            
+                % Original triangulation (only boundary nodes)
+                bnodes = poly_internal.bnodes;
+                np = size(bnodes,1);
+                constraint = [(1:np-1)' (2:np)'; np 1]; 
+                dt = delaunayTriangulation(bnodes, constraint); % NB: no constraint for added points!
+                inpoly = isInterior(dt);
+                dt_inpoly = dt.ConnectivityList(inpoly,:);
+                G_dummy = triangleGrid(bnodes, dt_inpoly);
+            
+                G_int = computeGeometry(G_dummy);
+                A_int = sum(G_int.cells.volumes);
+                nodes_int = round(node_density*nodes_tot*(A_int/A_tot));
+            
+                % loop through triangles
+                int_points = [];
+                for c=1:G_int.cells.num                    
+                    cfaces = G_int.cells.faces(G_int.cells.facePos(c):G_int.cells.facePos(c+1)-1, :);
+                    cfaces_areas = G_int.faces.areas(cfaces);
+                    %scale = 1 + std(cfaces_areas)/mean(cfaces_areas);
+                    scale = node_density*max(cfaces_areas)/min(cfaces_areas);
+                    num_nodes = round(scale*nodes_int*(G_int.cells.volumes(c)/A_int)); % num nodes assigned to this triangle
+
+                    cnodes = zeros(6, 1);
+                    for j=1:numel(cfaces)
+                        cnodes(2*j-1:2*j) = G_int.faces.nodes(G_int.faces.nodePos(cfaces(j)):G_int.faces.nodePos(cfaces(j)+1)-1, :);
+                    end
+                    ccoords = unique(G_int.nodes.coords(cnodes, :), 'rows');
+    
+                    for k=1:num_nodes
+                        rand2pts = randperm(3,2);
+                        %rand_pt = setdiff(randi(3,num_nodes,1)', repmat((1:3),num_nodes,1)', 'rows');
+                        rand_ncoords = ccoords(rand2pts, :);
+                        rand_fpt = randomPointOnLine(rand_ncoords(1,:), rand_ncoords(2,:), 'uniform');
+                        % nonuniform random point between rand_pt and opposite node
+                        other_node = setdiff(1:3, rand2pts);
+                        other_coord = ccoords(other_node, :);
+                        
+                        rand_pt = randomPointOnLine(rand_fpt, other_coord, 'nonuniform');
+                        int_points = [int_points; rand_pt];                       
+                    end
+                end
+                     
+                % Triangulation of boundary + quasi-random point distribution
+                nodes = [bnodes; int_points];
+                dt = delaunayTriangulation(nodes, constraint); % New nodes, same constraint: no constraint for added points!
+                inpoly = isInterior(dt);
+                dt_inpoly = dt.ConnectivityList(inpoly,:);
+                GBF_int = triangleGrid(nodes, dt_inpoly);
+
+                GBF_int = computeGeometry(GBF_int);
+                GBF_int.cells.indexMap = (1:GBF_int.cells.num)';
+                poly.(p_idx).G = GBF_int;
+                % No logical indices for unstructured grid -> set to NaN
+                poly.(p_idx).G.i = nan(GBF_int.cells.num, 1);
+                poly.(p_idx).G.j = nan(GBF_int.cells.num, 1);
+            
+                distributed_pts = [distributed_pts; int_points];
+                
+                if do_plot
+                    plotGrid(GBF_int, 'FaceColor', colors(poly.(p_idx).facies,:))
+                    hold on
+                    plot(nodes(:,1), nodes(:,2), 'r.')   
+                    hold on
+                end
+            end
+        end
+   
    end
 end

@@ -34,8 +34,74 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueFault_topright(all_polys, 
         facies = [facies; repmat(pn.facies, numel(nodes), 1)];
     end
     [~, unique_idx] = uniquetol(all_nodes, 'ByRows', true); % stable to give in same order as list of neighbors
-    poly.bnodes = all_nodes(sort(unique_idx), :);
-   
-   poly_obj.(p_idx_pebi) = poly;
-   nodes_overlap(p_idx_pebi) = poly.bnodes;
+    poly.bnodes = all_nodes(sort(unique_idx), :);     
+
+
+   %% Make PEBI subgrid
+    poly = Faults.globalSubgrid(poly, Lx, Lz, Nx, Nz, []);
+    
+    %% In polygon
+    poly = Faults.cellsInsideFault(poly);
+    
+    %% Plot grid
+    figure()
+    pG = poly.G;
+    bneighbors = unique(pG.faces.neighbors(pG.faces.tag, :));
+    plotGrid(pG)
+    bcells = zeros(pG.cells.num, 1);
+    bcells(bneighbors) = 1;
+    plotCellData(pG, bcells)
+    
+    figure()
+    pGF = poly.G_fault;
+    plotGrid(pGF)
+    
+    %% Set facies
+    [poly, bneighbors] = Faults.assignFacies25(poly, poly_neighbors);
+    
+    %% Find discontinuous face transitions
+    pGF = poly.G_fault;
+    tip_faces = find(pGF.faces.centroids(:,2) < 0.673);
+    tip_faces = setdiff(tip_faces, boundaryFaces(pGF));
+    
+    edge_case_faces = find(pGF.faces.centroids(:,1) > 1.433 & ...
+                            pGF.faces.centroids(:,1) < 1.44 & ...
+                            pGF.faces.centroids(:,2) > 0.988 & ...
+                            pGF.faces.centroids(:,2) < 0.9897);  % somehow removeRedundantFaces does not work on this face ..., add it manually
+    edge_case_faces = [edge_case_faces; find(pGF.faces.centroids(:,1) > 1.245 & ...
+                                            pGF.faces.centroids(:,1) < 1.25 & ...
+                                            pGF.faces.centroids(:,2) > 0.904 & ...
+                                            pGF.faces.centroids(:,2) < 0.906)];  % somehow removeRedundantFaces does not work on this face ..., add it manually
+    edge_case_faces = [edge_case_faces; find(pGF.faces.centroids(:,1) > 1.22 & ...
+                                            pGF.faces.centroids(:,1) < 1.225 & ...
+                                            pGF.faces.centroids(:,2) > 0.894 & ...
+                                            pGF.faces.centroids(:,2) < 0.896)];  % somehow removeRedundantFaces does not work on this face ..., add it manually
+    
+    
+    tip_faces = [tip_faces; edge_case_faces];
+    faces2keep = find(pGF.faces.centroids(:,1) > 1.2085 & ...
+                        pGF.faces.centroids(:,1) < 1.2211 & ...
+                        pGF.faces.centroids(:,2) > 0.895 & ...
+                        pGF.faces.centroids(:,2) < 0.8975);
+    
+    poly = Faults.removeRedundantFaces(poly, bneighbors, tip_faces, faces2keep);
+    
+    %% Fix faces unmatched with global grid
+    point_set = {[1,2], [100,109], [109,115]};
+    poly = Faults.fixUnmatchedFaces25(poly, point_set);
+    pGF = poly.G_fault; % update
+    
+    %% Change coordinate of degenerate face
+    bf = boundaryFaces(pGF);
+    bf_mask = zeros(pGF.faces.num, 1);
+    bf_mask(bf) = 1;
+    
+    old_face = find(pGF.faces.centroids(:,2) == min(pGF.faces.centroids(~bf_mask,2)));
+    true_coord_left = poly.bnodes(108,:);
+    true_coord_right = poly.bnodes(110,:);
+    
+    poly = Faults.changeNodesForFaces(poly, old_face, true_coord_left, true_coord_right);
+
+    poly_obj.(p_idx_pebi) = poly;
+    nodes_overlap(p_idx_pebi) = poly.bnodes;
 end

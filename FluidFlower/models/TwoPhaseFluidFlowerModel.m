@@ -1,4 +1,4 @@
-classdef TwoPhaseFluidFlowerModel < TwoPhaseWaterGasModel
+classdef TwoPhaseFluidFlowerModel < ThreePhaseBlackOilModel
     % Two-phase gas and water model
     properties
         % (constant) temperature field
@@ -11,8 +11,18 @@ classdef TwoPhaseFluidFlowerModel < TwoPhaseWaterGasModel
         % ------------------------------------------------------------------------
         function model = TwoPhaseFluidFlowerModel(G, rock, fluid, tsurf, tgrad, varargin)
            
-            model = model@TwoPhaseWaterGasModel(G, rock, fluid, tsurf, tgrad, varargin{:}); 
-            
+            model = model@ThreePhaseBlackOilModel(G, rock, fluid); 
+
+            model.oil   = false;
+            model.gas   = true;
+            model.water = true;
+            if nargin < 4
+                [tsurf, tgrad] = deal(nan);
+            end
+            model.t     = model.computeTemperatureField(G, tsurf, tgrad);
+            model.name  = 'GasWater_2ph';
+            model.gravity = gravity;
+            model = merge_options(model, varargin{:});
         end
 
     end
@@ -46,6 +56,10 @@ classdef TwoPhaseFluidFlowerModel < TwoPhaseWaterGasModel
            state.sGmax = min(1-model.fluid.krPts.w(1), state.sGmax);
            % ---
            state.sGmax = max(0,state.sGmax);
+        end
+
+        function t = computeTemperatureField(model, G, tsurf, tgrad)
+            t = tsurf * ones(G.cells.num, 1) + G.cells.centroids(:,2) * tgrad / 1000;
         end
     end
     

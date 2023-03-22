@@ -48,23 +48,54 @@ classdef UtilFunctions
        
        function [boundary_faces, bottom] = localBoundaryFaces(G, cells, varargin)
            % cells: list of indices of cells to extract boundary faces of
-            opt = struct('full_dim', false); % defaults: sharp interface, negligable horizontal flux for NVEHorz cells (r=0) 
+            opt = struct('full_dim', false, 'FF', false); % defaults: sharp interface, negligable horizontal flux for NVEHorz cells (r=0) 
             opt = merge_options(opt, varargin{:});
             
-            all_faces = zeros([numel(cells) 6]); % each cell has 6 faces in 3D
+            if opt.FF
+                all_faces = zeros([numel(cells) 4]);
+            else
+                all_faces = zeros([numel(cells) 6]); % each cell has 6 faces in 3D
+                for i=1:size(cells)
+                    % Only in pocessing of grid before simulation, so despite
+                    % potentially many loops, not too expensive overall
+                    icell_start = G.cells.facePos(cells(i));
+                    icell_stop = G.cells.facePos(cells(i)+1)-1;
+                    all_faces(i,:) = G.cells.faces(icell_start:icell_stop, 1);
+                end
+            end                       
             
-            for i=1:size(cells)
-                % Only in pocessing of grid before simulation, so despite
-                % potentially many loops, not too expensive overall
-                icell_start = G.cells.facePos(cells(i));
-                icell_stop = G.cells.facePos(cells(i)+1)-1;
-                all_faces(i,:) = G.cells.faces(icell_start:icell_stop, 1);
+            if opt.FF
+                ii = G.i;
+                kk = G.j;
+            else
+                [ii, jj, kk] = gridLogicalIndices(G);
             end
-            
-            [ii, jj, kk] = gridLogicalIndices(G);
             nx = numel(unique(ii(cells)));                                  
-            
-            if opt.full_dim
+           
+            if opt.FF
+                [G_sub, gc, gf] = extractSubgrid(G, cells);
+                G_sub.i = ii(gc);
+                G_sub.j = kk(gc);
+                boundary_faces_sub = boundaryFaces(G_sub);
+                boundary_faces = gf(boundary_faces_sub); 
+                
+                bottom_cells_sub = G_sub.cells.indexMap(G_sub.j == min(G_sub.j));
+                %bottom_cells = gc(bottom_cells_sub);
+                bottom_cells = bottom_cells_sub;
+                bottom = [];
+                for i=1:numel(bottom_cells)
+                    bface = G_sub.cells.faces(G_sub.cells.facePos(i):G_sub.cells.facePos(i+1)-1,:);
+                    bface = intersect(gf(bface), boundary_faces);
+                    bottom = [bottom; bface];
+                end
+                bottom_centroids = G.faces.centroids(bottom, 1);
+                [~, min_idx] = min(bottom_centroids);
+                [~, max_idx] = max(bottom_centroids);
+                bottom([min_idx, max_idx]) = []; % remove face on west+east side
+
+
+
+            elseif opt.full_dim
                 ny = numel(unique(jj(cells)));
                 
                 bottom = UtilFunctions.boundingFaces(G, 'bottom', all_faces, kk, @max);
@@ -88,11 +119,19 @@ classdef UtilFunctions
             end                                            
        end
        
-       function [faces] = boundingFaces(G, side, all_faces, xx, max_or_min)
+       function [faces] = boundingFaces(G, side, all_faces, xx, max_or_min, varargin)
            %Extract faces from a list of 'all_faces' that are directed
-           %towards specified 'side' and satisfy 'max_or_min'.
-           side_idx = struct('left', 1, 'right', 2, 'west', 3, ...
+           %towards specified 'side' and satisfy 'max_or_min'.     
+           opt = struct('FF', false); % defaults: sharp interface, negligable horizontal flux for NVEHorz cells (r=0) 
+           opt = merge_options(opt, varargin{:});
+
+           if opt.FF
+               side_idx = struct('left', 1, 'right', 2, 'west', 3, ...
                                 'east', 4, 'top', 5, 'bottom', 6);
+           else
+               side_idx = struct('left', 1, 'right', 2, 'west', 3, ...
+                                'east', 4, 'top', 5, 'bottom', 6);
+           end
            
             faces = all_faces(:, side_idx.(side));
             n = G.faces.neighbors(faces, :);

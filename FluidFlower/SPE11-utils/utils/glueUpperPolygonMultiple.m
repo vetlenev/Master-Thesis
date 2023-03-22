@@ -31,8 +31,11 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueUpperPolygonMultiple(all_p
         poly = interpolateInternal(poly, poly.top_mask, poly.bottom_mask, []);    
         poly = interpolateSide(poly);
         poly = interpolateHorizontal(poly);
-        %poly = interpolatePartlyHorizontal(poly, 0.2);
-    
+        
+        % Small polygon treated as fine cells -> set logical indices to NaN
+        poly.G.i = nan(poly.G.cells.num, 1);
+        poly.G.j = nan(poly.G.cells.num, 1);
+
         Nx_small = poly.G.cartDims(1)+1;
         Nz_small = poly.G.cartDims(2)+1;
         poly_obj.(p_idx_small) = poly;
