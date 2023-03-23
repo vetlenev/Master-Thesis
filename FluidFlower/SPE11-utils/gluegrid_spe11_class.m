@@ -163,7 +163,7 @@ poly = cell2struct(struct2cell(poly), {'p32'});
                                                         nodes_overlap, pts_overlap, G_glob);
 
 %% Bottom polygon glued to structured polygon and fault
-node_density = 0.1; % < 1 to not get to dense triangles
+node_density = 0.5; % < 1 to not get to dense triangles
 [poly, nodes_overlap, pts_overlap, ...
     top_nodes, bottom_nodes, west_nodes] = gluePolygon1(polys, poly, 1, [3,2], ...
                                                    nodes_overlap, pts_overlap, G_glob, node_density);
@@ -366,7 +366,7 @@ for i = 1:numel(poly_idxs) % plot subgrids first
     end    
     for j = 1:numel(overlap_idxs) % plot overlapping nodes
         px = overlap_idxs{j};
-        plot(nodes_overlap.(px)(:,1), nodes_overlap.(px)(:,2), 'r.', 'markersize', 6)
+        plot(nodes_overlap.(px)(:,1), nodes_overlap.(px)(:,2), 'k.', 'markersize', 6)
         hold on
 %         plot(pts_overlap.(px)(:,1), pts_overlap.(px)(:,2), 'b.', 'markersize', 15)
 %         hold on
@@ -392,6 +392,24 @@ poly_idxs = {poly.p30.p_idx; poly.p18.p_idx; poly.p13.p_idx; ...
              poly.p23PEBI.p_idx; poly.p1left.p_idx; poly.p1mid.p_idx; ...
              poly.p1rightA.p_idx; poly.p1rightB.p_idx; ...
              poly.p1rightC.p_idx; poly.p1small.p_idx};
+% poly_idxs = {poly.p30.p_idx; poly.p18.p_idx; poly.p13.p_idx; ...
+%              poly.p5A.p_idx; poly.p5B.p_idx; poly.p5C.p_idx; ...
+%              poly.p28.p_idx; poly.p20.p_idx; poly.p15.p_idx; ...
+%              poly.p6.p_idx; poly.p17.p_idx; poly.p27.p_idx; ...
+%              poly.p29A.p_idx; poly.p29B.p_idx; poly.p29C.p_idx; ...
+%              poly.p19A.p_idx; poly.p19B.p_idx; poly.p19C.p_idx; ...
+%              poly.p14.p_idx; poly.p4.p_idx; ... % poly.p31PEBI.p_idx; ...
+%              poly.p25PEBI.p_idx; poly.p12PEBI.p_idx; poly.p16.p_idx; ...
+%              poly.p10.p_idx; poly.p8.p_idx; poly.p3.p_idx; ...
+%              poly.p24PEBI.p_idx; poly.p9PEBI.p_idx; ...
+%              poly.p21PEBI.p_idx; poly.p26PEBI.p_idx; poly.p22PEBI.p_idx; ...
+%              poly.p23PEBI.p_idx; ...
+%              poly.p11left.p_idx; poly.p11right.p_idx; poly.p11mid.p_idx; ...
+%              poly.p7left.p_idx; poly.p7mid.p_idx; poly.p7right.p_idx; ...
+%              poly.p2left.p_idx; poly.p2mid.p_idx; poly.p2right.p_idx; ...
+%              poly.p7small.p_idx; poly.p1mid.p_idx; ...
+%              poly.p1rightA.p_idx; poly.p1rightB.p_idx; ...
+%              poly.p1rightC.p_idx; poly.p1small.p_idx};
 
 %% Glue together subgrids
 poly.glued = poly.p32; % top grid is basis for gluing
@@ -422,16 +440,62 @@ poly.glued.G = computeGeometry(poly.glued.G);
 ii = poly.glued.G.i;
 jj = poly.glued.G.j;
 
+%% Read deck -> assign fluids and rock
+deck = readEclipseDeck('deck/CSP11A.DATA');
+deck = convertDeckUnits(deck);
+fluid = initDeckADIFluid(deck);
+
+% Change from oil-gas system to water-gas system
+[fluid.krO] = fluid.krOG;
+fluid = rmfield(fluid, 'krOG');
+[fluid.krPts.o] = fluid.krPts.og;
+fluid.krPts = rmfield(fluid.krPts, 'og');
+[fluid.krW] = fluid.krO;
+fluid = rmfield(fluid, 'krO');
+[fluid.krPts.w] = fluid.krPts.o;
+fluid.krPts = rmfield(fluid.krPts, 'o');
+[fluid.pcWG] = fluid.pcOG;
+fluid = rmfield(fluid, 'pcOG');
+
+b = 1; % unit formation volume factor
+fluid.bW = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
+fluid.bG = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
+fluid.muW = @(p, varargin) 3e-5*Pascal*second + 0.*p;
+fluid.muG = @(p, varargin) 8e-4*Pascal*second + 0.*p;
+%fluid = assignRelPerm(fluid);
+
+facies_all = deck.REGIONS.SATNUM;
+
+perm = zeros(Gg.cells.num, 1);
+poro = zeros(Gg.cells.num, 1);
+for i=1:numel(unique(facies_all))
+    perm(Gg.facies == i) = unique(deck.GRID.PERMX(facies_all == i));
+    poro(Gg.facies == i) = unique(deck.GRID.PORO(facies_all == i));
+end
+%poro(Gg.facies == 7) = 0.5; % just set to a positive value to avoid errors
+
+rock = makeRock(Gg, perm, poro);
+rock.regions.saturation = Gg.facies;
+
+%% Remove impermeable layers from glued grid
+poly.sim = poly.glued;
+[G_sim, gc, gf] = extractSubgrid(poly.glued.G, poly.glued.G.facies ~= 7);
+% gc == G_sim.cells.indexMap
+poly_sim.G = G_sim;
+
 %% Find neighboring structured cells to fault
-Gg = poly.glued.G;
+Gg = poly.sim.G;
+%Gg = poly.glued.G;
 nan_cells = find(isnan(Gg.i)); % all nan logical indices are fine-scale triangle cells
 gN = Gg.faces.neighbors;
 gN1 = gN(:,1);
 gN2 = gN(:,2);
 % Remove bottom right triangle cells from buffer cells
-bottom_right_triangle = (poly.glued.cell_range.p1small(1):poly.glued.cell_range.p1small(2))';
-gN_rem = ismember(gN1, bottom_right_triangle) | ismember(gN2, bottom_right_triangle);
-gN(gN_rem,:) = [];
+if isfield(poly.glued.cell_range, 'p1small')
+    bottom_right_triangle = (poly.glued.cell_range.p1small(1):poly.glued.cell_range.p1small(2))';    
+    gN_rem = ismember(gN1, bottom_right_triangle) | ismember(gN2, bottom_right_triangle);
+    gN(gN_rem,:) = [];
+end
 
 nan_N = ismember(gN, nan_cells);
 fault_N = gN(sum(nan_N, 2) == 1, :); % if only one neighbor of a face is nan, this face is at boundary of fault
@@ -467,12 +531,12 @@ isFine.faultCells(nan_cells) = true;
 
 isFine.faultFaces = false(Gg.faces.num, 1);
 for i=find(isFine.faultCells)'
-    fault_face = Gg.cells.faces(Gg.cells.facePos(i):Gg.cells.facePos(i+1)-1,:);
+    fault_face = Gg.cells.faces(Gg.cells.facePos(i):Gg.cells.facePos(i+1)-1, 1);
     isFine.faultFaces(fault_face) = true;
 end
 isFine.bufferFaces = false(Gg.faces.num, 1);
 for i=find(isFine.bufferCells)'
-    buffer_face = Gg.cells.faces(Gg.cells.facePos(i):Gg.cells.facePos(i+1)-1,:);
+    buffer_face = Gg.cells.faces(Gg.cells.facePos(i):Gg.cells.facePos(i+1)-1, 1);
     isFine.bufferFaces(buffer_face) = true;
 end
 
@@ -480,10 +544,10 @@ allSealingCells = {}; % cell-indices for sealing cells
 allSealingBFaces = {}; % boundary faces of sealing cells
 allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis)
 
-lowperm_facie = 1;
+lowperm_facie = [1,7];
 
-lowperm_cells = find(Gg.facies == lowperm_facie);
-if lowperm_facie == 1 % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
+lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
+if ismember(lowperm_facie, 1) % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
     p7small_cells = poly.glued.cell_range.p7small(1):poly.glued.cell_range.p7small(2);
     lowperm_p7small = ismember(lowperm_cells, p7small_cells);
     lowperm_cells(lowperm_p7small) = [];
@@ -520,43 +584,6 @@ isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
 
 isFine.sealingBottom = allSealingBottom;
 %isFine.sealingCells = any(cell2mat(isFine.sealingCells), 2);
-
-%% Read deck -> assign fluids and rock
-deck = readEclipseDeck('deck/CSP11A.DATA');
-deck = convertDeckUnits(deck);
-fluid = initDeckADIFluid(deck);
-
-% Change from oil-gas system to water-gas system
-[fluid.krO] = fluid.krOG;
-fluid = rmfield(fluid, 'krOG');
-[fluid.krPts.o] = fluid.krPts.og;
-fluid.krPts = rmfield(fluid.krPts, 'og');
-[fluid.krW] = fluid.krO;
-fluid = rmfield(fluid, 'krO');
-[fluid.krPts.w] = fluid.krPts.o;
-fluid.krPts = rmfield(fluid.krPts, 'o');
-[fluid.pcWG] = fluid.pcOG;
-fluid = rmfield(fluid, 'pcOG');
-
-b = 1; % unit formation volume factor
-fluid.bW = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
-fluid.bG = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
-fluid.muW = @(p, varargin) 3e-5*Pascal*second + 0.*p;
-fluid.muG = @(p, varargin) 8e-4*Pascal*second + 0.*p;
-%fluid = assignRelPerm(fluid);
-
-facies_all = deck.REGIONS.SATNUM;
-
-perm = zeros(Gg.cells.num, 1);
-poro = zeros(Gg.cells.num, 1);
-for i=1:numel(unique(facies_all))
-    perm(Gg.facies == i) = unique(deck.GRID.PERMX(facies_all == i));
-    poro(Gg.facies == i) = unique(deck.GRID.PORO(facies_all == i));
-end
-poro(Gg.facies == 7) = 0.5; % just set to a positive value to avoid errors
-
-rock = makeRock(Gg, perm, poro);
-rock.regions.saturation = Gg.facies;
 
 %% Operational schedule
 bf = boundaryFaces(Gg);
@@ -668,8 +695,10 @@ z = max(Gg.faces.centroids(:,2)) - Gg.cells.centroids(:,2);
 state0 = initResSol(Gg, 1.013e5*Pascal + fluid.rhoWS*norm(gravity)*z, [1,0]); % atmospheric pressure
 
 %% Convert to hybrid model
-model = TwoPhaseFluidFlowerModel(Gg, rock, fluid, 1, 1, 'useCNVConvergence', true);
-%model = GenericBlackOilModel(G, rock, fluid);
+%model = TwoPhaseFluidFlowerModel(Gg, rock, fluid, 1, 1, 'useCNVConvergence', true);
+model = GenericBlackOilModel(Gg, rock, fluid);
+model.oil = false;
+model = validateModel(model);
 %model.water = false;
 pe_rest = 5*10^4*Pascal;
 remFineFaces = find(any(isFine.wellFaces,2) | isFine.bcFaces);
@@ -692,7 +721,7 @@ ph = model_hybrid.G.partition;
 %plotGrid(Gg, find(disc(ph) == 1798), 'edgecolor', 'yellow')
 plotCellData(Gg, disc(ph),'edgealpha', 0)
 plotOutlinedGrid(Gg, W, bc, isFine.sealingBFaces | any(isFine.wellFaces,2) | isFine.faultFaces | isFine.bufferFaces | isFine.bcFaces);
-cmap = colorcube(50000);
+cmap = colorcube(1000);
 %cmap= 'jet';
 colormap(cmap)
 xlim([0,2.8])
@@ -705,7 +734,8 @@ nls = NonLinearSolver('maxIterations', 70);
 nls.useRelaxation = true;
 
 %% Simulate!
-[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+%[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+[ws, states] = simulateScheduleAD(state0, model, schedule);
 
 %% FUNTCION DEFINTIONS
 function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, poly_obj, poly_num, poly_num_upper, ...
