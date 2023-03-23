@@ -164,9 +164,11 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
      
     [gdz_g, gdz_w] = deal(gdz);
     % Compute upscaled height difference for internal ve columns, at reference pressure heights for CO2 and water:
-    gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
+    %gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
+    gdz_g(vIc) = g*(G.cells.topDepth(n1) - G.cells.topDepth(n2));
     % if water pressure computed at bottom of VE cells
-    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
+    %gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
+    gdz_w(vIc) = g*(G.cells.bottomDepth(n1) - G.cells.bottomDepth(n2));
     % if water pressure computed at top of VE cells, uncomment:
     %gdz_w(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
     

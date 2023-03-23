@@ -415,14 +415,10 @@ poly_idxs = {poly.p30.p_idx; poly.p18.p_idx; poly.p13.p_idx; ...
 poly.glued = poly.p32; % top grid is basis for gluing
 poly.glued.G.facies = repmat(poly.glued.facies, poly.glued.G.cells.num, 1);
 
-% NB: Gluing doesn't work until faults are set up!
 for i=1:numel(poly_idxs)    
     px = poly_idxs{i};
     disp(px)
-    G_sub = poly.(px).G;   
-    if i == numel(poly_idxs)
-        stop = 0;
-    end
+    G_sub = poly.(px).G; 
     G_glued = glue2DGrid(poly.glued.G, G_sub, 'poly_idx', px);    
 
     new_cells = G_sub.cells.indexMap + poly.glued.G.cells.num;
@@ -437,8 +433,80 @@ for i=1:numel(poly_idxs)
 end
 
 poly.glued.G = computeGeometry(poly.glued.G);
-ii = poly.glued.G.i;
-jj = poly.glued.G.j;
+
+Gg = poly.glued.G;
+
+%% Remove impermeable layers from glued grid
+Gg = poly.glued.G;
+poly.sim = poly.glued;
+[G_sim, gc, gf] = extractSubgrid(poly.glued.G, poly.glued.G.facies ~= 7);
+% gc == G_sim.cells.indexMap
+G_sim.i = Gg.i(gc);
+G_sim.j = Gg.j(gc);
+G_sim.facies = Gg.facies(gc);
+poly.sim.G = G_sim;
+
+for i=1:numel(poly_idxs)    
+    px = poly_idxs{i};
+    G_sub = poly.(px).G; 
+    pg = poly.glued;
+    if all(pg.G.facies(pg.cell_range.(px)) == 7) % not included in new grid
+        continue;
+    else
+        poly.sim.cell_range.(px) = find(ismember(gc, pg.cell_range.(px)));
+    end
+end
+
+%% Find neighboring structured cells to fault
+Gg = poly.sim.G;
+%Gg = poly.glued.G;
+nan_cells = find(isnan(Gg.i)); % all nan logical indices are fine-scale triangle cells
+gN = Gg.faces.neighbors;
+gN1 = gN(:,1);
+gN2 = gN(:,2);
+% Remove bottom right triangle cells from buffer cells
+% if isfield(poly.glued.cell_range, 'p1small')
+%     bottom_right_triangle = (poly.glued.cell_range.p1small(1):poly.glued.cell_range.p1small(2))';    
+%     gN_rem = ismember(gN1, bottom_right_triangle) | ismember(gN2, bottom_right_triangle);
+%     gN(gN_rem,:) = [];
+% end
+
+nan_N = ismember(gN, nan_cells);
+fault_N = gN(sum(nan_N, 2) == 1, :); % if only one neighbor of a face is nan, this face is at boundary of fault
+fault_idx = nan_N(sum(nan_N, 2) == 1, :); % index of nan cell for each neighbor pair
+
+% select cartesian neighbor, not triangle cell
+fault_buffer = zeros(size(fault_N,1),1);
+for i=1:size(fault_N,1)
+    fault_buffer(i) = fault_N(i, ~fault_idx(i,:)); % ~nn will select no-nan neighbor, i.e., the cartesian cell
+end
+fault_buffer = fault_buffer(fault_buffer ~= 0);
+
+% Add impermeable fault (by extracting cells adjacent to "internal"
+% boundary)
+bcells = Gg.faces.neighbors(boundaryFaces(Gg),:);
+bcells_all = bcells(:);
+bcells_all = bcells_all(bcells_all ~= 0);
+imperm_fault = bcells_all(Gg.cells.centroids(bcells_all,1) > 0.5 & ...
+                            Gg.cells.centroids(bcells_all,1) < 1.5 & ...
+                            Gg.cells.centroids(bcells_all,2) > 0.5 & ...
+                            Gg.cells.centroids(bcells_all,2) < 1.15);
+
+fault_buffer = [fault_buffer; imperm_fault];
+
+%% Some plotting
+if true
+    figure(2)
+    %colormap('jet')
+    plotGrid(Gg)    
+    colorbar('southoutside')
+    %plotCellData(Gg, double(Gg.i == 130))
+    ss = zeros(Gg.cells.num,1);
+    ss(fault_buffer) = 1;
+    plotCellData(Gg, ss)
+    hold on
+    plotFaces(Gg, boundaryFaces(Gg), 'EdgeColor', 'red', 'linewidth', 2)
+end
 
 %% Read deck -> assign fluids and rock
 deck = readEclipseDeck('deck/CSP11A.DATA');
@@ -477,55 +545,10 @@ end
 rock = makeRock(Gg, perm, poro);
 rock.regions.saturation = Gg.facies;
 
-%% Remove impermeable layers from glued grid
-poly.sim = poly.glued;
-[G_sim, gc, gf] = extractSubgrid(poly.glued.G, poly.glued.G.facies ~= 7);
-% gc == G_sim.cells.indexMap
-poly_sim.G = G_sim;
-
-%% Find neighboring structured cells to fault
-Gg = poly.sim.G;
-%Gg = poly.glued.G;
-nan_cells = find(isnan(Gg.i)); % all nan logical indices are fine-scale triangle cells
-gN = Gg.faces.neighbors;
-gN1 = gN(:,1);
-gN2 = gN(:,2);
-% Remove bottom right triangle cells from buffer cells
-if isfield(poly.glued.cell_range, 'p1small')
-    bottom_right_triangle = (poly.glued.cell_range.p1small(1):poly.glued.cell_range.p1small(2))';    
-    gN_rem = ismember(gN1, bottom_right_triangle) | ismember(gN2, bottom_right_triangle);
-    gN(gN_rem,:) = [];
-end
-
-nan_N = ismember(gN, nan_cells);
-fault_N = gN(sum(nan_N, 2) == 1, :); % if only one neighbor of a face is nan, this face is at boundary of fault
-fault_idx = nan_N(sum(nan_N, 2) == 1, :); % index of nan cell for each neighbor pair
-
-% select cartesian neighbor, not triangle cell
-structured_N = zeros(size(fault_N,1),1);
-for i=1:size(fault_N,1)
-    structured_N(i) = fault_N(i, ~fault_idx(i,:)); % ~nn will select no-nan neighbor, i.e., the cartesian cell
-end
-structured_N = structured_N(structured_N ~= 0);
-
-%% Some plotting
-if true
-    figure()
-    %colormap('jet')
-    plotGrid(Gg)    
-    colorbar('southoutside')
-    %plotCellData(Gg, double(Gg.i == 130))
-    ss = zeros(Gg.cells.num,1);
-    ss(structured_N) = 1;
-    plotCellData(Gg, ss)
-    hold on
-    plotFaces(Gg, boundaryFaces(Gg), 'EdgeColor', 'red', 'linewidth', 2)
-end
-
 %% Setup model, schedule, state ...
 isFine = struct;
 isFine.bufferCells = false(Gg.cells.num, 1);
-isFine.bufferCells(structured_N) = true;
+isFine.bufferCells(fault_buffer) = true;
 isFine.faultCells = false(Gg.cells.num, 1);
 isFine.faultCells(nan_cells) = true;
 
@@ -548,15 +571,16 @@ lowperm_facie = [1,7];
 
 lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
 if ismember(lowperm_facie, 1) % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
-    p7small_cells = poly.glued.cell_range.p7small(1):poly.glued.cell_range.p7small(2);
+    p7small_cells = poly.sim.cell_range.p7small(1):poly.sim.cell_range.p7small(2); % poly.glued -> poly.sim
     lowperm_p7small = ismember(lowperm_cells, p7small_cells);
     lowperm_cells(lowperm_p7small) = [];
 end
 %facie_polys = struct; % append polys part of this facies
 lowperm_cells_split = struct; % lowperm cells in separate arrays for each polygon
-for i=1:numel(poly_idxs)
-    pidx = string(poly_idxs{i});
-    pcells = (poly.glued.cell_range.(pidx)(1):poly.glued.cell_range.(pidx)(2))';
+poly_idxs_new = fieldnames(poly.sim.cell_range);
+for i=1:numel(poly_idxs_new)
+    pidx = string(poly_idxs_new{i});
+    pcells = (poly.sim.cell_range.(pidx)(1):poly.sim.cell_range.(pidx)(2))';
     if all(ismember(pcells, lowperm_cells))
         %facie_polys.(pidx) = poly.(pidx);
         lowperm_cells_split.(pidx) = pcells;
@@ -592,6 +616,8 @@ top_faces = bf(abs(bfz - max(bfz)) < 1e-10);
 %bc = pside([], G, 'Top', 1.1*10^5*Pascal, 'sat', [1,0]);
 bc = addBC([], top_faces, 'pressure', 1.1*10^5*Pascal, 'sat', [1,0]);
 
+ii = Gg.i;
+jj = Gg.j;
 % ds = deck.SCHEDULE;
 % dt = ds.step.val;
 % t = cumsum(dt);
@@ -721,7 +747,7 @@ ph = model_hybrid.G.partition;
 %plotGrid(Gg, find(disc(ph) == 1798), 'edgecolor', 'yellow')
 plotCellData(Gg, disc(ph),'edgealpha', 0)
 plotOutlinedGrid(Gg, W, bc, isFine.sealingBFaces | any(isFine.wellFaces,2) | isFine.faultFaces | isFine.bufferFaces | isFine.bcFaces);
-cmap = colorcube(1000);
+cmap = colorcube(30000);
 %cmap= 'jet';
 colormap(cmap)
 xlim([0,2.8])
@@ -734,8 +760,37 @@ nls = NonLinearSolver('maxIterations', 70);
 nls.useRelaxation = true;
 
 %% Simulate!
-%[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
-[ws, states] = simulateScheduleAD(state0, model, schedule);
+[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+%[ws, states] = simulateScheduleAD(state0, model, schedule);
+
+%% Plot CO2 saturation for each model
+%fafa = find(sealingFaces | sealingCells_faces);
+
+c1 = [255, 255, 255]/255;
+c2 = [48, 37, 255]/255;
+c3 = [0, 255, 0]/255;
+cc = interp1([0; 1e-5; 1], [c1; c2; c3], (0:0.01:1)');
+% c1 = [48, 37, 255]/255;
+% c2 = [0, 255, 0]/255;
+% cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
+
+G = model_hybrid.G;
+t = cumsum(schedule.step.val)/day();
+swr = fluid.krPts.w(1);
+
+for i = 1:10:numel(states_hybrid)
+    f1 = UtilFunctions.fullsizeFig(1); clf
+    %f1 = figure(1); clf
+    plotCellData(G, states_hybrid{i}.s(:,2), 'edgec', 'none');
+    plotFaces(G, (1:G.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
+    hold on
+    %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
+    colormap(cc); caxis([0, 1-swr]); colorbar('location','southoutside');
+    axis tight off
+    title({'Fine-scale saturation', sprintf('year: %.1f',t(i))})   
+    %setDaspect(run3D, standard);
+    %saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
+end
 
 %% FUNTCION DEFINTIONS
 function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, poly_obj, poly_num, poly_num_upper, ...
