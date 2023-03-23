@@ -486,6 +486,8 @@ classdef Faults < PolygonGrid
 
                 GBF_int = computeGeometry(GBF_int);
                 GBF_int.cells.indexMap = (1:GBF_int.cells.num)';
+                % Set face-orientation to undefined (NaN)
+                GBF_int.cells.faces(:,2) = nan(size(GBF_int.cells.faces(:,1)));
                 poly.(p_idx).G = GBF_int;
                 % No logical indices for unstructured grid -> set to NaN
                 poly.(p_idx).G.i = nan(GBF_int.cells.num, 1);

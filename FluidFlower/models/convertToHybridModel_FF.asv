@@ -148,7 +148,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     rock_c = model_coarse.rock;
      
     % Copy operators over and create a new VE model
-    if isa(model, 'TwoPhaseFluidFlowerModel') || isa(model, 'GenericBlackOilModel')
+    if isa(model, 'TwoPhaseFluidFlowerModel')
         model_ve = WaterGasHybridModel_FF(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
                                             'sealingCells', opt.sealingCells);
     elseif isa(model, 'OverallCompositionCompositionalModel')
@@ -163,8 +163,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if any(badc)
         warning(['Found ', num2str(nnz(badc)), ' cells with zero height. Fixing...']);
         model_ve.G.cells.height(badc) = mv;
-        %model_ve.G.cells.bottomDepth(badc) = model_ve.G.cells.bottomDepth(badc) + mv;
-        model_ve.G.cells.topDepth(badc) = model_ve.G.cells.topDepth(badc) + mv;
+        model_ve.G.cells.bottomDepth(badc) = model_ve.G.cells.bottomDepth(badc) + mv;
     end
     %delta = model_ve.operators.connections.faceBottomDepth - model_ve.operators.connections.faceTopDepth;
     delta = model_ve.operators.connections.faceTopDepth - model_ve.operators.connections.faceBottomDepth; % Top and Bottom are swapped since z-coord is height, not depth
@@ -172,8 +171,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if any(badf)
         warning(['Found ', num2str(nnz(badf)), ' faces with zero height. Fixing...']);
         model_ve.operators.connections.faceHeight(badf) = mv;
-        %model_ve.operators.connections.faceBottomDepth(badf) = model_ve.operators.connections.faceBottomDepth(badf) + mv;
-        model_ve.operators.connections.faceTopDepth(badf) = model_ve.operators.connections.faceTopDepth(badf) + mv;
+        model_ve.operators.connections.faceBottomDepth(badf) = model_ve.operators.connections.faceBottomDepth(badf) + mv;
     end
        
     
@@ -222,6 +220,10 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
             
             veB = B == b & T ~= t;
             cB = c(veB); % select correct bottom cells
+%             cb = c_vic(ismember(c_vic, cb));
+%             if ~isempty(cb)
+%                 cB = cat(2, cB, cb);
+%             end
         end
     end    
     

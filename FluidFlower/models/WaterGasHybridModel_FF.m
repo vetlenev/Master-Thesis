@@ -25,7 +25,7 @@ classdef WaterGasHybridModel_FF < TwoPhaseFluidFlowerModel
             model = model.setupOperators(); % recompute operators in case assignment to sealing cells did modify some operators 
             
             model.useCNVConvergence = true;                                  
-            model = addCoarseOperatorsMultiVE(model);
+            model = addCoarseOperatorsHybrid_FF(model);
         end
         
         function [problem, state] = getEquations(model, state0, state, dt, ...

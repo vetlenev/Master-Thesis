@@ -115,10 +115,24 @@ function [topz, bottomz, height, topcells] = getCellHeights(G, opt)
     hf_bottom = hf_z;
     if size(G.cells.faces, 2) > 1 && (any(strcmpi(G.type, 'cartGrid')) || any(strcmpi(G.type, 'processGRDECL')))
         ftype = G.cells.faces(:, 2);
+        % Manually estimate ftype for triangulated cells
+        tri_faces = isnan(ftype);
+        fno_tri = G.cells.faces(tri_faces, 1);       
+        ftype_tri = ones(size(fno_tri));    
+        cNo_tri = cNo(tri_faces);       
+        normals = abs(G.faces.normals(fno_tri, :));
+        nz = normals(:, 2);
+        nx = normals(:, 1);
+        zc = G.cells.centroids(cNo_tri, 2); % same centroid compared for all faces of a cell
+        z = G.faces.centroids(fno_tri, 2);
+        
+        ftype_tri(nz > nx & z < zc) = 3;
+        ftype_tri(nz > nx & z > zc) = 4;
+        ftype(tri_faces) = ftype_tri;      
     else
-        fno = G.cells.faces(:, 1);
+        % Manually estimate ftype for all faces
+        fno = G.cells.faces(:,1);
         ftype = ones(size(fno));
-        %cNo = rldecode(1 : G.cells.num, diff(G.cells.facePos), 2) .';
         normals = abs(G.faces.normals(fno, :));
         nz = normals(:, 2);
         nx = normals(:, 1);
@@ -126,15 +140,15 @@ function [topz, bottomz, height, topcells] = getCellHeights(G, opt)
         z = G.faces.centroids(fno, 2);
         
         ftype(nz > nx & z < zc) = 3;
-        ftype(nz > nx & z > zc) = 4;
+        ftype(nz > nx & z > zc) = 4;        
         warning('Grid is not corner point or cartGrid derived. Unable to guess column structure. Results may be inaccurate!');
     end
     % Avoid picking "wrong" type of face for columns
     maskTop    = ftype == 4; % 3
     maskBottom = ftype == 3; % 4
 
-    hf_top(~maskTop) = inf;
-    hf_bottom(~maskBottom) = -inf; 
+    hf_top(~maskTop) = -inf;
+    hf_bottom(~maskBottom) = inf; 
 
     topIx = accumarray(cNo, hf_top, [G.cells.num, 1],  @maxIndex); % accumulate over all faces belonging to given cell
     bottomIx = accumarray(cNo, hf_bottom, [G.cells.num, 1],  @minIndex); % NB: minIndex, not maxIndex, because z-coord is HEIGHT, not DEPTH
@@ -154,14 +168,20 @@ function [topz, bottomz, height, topcells] = getCellHeights(G, opt)
     bottom = hf_pt(bottomIx + offsets, :);
     topz = top(:, 2);
     bottomz = bottom(:, 2);
+
     if opt.useDepth
         %height = bottomz - topz;
         height = topz - bottomz;
     else
         height = sqrt(sum((top - bottom).^2, 2));
     end
-    %assert(all(height >= 0))
+    
+    triangle_cells = diff(G.cells.facePos) == 3;
+    imperm_cells = G.facies == 7;
+    structured_flow = ~triangle_cells & ~imperm_cells; % all structured (cartesian) cells with nonzero fluid flow
+    assert(all(height(structured_flow) >= 0))
     height(height < 0) = 0;
+    %height = abs(height);
 end
 
 function ix = minIndex(x)
