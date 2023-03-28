@@ -9,28 +9,31 @@ filename = 'draft_spe11_with_facies_markers.geo';
 
 %% Directory and seed
 rootdir = strrep(ROOTDIR, '\', '/');
+% NB: change this to your local path to FluidFlower folder
 data_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/data');
 mkdir(data_dir);
 
 my_seed = 295;
-seed = UtilFunctions.setSeed(data_dir, my_seed);
+seed = UtilFunctionsFF.setSeed(data_dir, my_seed);
 rng(seed)
+
+%% SET PARAMETERS
+node_density = 0.5; % The density of nodes inside faults. Should be < 1 to not get to dense triangles
+nx_glob = 200; % standard: nx_glob=200, nz_glob=100, works for this setting...
+nz_glob = 100;
 
 %% Other definitions
 poly = struct; % to hold each polynomial
-split_pts = struct; % to store split points of each poly
-pts_overlap = struct;
-nodes_overlap = struct;
+pts_overlap = struct; % to hold overlapping polygonal points (provided from data file)
+nodes_overlap = struct; % to hold overlapping nodes from generated subgrids
 
 logicalBottom = @(G) G.nodes.coords(:,2) == min(G.nodes.coords(:,2));
 logicalTop = @(G) G.nodes.coords(:,2) == max(G.nodes.coords(:,2));
-facesBottom = @(G) G.faces.centroids(:,2) == min(G.faces.centroids(:,2));
-facesTop = @(G) G.faces.centroids(:,2) == max(G.faces.centroids(:,2));
 
 gravity reset on
 
 %% Global grid
-[G_glob, x_glob, z_glob] = PolygonGrid.globalCartGrid(pts, 200, 100); % nx=200, nz=150
+[G_glob, x_glob, z_glob] = PolygonGrid.globalCartGrid(pts, nx_glob, nz_glob);
 
 Lx = max(G_glob.faces.centroids(:,1));
 Lz = max(G_glob.faces.centroids(:,2));
@@ -39,7 +42,7 @@ Nx = N(1); Nz = N(2);
 
 %% Organize polygons
 polys = PolygonGrid.polyPoints(pts, loops, facies);
-% Upper three surfaces: 28, 30, 32
+% Upper, fully horizontally extending surface: 32
 poly.top = PolygonGrid(polys, 32);
 
 ptop_orig = poly.top.p_orig;
@@ -47,9 +50,9 @@ ptop = poly.top.p;
 poly.top.p_idx = 'p32';
 
 %% Find top and bottom surfaces
-[poly.top, split_pts.top] = reorderPts(poly.top, 32);
+[poly.top, split_pts] = reorderPts(poly.top, 32);
 
-[top_side, bottom_side] = topAndBottomSurfaces(poly.top, split_pts.top, 32, pts_overlap);
+[top_side, bottom_side] = topAndBottomSurfaces(poly.top, split_pts, 32, pts_overlap);
 poly.top.top_side = top_side;
 poly.top.bottom_side = bottom_side;
 
@@ -61,18 +64,16 @@ poly.top = cartesianSubgrid(poly.top, Lx, Lz, Nx, Nz, []); % []: no conforming o
 poly.top.bottom_mask = logicalBottom(poly.top.G); % only select nodes at bottom of grid
 poly.top.top_mask = logicalTop(poly.top.G);
 poly.top.G = computeGeometry(poly.top.G);
-poly.top.faces_bottom = facesBottom(poly.top.G);
-poly.top.faces_top = facesTop(poly.top.G);
 % Bottom:
-[poly.top, closest_bottom] = correct_dx_poly_new(poly.top, G_glob, poly.top.bottom_mask, 'bottom');
+[poly.top, closest_bottom] = correct_dx_poly(poly.top, G_glob, poly.top.bottom_mask, 'bottom');
 % Top:
-[poly.top, closest_top] = correct_dx_poly_new(poly.top, G_glob, poly.top.top_mask, 'top');
+[poly.top, closest_top] = correct_dx_poly(poly.top, G_glob, poly.top.top_mask, 'top');
 
 %% Interpolation
 % Interpolate z-values at surface of polygon
-poly.top = interpolateZ_remaining_new(poly.top, closest_bottom, ...
+poly.top = interpolateZ_remaining(poly.top, closest_bottom, ...
                                 poly.top.bottom_mask, 'bottom', 'linear'); % top face is the "remaining" parts of the polygon we want bottom surface
-poly.top = interpolateZ_remaining_new(poly.top, closest_top, ...
+poly.top = interpolateZ_remaining(poly.top, closest_top, ...
                                 poly.top.top_mask, 'top', 'linear');
 
 % Interpolate x+z values in interior
@@ -163,24 +164,12 @@ poly = cell2struct(struct2cell(poly), {'p32'});
                                                         nodes_overlap, pts_overlap, G_glob);
 
 %% Bottom polygon glued to structured polygon and fault
-node_density = 0.5; % < 1 to not get to dense triangles
 [poly, nodes_overlap, pts_overlap, ...
     top_nodes, bottom_nodes, west_nodes] = gluePolygon1(polys, poly, 1, [3,2], ...
                                                    nodes_overlap, pts_overlap, G_glob, node_density);
 
-% poly = Faults.QuasiRandomPointDistribution(poly, "p1small", G_glob, node_density, false);
-% 
-% G_tri = poly.p1small.G;
-% 
-% poly.p1small.top_mask = ismember(G_tri.nodes.coords, top_nodes, 'rows');
-% poly.p1small.bottom_mask = ismember(G_tri.nodes.coords, bottom_nodes, 'rows');
-% poly.p1small.west_mask = ismember(G_tri.nodes.coords, west_nodes, 'rows');
-% east_tri = top_nodes(ismember(top_nodes, bottom_nodes, 'rows'), :);
-% poly.p1small.east_mask = ismember(G_tri.nodes.coords, east_tri, 'rows');
-
-
 %% Triangulation of Top Left Fault
-poly31_neighbors = cell(11, 3);
+poly31_neighbors = cell(11, 2);
 % List in counterclockwise order, starting from top left
 poly31_neighbors{1,1} = poly.p32; poly31_neighbors{1,2} = 'top';
 poly31_neighbors{2,1} = poly.p28; poly31_neighbors{2,2} = 'west';
@@ -194,10 +183,14 @@ poly31_neighbors{9,1} = poly.p14; poly31_neighbors{9,2} = 'east';
 poly31_neighbors{10,1} = poly.p19A; poly31_neighbors{10,2} = 'east';
 poly31_neighbors{11,1} = poly.p29A; poly31_neighbors{11,2} = 'east';
 
-[poly, nodes_overlap, pts_overlap] = triangulateFault(polys, poly, 31, poly31_neighbors, ...
-                                                        nodes_overlap, pts_overlap, G_glob);
+% [poly, nodes_overlap, pts_overlap] = triangulateFault(polys, poly, 31, poly31_neighbors, ...
+%                                                         nodes_overlap, pts_overlap, G_glob);
+% 
+% [poly, p31new] = Faults.QuasiRandomPointDistribution(poly, 31, G_glob, node_density, false);
 
-[poly, p31new] = Faults.QuasiRandomPointDistribution(poly, 31, G_glob, node_density, false);
+%% Quadrilateration
+poly = Faults.makeQuadrilaterals(polys, poly, 31, poly31_neighbors, ...
+                                    2, Lx, Lz, Nx, Nz);
 
 %% Triangulation of Top Right Fault
 poly25_neighbors = cell(12, 2);
@@ -215,20 +208,31 @@ poly25_neighbors{10,1} = poly.p13; poly25_neighbors{10,2} = 'east';
 poly25_neighbors{11,1} = poly.p18; poly25_neighbors{11,2} = 'east';
 poly25_neighbors{12,1} = poly.p30; poly25_neighbors{12,2} = 'east';
 
-[poly, nodes_overlap, pts_overlap] = triangulateFault(polys, poly, 25, poly25_neighbors, ...
-                                                        nodes_overlap, pts_overlap, G_glob, 2);
+% [poly, nodes_overlap, pts_overlap] = triangulateFault(polys, poly, 25, poly25_neighbors, ...
+%                                                         nodes_overlap, pts_overlap, G_glob, 2);
+% 
+% [poly, p25new] = Faults.QuasiRandomPointDistribution(poly, 25, G_glob, node_density, false);
 
-[poly, p25new] = Faults.QuasiRandomPointDistribution(poly, 25, G_glob, node_density, false);
+%% Quadrilateration
+% poly25_neighbors = {poly.p32; poly.p29B; poly.p29C; poly.p19B; poly.p19C; ...
+%                     poly.p14; poly.p4; poly.p11right; poly.p5A; ...
+%                     poly.p13; poly.p18; poly.p30};
+
+poly = Faults.makeQuadrilaterals(polys, poly, 25, poly25_neighbors, ...
+                                    2, Lx, Lz, Nx, Nz);
 
 %% Triangulation of Right Fault
 poly12_neighbors = cell(2, 2);
 poly12_neighbors{1,1} = poly.p5B; poly12_neighbors{1,2} = 'top';
 poly12_neighbors{2,1} = poly.p5C; poly12_neighbors{2,2} = 'bottom';
 
-[poly, nodes_overlap, pts_overlap] = triangulateFault(polys, poly, 12, poly12_neighbors, ...
-                                                        nodes_overlap, pts_overlap, G_glob, 2);
+% [poly, nodes_overlap, pts_overlap] = triangulateFault(polys, poly, 12, poly12_neighbors, ...
+%                                                         nodes_overlap, pts_overlap, G_glob, 2);
+% 
+% [poly, p12new] = Faults.QuasiRandomPointDistribution(poly, 12, G_glob, node_density, false);
 
-[poly, p12new] = Faults.QuasiRandomPointDistribution(poly, 12, G_glob, node_density, false);
+poly = Faults.makeQuadrilaterals(polys, poly, 12, poly12_neighbors, ...
+                                    2, Lx, Lz, Nx, Nz);
 
 %% Triangulation of Bottom Fault
 polyBF_nums = [24, 9, 21, 26, 22, 23]; % polyBF = poly bottom fault
@@ -331,20 +335,27 @@ colors = [[0 0.4470 0.7410];
           [0.3010 0.7450 0.9330];
           [0.6350 0.0780 0.1840]];
 
-bf_polys = [24,9,21,26,22,23]; % polygons constituting bottom fault
+%bf_polys = [24,9,21,26,22,23]; % polygons constituting bottom fault
+bf_polys = [26,22]; % other polygons are cartesian quadrilaterals
 
+% Triangulate irregular twin polygons
+[poly, pBFnew] = Faults.QuasiRandomPointDistribution(poly, bf_polys, G_glob, node_density, false, colors);
+% Quadrilaterate the more regular polygons
+poly = Faults.heterogeneousFault(polys, poly, 1.5, Lx, Lz, Nx, Nz);
+% Triangulate bottom-most part
 [poly, pBFnew] = Faults.QuasiRandomPointDistribution(poly, bf_polys, G_glob, node_density, false, colors);
 
 %% Plots / tests
-figure()
+figure(2)
 xlim([0, 2.8])
 ylim([0, 1.2])
 %colormap('jet')
 
-if isfield(poly, 'p31PEBI') && isfield(poly, 'p25PEBI') && isfield(poly, 'pBFPEBI')
-   plotGrid(poly.p31PEBI.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p31PEBI.facies,:))
+if isfield(poly, 'p31f') && isfield(poly, 'p25f') && isfield(poly, 'pBFPEBI') && false
+   plotGrid(poly.p31fA.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p31fA.facies,:))
    hold on
-   plotGrid(poly.p25PEBI.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25PEBI.facies,:))
+   %plotGrid(poly.p25PEBI.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25PEBI.facies,:))
+   plotGrid(poly.p25fA.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25fA.facies,:))
    hold on
    plotGrid(poly.p12PEBI.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p12PEBI.facies,:))
    for i=[24,9,21,26,22,23]
@@ -373,6 +384,8 @@ for i = 1:numel(poly_idxs) % plot subgrids first
     end
 end
 
+%plotGrid(poly.p25pA.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25pA.facies,:))
+
 %% Glue-preparation
 % Remove all PEBI-polygons to check if triangulation causes problems
 poly_idxs = {poly.p30.p_idx; poly.p18.p_idx; poly.p13.p_idx; ...
@@ -392,24 +405,6 @@ poly_idxs = {poly.p30.p_idx; poly.p18.p_idx; poly.p13.p_idx; ...
              poly.p23PEBI.p_idx; poly.p1left.p_idx; poly.p1mid.p_idx; ...
              poly.p1rightA.p_idx; poly.p1rightB.p_idx; ...
              poly.p1rightC.p_idx; poly.p1small.p_idx};
-% poly_idxs = {poly.p30.p_idx; poly.p18.p_idx; poly.p13.p_idx; ...
-%              poly.p5A.p_idx; poly.p5B.p_idx; poly.p5C.p_idx; ...
-%              poly.p28.p_idx; poly.p20.p_idx; poly.p15.p_idx; ...
-%              poly.p6.p_idx; poly.p17.p_idx; poly.p27.p_idx; ...
-%              poly.p29A.p_idx; poly.p29B.p_idx; poly.p29C.p_idx; ...
-%              poly.p19A.p_idx; poly.p19B.p_idx; poly.p19C.p_idx; ...
-%              poly.p14.p_idx; poly.p4.p_idx; ... % poly.p31PEBI.p_idx; ...
-%              poly.p25PEBI.p_idx; poly.p12PEBI.p_idx; poly.p16.p_idx; ...
-%              poly.p10.p_idx; poly.p8.p_idx; poly.p3.p_idx; ...
-%              poly.p24PEBI.p_idx; poly.p9PEBI.p_idx; ...
-%              poly.p21PEBI.p_idx; poly.p26PEBI.p_idx; poly.p22PEBI.p_idx; ...
-%              poly.p23PEBI.p_idx; ...
-%              poly.p11left.p_idx; poly.p11right.p_idx; poly.p11mid.p_idx; ...
-%              poly.p7left.p_idx; poly.p7mid.p_idx; poly.p7right.p_idx; ...
-%              poly.p2left.p_idx; poly.p2mid.p_idx; poly.p2right.p_idx; ...
-%              poly.p7small.p_idx; poly.p1mid.p_idx; ...
-%              poly.p1rightA.p_idx; poly.p1rightB.p_idx; ...
-%              poly.p1rightC.p_idx; poly.p1small.p_idx};
 
 %% Glue together subgrids
 poly.glued = poly.p32; % top grid is basis for gluing
@@ -419,7 +414,7 @@ for i=1:numel(poly_idxs)
     px = poly_idxs{i};
     disp(px)
     G_sub = poly.(px).G; 
-    G_glued = glue2DGrid(poly.glued.G, G_sub, 'poly_idx', px);    
+    G_glued = glue2DGrid_FF(poly.glued.G, G_sub, 'poly_idx', px);    
 
     new_cells = G_sub.cells.indexMap + poly.glued.G.cells.num;
     poly.glued.cell_range.(px) = [poly.glued.G.cells.num+1, poly.glued.G.cells.num+max(G_sub.cells.indexMap)];
@@ -433,8 +428,6 @@ for i=1:numel(poly_idxs)
 end
 
 poly.glued.G = computeGeometry(poly.glued.G);
-
-Gg = poly.glued.G;
 
 %% Remove impermeable layers from glued grid
 Gg = poly.glued.G;
@@ -457,19 +450,13 @@ for i=1:numel(poly_idxs)
     end
 end
 
+Gg = poly.sim.G; % THIS IS THE COMPLETE GLUED GRID
+
 %% Find neighboring structured cells to fault
-Gg = poly.sim.G;
-%Gg = poly.glued.G;
 nan_cells = find(isnan(Gg.i)); % all nan logical indices are fine-scale triangle cells
 gN = Gg.faces.neighbors;
 gN1 = gN(:,1);
 gN2 = gN(:,2);
-% Remove bottom right triangle cells from buffer cells
-% if isfield(poly.glued.cell_range, 'p1small')
-%     bottom_right_triangle = (poly.glued.cell_range.p1small(1):poly.glued.cell_range.p1small(2))';    
-%     gN_rem = ismember(gN1, bottom_right_triangle) | ismember(gN2, bottom_right_triangle);
-%     gN(gN_rem,:) = [];
-% end
 
 nan_N = ismember(gN, nan_cells);
 fault_N = gN(sum(nan_N, 2) == 1, :); % if only one neighbor of a face is nan, this face is at boundary of fault
@@ -483,7 +470,7 @@ end
 fault_buffer = fault_buffer(fault_buffer ~= 0);
 
 % Add impermeable fault (by extracting cells adjacent to "internal"
-% boundary)
+% boundary) -> to give correct VE discretization
 bcells = Gg.faces.neighbors(boundaryFaces(Gg),:);
 bcells_all = bcells(:);
 bcells_all = bcells_all(bcells_all ~= 0);
@@ -496,7 +483,7 @@ fault_buffer = [fault_buffer; imperm_fault];
 
 %% Some plotting
 if true
-    figure(2)
+    figure(3)
     %colormap('jet')
     plotGrid(Gg)    
     colorbar('southoutside')
@@ -595,25 +582,21 @@ for i=1:numel(poly_idxs_new)
     end
 end
 
-%iswap = find(diff(lowperm_cells) ~= 1);
-
 allSealingCells = vertcat(allSealingCells{:}); % no sealing cells if only face constraint
 isFine.sealingCells = false(Gg.cells.num, 1);
 isFine.sealingCells(allSealingCells) = true;
 
-allSealingBFaces = removeOverlappingElements(vertcat(allSealingBFaces{:}));
+allSealingBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allSealingBFaces{:}));
 %allSealingBFaces = vertcat(allSealingBFaces{:});
 isFine.sealingBFaces = false(Gg.faces.num, 1);
 isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
 
 isFine.sealingBottom = allSealingBottom;
-%isFine.sealingCells = any(cell2mat(isFine.sealingCells), 2);
 
 %% Operational schedule
 bf = boundaryFaces(Gg);
 bfz = Gg.faces.centroids(bf, 2);
 top_faces = bf(abs(bfz - max(bfz)) < 1e-10);
-%bc = pside([], G, 'Top', 1.1*10^5*Pascal, 'sat', [1,0]);
 bc = addBC([], top_faces, 'pressure', 1.1*10^5*Pascal, 'sat', [1,0]);
 
 ii = Gg.i;
@@ -740,8 +723,8 @@ otherFineFaces = unique([remFineFaces; faultFaces]);
                                                         'pe_rest', pe_rest);
 
 %% Plot discretized grid
-f3 = figure(3);
-clf(3)
+f4 = figure(4);
+clf(4)
 disc = model_hybrid.G.cells.discretization;
 ph = model_hybrid.G.partition;
 %plotGrid(Gg, find(disc(ph) == 1798), 'edgecolor', 'yellow')
@@ -774,14 +757,14 @@ cc = interp1([0; 1e-5; 1], [c1; c2; c3], (0:0.01:1)');
 % c2 = [0, 255, 0]/255;
 % cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 
-G = model.G;
+G = model_hybrid.G;
 t = cumsum(schedule.step.val)/day();
 swr = fluid.krPts.w(1);
 
-for i = 1:10:numel(states_hybrid)
-    f1 = UtilFunctions.fullsizeFig(1); clf
+for i = 1:20:numel(states_hybrid)
+    f5 = UtilFunctionsFF.fullsizeFig(5); clf
     %f1 = figure(1); clf
-    plotCellData(G, states{i}.s(:,2), 'edgec', 'none');
+    plotCellData(G, states_hybrid{i}.s(:,2), 'edgec', 'none');
     plotFaces(G, (1:G.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on
     %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
@@ -871,10 +854,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     
     poly.G.nodes.coords(poly.top_mask, :) = nodes_overlap.(p_idx); % glue to overlapping nodes on top side
     
-    [poly, closest_bottom] = correct_dx_poly_new(poly, G_glob, ...
+    [poly, closest_bottom] = correct_dx_poly(poly, G_glob, ...
                                                 poly.bottom_mask, 'bottom'); % manually define nodes on bottom side
     
-    poly = interpolateZ_remaining_new(poly, closest_bottom, ...
+    poly = interpolateZ_remaining(poly, closest_bottom, ...
                                     poly.bottom_mask, 'bottom', 'linear');
            
     poly = interpolateInternal(poly, poly.top_mask, poly.bottom_mask, []);
@@ -892,11 +875,6 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     % Get logical indices for new polygon   
     poly = logicalIndicesUpperOverlap(poly, poly_upper);  
 
-    % --- Is this needed? ---
-    poly.faces_bottom = poly.G.faces.centroids(:,2) == min(poly.G.faces.centroids(:,2)); 
-    poly.faces_top = poly.G.faces.centroids(:,2) == max(poly.G.faces.centroids(:,2));
-    % ---
-    
     poly_obj.(p_idx) = poly;
 end
 

@@ -17,7 +17,7 @@ classdef PolygonGrid
         bnodes % boundary nodes of polygon
         cell_range % range of cell indices for this polygon in global glued grid
         G % polygon grid      
-        scale_Nx % scaling factor for horizontal dim of polygon
+        scale_Nx % scaling fact
 
         top_side % data points at top curve of polygon
         bottom_side
@@ -43,7 +43,6 @@ classdef PolygonGrid
             obj.p_orig = obj.p;
             obj.p = obj.p(1:end-1,:); % endpoint included twice - remove this
             obj.p_added = [];
-            obj.scale_Nx = 1;
         end
         
         function obj = cartesianSubgrid(obj, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_nodes_overlap, varargin)
@@ -64,7 +63,7 @@ classdef PolygonGrid
             if ~isempty(num_nodes_overlap)
                 Nx = num_nodes_overlap - 1; % NB: number of cells is one less than number of nodes !!
             else
-                Nx = ceil(obj.scale_Nx * fac * Nx_glob);
+                Nx = ceil(fac * Nx_glob);
             end
             dx_glob = Lx_glob/Nx_glob;
             % --- New ---

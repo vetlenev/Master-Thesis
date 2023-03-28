@@ -56,9 +56,9 @@ function [poly_obj, nodes_overlap, pts_overlap, ...
     % Create (dummy) subgrid for full polygon
     poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_overlap);
     % Create bottom nodes for parent polygon (this is queried later)
-    [poly, closest_bottom] = correct_dx_poly_new(poly, G_glob, ...
+    [poly, closest_bottom] = correct_dx_poly(poly, G_glob, ...
                                                 poly.bottom_mask, 'bottom'); % manually define nodes on bottom side
-    poly = interpolateZ_remaining_new(poly, closest_bottom, ...
+    poly = interpolateZ_remaining(poly, closest_bottom, ...
                                     poly.bottom_mask, 'bottom', 'linear');   
 
     %% Handle LEFT part
@@ -117,7 +117,8 @@ function [poly_obj, nodes_overlap, pts_overlap, ...
     poly_mid.bottom_side = poly_left.p_added;
     poly_mid.p_we = [];
     poly_mid.we = [];
-    
+
+    poly_mid.scale_Nx = 2;
     poly_mid = cartesianSubgrid(poly_mid, Lx_glob, Lz_glob, Nx_glob, Nz_glob, [], Nz_left); 
 
     % Fix top nodes by interpolation

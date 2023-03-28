@@ -110,7 +110,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     % --------------------------   
     h_T_global = h_max_global.*(snr > 0) + h_global.*(snr == 0);
-    h_B_global = H;    
+    h_B_global = H + 0*h_global; % last term to convert to AD-varible
                
     % --- Special treatment of cells having BOTH bottom and horizontal VE fluxes ---   
     [h_ve, hmax_ve, hT_ve, hB_ve, ...
@@ -164,11 +164,11 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
      
     [gdz_g, gdz_w] = deal(gdz);
     % Compute upscaled height difference for internal ve columns, at reference pressure heights for CO2 and water:
-    %gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
-    gdz_g(vIc) = g*(G.cells.topDepth(n1) - G.cells.topDepth(n2));
+    gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
+    %gdz_g(vIc) = g*(G.cells.topDepth(n1) - G.cells.topDepth(n2));
     % if water pressure computed at bottom of VE cells
-    %gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
-    gdz_w(vIc) = g*(G.cells.bottomDepth(n1) - G.cells.bottomDepth(n2));
+    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
+    %gdz_w(vIc) = g*(G.cells.bottomDepth(n1) - G.cells.bottomDepth(n2));
     % if water pressure computed at top of VE cells, uncomment:
     %gdz_w(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
     
@@ -339,8 +339,7 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T
             H = G.cells.height(isFine);
             
             cz = (T + B)/2;
-            dz = B - cz;
-            %dz = cz - T;
+            dz = cz - B; % B - cz            
             dpFine = g.*rhoW(isFine).*dz;
             pW(isFine) = pW(isFine) - dpFine;
         end    

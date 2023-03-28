@@ -73,7 +73,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     op = model.operators;
     G = model.G;    
     f = model.fluid;
-    g = norm(model.gravity);
+    g = -norm(model.gravity);
     pv = poreVolume(G, model.rock);
     
     swr = model.fluid.krPts.w(1);
@@ -236,7 +236,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     h = a_M.*H;  
     h_max = (a_R + a_M).*H;
     
-    g = norm(model.gravity);
+    g = -norm(model.gravity);
     rhow = rhoW(c);
     rhog = rhoG(c);
     
@@ -282,7 +282,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     h = a_M.*H;  
     h_max = (a_R + a_M).*H;
     
-    g = norm(model.gravity);
+    g = -norm(model.gravity);
     rhow = rhoW(c);
     rhog = rhoG(c);
     C = (T + B)/2;
@@ -319,7 +319,7 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T
     
     rhoWf = rhoWf(vtc);
     rhoGf = rhoGf(vtc);
-    g = norm(model.gravity);
+    g = -norm(model.gravity);
     t1 = op.connections.faceTopDepth(vtc, 1);
     t2 = op.connections.faceTopDepth(vtc, 2);
 
@@ -339,8 +339,7 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T
             H = G.cells.height(isFine);
             
             cz = (T + B)/2;
-            dz = B - cz;
-            %dz = cz - T;
+            dz = cz - B; % B - cz            
             dpFine = g.*rhoW(isFine).*dz;
             pW(isFine) = pW(isFine) - dpFine;
         end    
@@ -421,7 +420,7 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     opt = struct('ve_model', 'sharp_interface', 'p_entry', 0, 'pc_vetofine', 'fluid');
     opt = merge_options(opt, varargin{:});
     
-    g = norm(model.gravity);
+    g = -norm(model.gravity);
     f = model.fluid;
     
     sW = 1 - sG;

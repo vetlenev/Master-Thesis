@@ -21,10 +21,11 @@ function [poly_obj, nodes_overlap] = triangulateBottomFault(all_polys, poly_obj,
     for p=1:numel(poly_num)
         poly_n = poly_num(p);
         poly = Faults(all_polys, poly_n, fac_scale, false); 
-        p_idx_pebi = strcat('p', string(poly_n), 'PEBI');
-        poly.p_idx = p_idx_pebi;                
+        %p_idx = strcat('p', string(poly_n), 'PEBI');
+        p_idx = strcat('p', string(poly_n), 'f');
+        poly.p_idx = p_idx;                
     
-       poly_obj.(p_idx_pebi) = poly;
+       poly_obj.(p_idx) = poly;
     end
    
     all_nodes = [];
@@ -36,7 +37,8 @@ function [poly_obj, nodes_overlap] = triangulateBottomFault(all_polys, poly_obj,
     for i=1:size(poly_neighbors, 1)
         pn = poly_neighbors{i,1}; % neighboring polygon instance        
         pn_face = poly_neighbors{i,2}; % intersecting face of neighbor
-        p_idx = strcat(poly_neighbors{i,3}, 'PEBI'); % index of associated polygon in fault
+        %p_idx = strcat(poly_neighbors{i,3}, 'PEBI'); % index of associated polygon in fault
+        p_idx = strcat(poly_neighbors{i,3}, 'f');
         poly = poly_obj.(p_idx);
 
         [nodes, pts] = findOverlappingNodes(poly, pn, pn_face);
@@ -53,30 +55,52 @@ function [poly_obj, nodes_overlap] = triangulateBottomFault(all_polys, poly_obj,
                 || strcmp(pn.p_idx, 'p29B') || strcmp(pn.p_idx, 'p19B')
             nodes = flip(nodes); % necessary to get in counter-clockwise order
         end
-        poly_obj.(p_idx).bnodes = [poly.bnodes; nodes];
+        poly.bnodes = [poly.bnodes; nodes];
         all_nodes = [all_nodes; nodes];
         all_pts = [all_pts; pts];
         %facies = [facies; repmat(pn.facies, numel(nodes), 1)];
+        if strcmp(pn_face, 'top')
+            poly.external_top = [poly.external_top; nodes];
+        elseif strcmp(pn_face, 'bottom')
+            poly.external_bottom = [poly.external_bottom; nodes];
+        elseif strcmp(pn_face, 'west')
+            poly.external_west = [poly.external_west; nodes];
+        elseif strcmp(pn_face, 'east')
+            poly.external_east = [poly.external_east; nodes];
+        end
+        poly_obj.(p_idx) = poly;
     end
     [~, unique_idx] = uniquetol(all_nodes, 'ByRows', true); % stable to give in same order as list of neighbors
     external_nodes = all_nodes(sort(unique_idx), :); 
-    [~, unique_idx] = uniquetol(all_pts, 'ByRows', true); % stable to give in same order as list of neighbors
-    external_pts = all_pts(sort(unique_idx), :); 
+    [~, unique_idx] = uniquetol(all_pts, 'ByRows', true); % stable to give in same order as list of neighbors    
+    external_pts = all_pts(sort(unique_idx), :);     
 
     poly_obj.pBFPEBI.bnodes = external_nodes;
     poly_obj.pBFPEBI.p = external_pts;
     nodes_overlap.pBFPEBI = external_nodes;
 
 
-    % 2. Assign internal boundary nodes
+    % 2. Assign internal and categorize external boundary nodes
     for p=1:numel(poly_num)
         poly_n = poly_num(p); 
-        p_idx = strcat('p', string(poly_n), 'PEBI');
-        internal_bnodes = poly_obj.(p_idx).bnodes;
+        %p_idx = strcat('p', string(poly_n), 'PEBI');
+        p_idx = strcat('p', string(poly_n), 'f');
+        poly = poly_obj.(p_idx);
+        internal_bnodes = poly.bnodes;
         [~, unique_idx] = uniquetol(internal_bnodes, 'ByRows', true);
         internal_bnodes = internal_bnodes(sort(unique_idx), :); 
+        poly.bnodes = internal_bnodes;
 
-        poly_obj.(p_idx).bnodes = internal_bnodes;
+        [~, unique_idx] = uniquetol(poly.external_top, 'ByRows', true); % stable to give in same order as list of neighbors    
+        poly.external_top = poly.external_top(sort(unique_idx), :); 
+        [~, unique_idx] = uniquetol(poly.external_bottom, 'ByRows', true); % stable to give in same order as list of neighbors    
+        poly.external_bottom = poly.external_bottom(sort(unique_idx), :); 
+        [~, unique_idx] = uniquetol(poly.external_west, 'ByRows', true); % stable to give in same order as list of neighbors    
+        poly.external_west = poly.external_west(sort(unique_idx), :); 
+        [~, unique_idx] = uniquetol(poly.external_east, 'ByRows', true); % stable to give in same order as list of neighbors    
+        poly.external_east = poly.external_east(sort(unique_idx), :); 
+
+        poly_obj.(p_idx) = poly;
     end       
     
 end

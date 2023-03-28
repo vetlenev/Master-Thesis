@@ -7,8 +7,9 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
     N_glob = G_glob.cartDims;
     Nx_glob = N_glob(1); Nz_glob = N_glob(2);
 
-    p_idx_pebi = strcat('p', string(poly_num), 'PEBI'); 
-    poly = poly_obj.(p_idx_pebi);
+    %p_idx = strcat('p', string(poly_num), 'PEBI');  
+    p_idx = strcat('p', string(poly_num), 'f');
+    poly = poly_obj.(p_idx);
     external_nodes = poly.bnodes;
 
     internal_pts = poly.p(~ismembertol(poly.p, poly_obj.pBFPEBI.p, 'ByRows', true), :);
@@ -35,13 +36,14 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
         % update boundary nodes for internal polygon to include internal points
         poly.bnodes = [external_nodes(1:ext_swap,:); internal_nodes; external_nodes(ext_swap+1:end,:)];
 
-        nodes_overlap.(p_idx_pebi) = double.empty(0,2); % no overlap with other internal polygons, since nodes haven't been assigned to the others yet
+        nodes_overlap.(p_idx) = double.empty(0,2); % no overlap with other internal polygons, since nodes haven't been assigned to the others yet
     elseif poly_num == 9
         % top side -> copy nodes from p24
-        poly.internal_top = findInternalOverlap(poly, poly_obj.p24PEBI, 'top');
+        %poly.internal_top = findInternalOverlap(poly, poly_obj.p24PEBI, 'top');
+        poly.internal_top = findInternalOverlap(poly, poly_obj.p24f, 'top');
         internal_nodes = [internal_nodes; flip(poly.internal_top)];
         % west side -> copy associated nodes from p24 (east side of p24)
-        poly.internal_west = findInternalOverlap(poly, poly_obj.p24PEBI, 'east');
+        poly.internal_west = findInternalOverlap(poly, poly_obj.p24f, 'east');
         internal_nodes = [internal_nodes; flip(poly.internal_west)]; 
         % bottom side
         p_bottom = [internal_pts(1,:); external_nodes(1,:)];
@@ -50,20 +52,20 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
         internal_nodes = [internal_nodes; poly.internal_bottom];              
 
         poly.bnodes = [internal_nodes; external_nodes];
-        nodes_overlap.(p_idx_pebi) = [poly.internal_top; poly.internal_west];
+        nodes_overlap.(p_idx) = [poly.internal_top; poly.internal_west];
     elseif poly_num == 21
         % upper top side -> copy from bottom of p9
-        internal_top_upper = findInternalOverlap(poly, poly_obj.p9PEBI, 'bottom');
+        internal_top_upper = findInternalOverlap(poly, poly_obj.p9f, 'bottom');
         internal_nodes = [internal_nodes; flip(internal_top_upper)];
         % west side -> overlap with p24
-        poly.internal_west = findInternalOverlap(poly, poly_obj.p24PEBI, 'east');
+        poly.internal_west = findInternalOverlap(poly, poly_obj.p24f, 'east');
         internal_nodes = [internal_nodes; flip(poly.internal_west)];
         % lower top side -> copy from bottom of p24
-        internal_top_lower = findInternalOverlap(poly, poly_obj.p24PEBI, 'bottom');
+        internal_top_lower = findInternalOverlap(poly, poly_obj.p24f, 'bottom');
         poly.internal_top = [internal_top_upper; internal_top_lower];
         internal_nodes = [internal_nodes; flip(internal_top_lower)];
         % bottom side: no nodes -> interpolate
-        p_added = poly_obj.p26PEBI.p(ismember(poly_obj.p26PEBI.p, poly_obj.p22PEBI.p, 'rows'), :);
+        p_added = poly_obj.p26f.p(ismember(poly_obj.p26f.p, poly_obj.p22f.p, 'rows'), :);
         p_added = p_added(p_added(:,2) == max(p_added(:,2)), :); % this node is for some reason not included in the upper neighbor ... add manually
         ext_swap = find(external_nodes(:,1) == min(external_nodes(:,1))); % for this fault we know node with smallest x-coord gives correct index for external swap
         p_bottom = [external_nodes(ext_swap,:); p_added; external_nodes(ext_swap+1,:)];
@@ -73,10 +75,10 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
           
         int_swap = find(ismembertol(internal_nodes, poly.bnodes(1,:), 'ByRows',true));        
         poly.bnodes = [internal_nodes(1:int_swap,:); external_nodes(1:ext_swap,:); internal_nodes(int_swap+1:end,:); external_nodes(ext_swap+1:end,:)];
-        nodes_overlap.(p_idx_pebi) = [poly.internal_top; poly.internal_west];
+        nodes_overlap.(p_idx) = [poly.internal_top; poly.internal_west];
     elseif poly_num == 26
         % top side -> copy from associated part of 21
-        poly.internal_top = findInternalOverlap(poly, poly_obj.p21PEBI, 'bottom');
+        poly.internal_top = findInternalOverlap(poly, poly_obj.p21f, 'bottom');
         internal_nodes = [internal_nodes; flip(poly.internal_top)];
         % west side -> only external nodes
         % bottom side -> interpolate
@@ -92,13 +94,13 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
 
         int_swap = find(ismembertol(internal_nodes(:,1), max(external_nodes(:,1)), 'ByRows',true));
         poly.bnodes = [internal_nodes(1:int_swap,:); external_nodes; internal_nodes(int_swap+1:end,:)];
-        nodes_overlap.(p_idx_pebi) = poly.internal_top;
+        nodes_overlap.(p_idx) = poly.internal_top;
     elseif poly_num == 22
         % top side -> copy from p21
-        poly.internal_top = findInternalOverlap(poly, poly_obj.p21PEBI, 'bottom');
+        poly.internal_top = findInternalOverlap(poly, poly_obj.p21f, 'bottom');
         internal_nodes = [internal_nodes; flip(poly.internal_top)];
         % west side -> copy from p26
-        poly.internal_west = findInternalOverlap(poly, poly_obj.p26PEBI, 'east');
+        poly.internal_west = findInternalOverlap(poly, poly_obj.p26f, 'east');
         internal_nodes = [internal_nodes; flip(poly.internal_west)];
         % bottom side -> interpolate
         p_bottom = [internal_pts(end,:); external_nodes(1,:)];
@@ -108,11 +110,11 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
         % east side -> only externals
 
         poly.bnodes = [internal_nodes; external_nodes];
-        nodes_overlap.(p_idx_pebi) = [poly.internal_top; poly.internal_west];
+        nodes_overlap.(p_idx) = [poly.internal_top; poly.internal_west];
     elseif poly_num == 23
         % top side -> copy from p26 AND p22
-        internal_top_left = findInternalOverlap(poly, poly_obj.p26PEBI, 'bottom');
-        internal_top_right = findInternalOverlap(poly, poly_obj.p22PEBI, 'bottom');
+        internal_top_left = findInternalOverlap(poly, poly_obj.p26f, 'bottom');
+        internal_top_right = findInternalOverlap(poly, poly_obj.p22f, 'bottom');
         internal_top = [flip(internal_top_right); flip(internal_top_left)];
         [~, unique_idx] = uniquetol(internal_top, 'ByRows',true);
         poly.internal_top = internal_top(sort(unique_idx), :);
@@ -120,20 +122,23 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
         % west/bottom/east side -> only externals
 
         poly.bnodes = [internal_nodes; external_nodes];
-        nodes_overlap.(p_idx_pebi) = poly.internal_top;
+        nodes_overlap.(p_idx) = poly.internal_top;
     end
  
     [~, unique_idx] = uniquetol(poly.bnodes, 'ByRows',true);
     poly.bnodes = poly.bnodes(sort(unique_idx), :);
 
-    poly_obj.(p_idx_pebi) = poly;    
+    poly_obj.(p_idx) = poly;    
 end
 
 function [x_all,z_all] = interpolateInternalSide(poly, p_side_all, L_glob, N_glob, x_or_z)
     % Linearly interpolate interior points on internal side.
-    % NB: Assumes p_side is order from lower to higher value (x or z)
+    % NB: Assumes p_side is ordered from lower to higher value (x or z)
     x_all = [];
     z_all = [];
+    if x_or_z == 1
+        poly.fac_scale = 0.5*poly.fac_scale; % to not get too dense bottom/top nodes in internal faults...
+    end
     for i=1:size(p_side_all,1)-1 % loop through each line segment
         p_side = p_side_all(i:i+1,:);
         p_min = p_side(p_side(:,x_or_z) == min(p_side(:,x_or_z)), :);

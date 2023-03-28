@@ -92,7 +92,7 @@ classdef Faults < PolygonGrid
                 G_int = computeGeometry(G_dummy);
                 A_int = sum(G_int.cells.volumes);
                 A_frac = A_int/A_tot;
-                dim_frac = (G_glob.cartDims(1)*G_glob.cartDims(2))/(200*100); % [200, 100] is "standard" dimensions
+                dim_frac = (G_glob.cartDims(1)*G_glob*cartDims(2))/(200*100); % [200, 100] is "standard" dimensions
                 nodes_int = round(node_density*dim_frac*nodes_tot*A_frac);
             
                 % loop through triangles
