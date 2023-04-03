@@ -11,9 +11,7 @@ filename = 'draft_spe11_with_facies_markers.geo';
 rootdir = strrep(ROOTDIR, '\', '/');
 % NB: change this to your local path to FluidFlower folder
 data_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/data');
-plot_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/output/hybrid/extended/sealing_1_3_7_regions/');
 mkdir(data_dir);
-mkdir(plot_dir);
 
 my_seed = 295;
 seed = UtilFunctionsFF.setSeed(data_dir, my_seed);
@@ -22,7 +20,7 @@ rng(seed)
 %% SET PARAMETERS
 node_density = 0.5; % The density of nodes inside triangulated parts of faults. Should be < 1 to not get to dense triangles (standard: 0.3)
 nx_glob = 200; % standard: nx_glob=250, nz_glob=150, works for this setting...
-nz_glob = 150;
+nz_glob = 100;
 
 %% Other definitions
 poly = struct; % to hold each polynomial
@@ -193,10 +191,11 @@ poly31_neighbors{9,1} = poly.p14; poly31_neighbors{9,2} = 'east';
 poly31_neighbors{10,1} = poly.p19A; poly31_neighbors{10,2} = 'east';
 poly31_neighbors{11,1} = poly.p29A; poly31_neighbors{11,2} = 'east';
 
-% Quadrilateration
+% "Quadrilateration" of fault
 poly = Faults.makeQuadrilaterals(polys, poly, 31, poly31_neighbors, ...
                                     2, Lx, Lz, Nx, Nz);
 
+% Distribution of points for triangulation
 [poly, p31At] = Faults.QuasiRandomPointDistribution(poly, "p31fAt", G_glob, node_density, false, colors);
 
 %% Triangulation of Top Right Fault
@@ -326,7 +325,6 @@ end
                                                     nodes_overlap, pts_overlap, G_glob);
 
 %% Triangulate internal parts separately
-%bf_polys = [24,9,21,26,22,23]; % polygons constituting bottom fault
 bf_polys = [26,22]; % other polygons are cartesian quadrilaterals
 
 % Triangulate irregular twin polygons
@@ -360,10 +358,7 @@ for i = 1:numel(poly_idxs) % plot subgrids first
     end
 end
 
-%plotGrid(poly.p25pA.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25pA.facies,:))
-
 %% Glue-preparation
-% Remove all PEBI-polygons to check if triangulation causes problems
              
 poly_idxs = {poly.p31fAq.p_idx; poly.p31fAt.p_idx; ...
              poly.p25fA.p_idx; poly.p25fB.p_idx; poly.p25fC.p_idx; ...             
@@ -392,7 +387,6 @@ poly_idxs = {poly.p31fAq.p_idx; poly.p31fAt.p_idx; ...
 %% Glue together subgrids
 poly.glued = poly.p32; % top grid is basis for gluing
 poly.glued.G.facies = repmat(poly.glued.facies, poly.glued.G.cells.num, 1);
-poly.glued.cell_range.p32 = [1, poly.p32.G.cells.num];
 
 for i=1:numel(poly_idxs)    
     px = poly_idxs{i};
@@ -431,17 +425,18 @@ for i=1:numel(poly_idxs)
     px = poly_idxs{i};
     G_sub = poly.(px).G; 
     pg = poly.glued;
-    % --------------------
-    % TODO: Find mapping from glued facies to sim facies!
-    % --------------------
     if all(pg.G.facies(pg.cell_range.(px)) == 7) % not included in new grid
-        poly.sim.cell_range = rmfield(poly.sim.cell_range, px);
+        continue;
     else
         poly.sim.cell_range.(px) = find(ismember(gc, pg.cell_range.(px)));
     end
 end
 
-Gg = poly.sim.G; % THIS IS THE COMPLETE GLUED GRID
+
+% ------------------------------------------------
+Gg = poly.sim.G; % THIS IS THE COMPLETE GLUED GRID USED FOR SIMULATION
+% ------------------------------------------------
+
 
 %% Find neighboring structured cells to fault
 nan_cells = find(isnan(Gg.i)); % all nan logical indices are fine-scale triangle cells
@@ -472,17 +467,15 @@ imperm_fault = bcells_all(Gg.cells.centroids(bcells_all,1) > 0.5 & ...
 
 fault_buffer = [fault_buffer; imperm_fault];
 
-fault_buffer = fault_buffer(~ismember(fault_buffer, nan_cells));
-
 %% Some plotting
 if true
     figure(3)
     %colormap('jet')
     plotGrid(Gg)    
     colorbar('southoutside')
-    %plotCellData(Gg, double(Gg.i == 46))
+    %plotCellData(Gg, double(Gg.i == 130))
     ss = zeros(Gg.cells.num,1);
-    ss(fault_buffer) = 1;    
+    ss(fault_buffer) = 1;
     plotCellData(Gg, ss)
     hold on
     plotFaces(Gg, boundaryFaces(Gg), 'EdgeColor', 'red', 'linewidth', 2)
@@ -525,333 +518,6 @@ end
 rock = makeRock(Gg, perm, poro);
 rock.regions.saturation = Gg.facies;
 
-%% Setup model, schedule, state ...
-isFine = struct;
-isFine.bufferCells = false(Gg.cells.num, 1);
-isFine.bufferCells(fault_buffer) = true;
-isFine.faultCells = false(Gg.cells.num, 1);
-isFine.faultCells(nan_cells) = true;
-
-isFine.faultFaces = false(Gg.faces.num, 1);
-for i=find(isFine.faultCells)'
-    fault_face = Gg.cells.faces(Gg.cells.facePos(i):Gg.cells.facePos(i+1)-1, 1);
-    isFine.faultFaces(fault_face) = true;
-end
-isFine.bufferFaces = false(Gg.faces.num, 1);
-for i=find(isFine.bufferCells)'
-    buffer_face = Gg.cells.faces(Gg.cells.facePos(i):Gg.cells.facePos(i+1)-1, 1);
-    isFine.bufferFaces(buffer_face) = true;
-end
-
-allSealingCells = {}; % cell-indices for sealing cells
-allSealingBFaces = {}; % boundary faces of sealing cells
-allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis)
-allLayersBFaces = {};
-
-lowperm_facie = [1,4,7];
-
-lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
-if ismember(lowperm_facie, 1) % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
-    p7small_cells = poly.sim.cell_range.p7small(1):poly.sim.cell_range.p7small(2); % poly.glued -> poly.sim
-    lowperm_p7small = ismember(lowperm_cells, p7small_cells);
-    lowperm_cells(lowperm_p7small) = [];
-end
-%facie_polys = struct; % append polys part of this facies
-lowperm_cells_split = struct; % lowperm cells in separate arrays for each polygon
-poly_idxs_new = fieldnames(poly.sim.cell_range);
-for i=1:numel(poly_idxs_new)
-    pidx = string(poly_idxs_new{i});
-    pcells = (poly.sim.cell_range.(pidx)(1):poly.sim.cell_range.(pidx)(2))';
-
-    [sealing_faces, bottom_faces, sealing_cells] = addConfiningLayersFF(Gg, 'cells', pcells);
-
-    if isempty(sealing_faces) || isempty(bottom_faces) || isempty(sealing_cells)
-        continue; % don't add sealing layer if triangulated cells
-    end
-    if all(ismember(pcells, lowperm_cells))
-        %facie_polys.(pidx) = poly.(pidx);
-        lowperm_cells_split.(pidx) = pcells;
-                
-        allSealingCells = cat(2, allSealingCells, sealing_cells);
-        allSealingBFaces = cat(2, allSealingBFaces, sealing_faces);
-        allSealingBottom = cat(2, allSealingBottom, bottom_faces);
-    end
-    allLayersBFaces = cat(2, allLayersBFaces, sealing_faces);
-end
-
-allSealingCells = vertcat(allSealingCells{:}); % no sealing cells if only face constraint
-isFine.sealingCells = false(Gg.cells.num, 1);
-isFine.sealingCells(allSealingCells) = true;
-
-allSealingBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allSealingBFaces{:}));
-allLayersBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayersBFaces{:}));
-%allSealingBFaces = vertcat(allSealingBFaces{:});
-isFine.sealingBFaces = false(Gg.faces.num, 1);
-isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
-
-isFine.layersBFaces = false(Gg.faces.num, 1);
-isFine.layersBFaces(allLayersBFaces) = true; % bounding faces of sealing cells
-
-
-isFine.sealingBottom = allSealingBottom;
-
-%% Operational schedule
-bf = boundaryFaces(Gg);
-bfz = Gg.faces.centroids(bf, 2);
-top_faces = bf(abs(bfz - max(bfz)) < 1e-10);
-bc = addBC([], top_faces, 'pressure', 1e5*Pascal, 'sat', [1,0]);
-
-ii = Gg.i;
-jj = Gg.j;
-% ds = deck.SCHEDULE;
-% dt = ds.step.val;
-% t = cumsum(dt);
-% tot_time = t(end);
-tot_time = 18*hour; % 5*day
-t_control2 = 2*hour;% 2.5*hour;
-t_control3 = 4*hour; % 5*hour;
-dt1 = rampupTimesteps(t_control2, t_control2/70, 10); % t_control2/70
-dt2 = rampupTimesteps(t_control3-t_control2, (t_control3-t_control2)/70, 12); % (t_control3-t_control2)/120
-dt3 = rampupTimesteps(tot_time-t_control3, (tot_time-t_control3)/70, 12); % (tot_time-t_control3)/120
-dt = [dt1; dt2; dt3];
-t = cumsum(dt);
-
-inj_rate_W1 = 1.6*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
-inj_rate_W2 = 1.6*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
-
-xc = Gg.cells.centroids(:,1);
-zc = Gg.cells.centroids(:,2);
-min_x = @(x) min(abs(xc - x));
-min_z = @(z) min(abs(zc - z));
-idx_x = @(x) find(xc - x == min_x(x));
-idx_z = @(z) find(zc - z == min_z(z));
-
-dist2pt = @(c,p) sqrt((p(:,1)-c(:,1)).^2 + (p(:,2)-c(:,2)).^2);
-[~, W1_cell] = min(dist2pt(Gg.cells.centroids, [0.9,0.3]));
-[~, W2_cell] = min(dist2pt(Gg.cells.centroids, [1.7,0.7]));
-
-W1_x = ii(W1_cell);
-W1_z = jj(W1_cell);
-
-W = addWell([], Gg, rock, W1_cell, ...
-                'type', 'rate', ...  % inject at constant rate
-                'val', inj_rate_W1, ... % volumetric injection rate
-                'radius', 0.001, ...
-                'comp_i', [0 1], ...
-                'status', true); % starts injecting
-
-W2_x = ii(W2_cell);
-W2_z = jj(W2_cell);
-
-W = addWell(W, Gg, rock, W2_cell, ...
-                'type', 'rate', ...  % inject at constant rate
-                'val', inj_rate_W2, ... % volumetric injection rate
-                'radius', 0.001, ...
-                'comp_i', [0 1], ...
-                'status', false); % starts off
-
-schedule = simpleSchedule(dt, 'W', W, 'bc', bc);
-
-schedule.control(2:3) = schedule.control(1);
-schedule.control(2).W(2).status = true;
-schedule.control(3).W(1).status = false;
-schedule.control(3).W(2).status = false;
-
-schedule.step.control(t <= t_control2) = 1;
-schedule.step.control(t > t_control2 & t <= t_control3) = 2;
-schedule.step.control(t > t_control3) = 3;
-
-nearWell = false(Gg.cells.num, numel(W));
-openBC = false(Gg.cells.num, 1);
-
-horzWellDistRate = [0.06, 0.12]; % [0.03, 0.08] % ratio of total horizontal length considered "close" to well
-vertWellDistRate = [0.1, 0.15]; % [0.06, 0.12]
-for i = 1:numel(W)
-    c = W(i).cells(1);
-    hdist_i = abs(ii - ii(c)); 
-    hdist_x = abs(xc - xc(c));
-    vdist_j = abs(jj - jj(c)); 
-    vdist_z = abs(zc - zc(c));
-    % store cells close to well, if fine-scale needed
-    nearWell(hdist_i < horzWellDistRate(1)*max(ii) & ... % max(ii)
-             hdist_x < horzWellDistRate(2)*max(xc) & ...             
-             vdist_j < vertWellDistRate(1)*max(jj) & ...
-             vdist_z < vertWellDistRate(2)*max(zc), i) = true; % max(kk)
-end
-if ~isempty(bc)
-    openBC(sum(Gg.faces.neighbors(bc.face, :), 2)) = true;
-end
-
-isFine.well = nearWell;
-isFine.bc = openBC;
-
-remFineCells = any(isFine.well,2) | isFine.bc | ...
-                isFine.faultCells | isFine.bufferCells;
-sealingCells = false(Gg.cells.num, 1);
-sealingCells(isFine.sealingCells) = true;
-
-isFine.allFineCells = sealingCells | remFineCells;
-
-isFine.bcFaces = false(Gg.faces.num, 1);
-bcFacesAll = addConfiningLayersFF(Gg,'cells',isFine.bc);
-isFine.bcFaces(bcFacesAll) = true;
-
-isFine.wellFaces = false(Gg.faces.num, numel(W));
-for i=1:numel(W)
-    wellFacesAll = addConfiningLayersFF(Gg,'cells',isFine.well(:,i));
-    isFine.wellFaces(wellFacesAll, i) = true;
-end
-
-z = max(Gg.faces.centroids(:,2)) - Gg.cells.centroids(:,2);
-state0 = initResSol(Gg, 1.013e5*Pascal + fluid.rhoWS*norm(gravity)*z, [1,0]); % atmospheric pressure
-
-%% Convert to hybrid model
-%Gg.cells.volumes(Gg.cells.volumes == 0) = eps;
-%model = TwoPhaseFluidFlowerModel(Gg, rock, fluid, 1, 1, 'useCNVConvergence', true);
-fluid.rhoWS = 500*kilogram/meter^3;
-model = GenericBlackOilModel(Gg, rock, fluid);
-model.oil = false;
-model = validateModel(model);
-%model.water = false;
-pe_rest = 4.65*10^4*Pascal; % 5*10^5
-remFineFaces = find(any(isFine.wellFaces,2) | isFine.bcFaces);
-faultFaces = find(isFine.faultFaces | isFine.bufferFaces);
-otherFineFaces = unique([remFineFaces; faultFaces]);
-[model_hybrid, model_coarse] = convertToHybridModel_FF(model, isFine.allFineCells, ...
-                                                        'otherFineFaces', otherFineFaces, ...                                                    
-                                                        'sealingCells', sealingCells, ...
-                                                        'sealingBFaces', isFine.sealingBFaces, ...
-                                                        'setSubColumnsFine', false, ...
-                                                        'multiplier', 1, ...
-                                                        'sumTrans', true, ...
-                                                        'pe_rest', pe_rest);
-Gh = model_hybrid.G;
-Gf = model.G;
-
-%% Assign hybrid facies
-hybrid_facies = zeros(Gh.cells.num, 1);
-ufac = unique(Gf.facies);
-for i=1:numel(ufac)
-    fac = ufac(i);
-    hybrid_cells = Gh.partition(Gf.facies == fac);
-    hybrid_facies(hybrid_cells) = fac;
-end
-model_ve.G.facies = hybrid_facies;
-
-%% Plot discretized grid
-fafa = [find(isFine.sealingBFaces); find(isFine.bufferFaces); find(any(isFine.wellFaces,2))];
-
-f4 = figure(4);
-clf(4)
-disc = model_hybrid.G.cells.discretization;
-ph = model_hybrid.G.partition;
-%plotGrid(Gg, find(disc(ph) == 1798), 'edgecolor', 'yellow')
-plotCellData(Gg, disc(ph),'edgealpha', 0)
-plotOutlinedGrid(Gg, W, bc, isFine.sealingBFaces | any(isFine.wellFaces,2) | isFine.faultFaces | isFine.bufferFaces | isFine.bcFaces);
-hold on
-plotFaces(Gf, fafa, 'edgecolor', 'yellow')
-cmap = colorcube(30000);
-%cmap= 'jet';
-colormap(cmap)
-xlabel('[m]')
-ylabel('[m]')
-xlim([0,2.8])
-ylim([0,1.2])
-
-saveas(f4, strcat(plot_dir, 'hybrid_partition'), 'png');
-
-%% Upscale settings
-schedule_hybrid = upscaleSchedule(model_hybrid, schedule);
-state0_hybrid = upscaleState(model_hybrid, model, state0);
-nls = NonLinearSolver('maxIterations', 70);
-nls.useRelaxation = true;
-nls.maxTimestepCuts = 8;
-
-%% Simulate!
-[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
-%[ws, states] = simulateScheduleAD(state0, model, schedule, 'NonLinearSolver', nls);
-
-%% Plot relaxed VE columns
-figure()
-relaxed_ve = zeros(Gh.cells.num, 1);
-relaxed_ve(states_hybrid{1}.cBottom) = 1;
-relaxed_ve(states_hybrid{1}.cHorz) = 2;
-relaxed_ve(states_hybrid{1}.cBottomHorz) = 3;
-plotCellData(Gh, relaxed_ve)
-hold on
-plotFaces(Gf, find(isFine.sealingBFaces), 'edgecolor', 'red', 'linewidth', 1.5);
-
-%% Reconstruct fine state
-states_hybrid_fs = convertHybridStates_test(model_hybrid, model, states_hybrid);
-%states_hybrid_fs = convertHybridStates_FF(model_hybrid, model, states_hybrid);
-
-%% Plot settings
-
-c1 = [255, 255, 255]/255;
-c2 = [48, 37, 255]/255;
-c3 = [0, 255, 0]/255;
-cc = interp1([0; 1e-5; 1], [c1; c2; c3], (0:0.01:1)');
-% c1 = [48, 37, 255]/255;
-% c2 = [0, 255, 0]/255;
-% cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
-
-t = cumsum(schedule.step.val)/hour();
-t1 = find(schedule.step.control == 1);
-t1 = t1(end);
-t2 = find(schedule.step.control == 2);
-t2 = t2(end);
-t3 = find(schedule.step.control == 3);
-t3 = t3(end);
-
-swr = fluid.krPts.w(3,2);
-%% Plot hybrid
-
-for i = [t1, t2, t3]
-    f5 = UtilFunctionsFF.fullsizeFig(5); clf(5)     
-    plotCellData(Gh, states_hybrid{i}.s(:,2), 'edgec', 'none');
-    plotFaces(Gh, (1:Gh.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
-    hold on
-    %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    %colormap(cc); caxis([0, 1-swr]); 
-    caxis([0, max(states_hybrid{end}.sGmax)])
-    colorbar('location','southoutside');
-    axis tight off
-    title({'Hybrid saturation', sprintf('hour: %.1f',t(i))})   
-    %setDaspect(run3D, standard);
-    saveas(f5, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
-end
-
-for i = [t1, t2, t3]
-    f6 = UtilFunctionsFF.fullsizeFig(6); clf(6)
-    %f1 = figure(1); clf
-    plotCellData(Gf, states_hybrid_fs{i}.s(:,2), 'edgec', 'none');
-    plotFaces(Gf, (1:Gf.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
-    hold on
-    plotFaces(Gf, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    %colormap(cc); caxis([0, 1-swr]); 
-    caxis([0, max(states_hybrid_fs{end}.sGmax)]);
-    colorbar('location','southoutside');
-    axis tight off
-    title({'Reconstructed fine-scale saturation', sprintf('hour: %.1f',t(i))})   
-    %setDaspect(run3D, standard);
-    saveas(f6, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
-end
-
-%% Fine-scale solution
-for i = [t1, t2, t3]
-    f7 = UtilFunctionsFF.fullsizeFig(7); clf(7)     
-    plotCellData(Gf, states{i}.s(:,2), 'edgec', 'none');
-    plotFaces(Gf, (1:Gf.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
-    hold on
-    %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    %colormap(cc); caxis([0, 1-swr]); 
-    caxis([0, max(states{end}.sMax(:,2))])
-    colorbar('location','southoutside');
-    axis tight off
-    title({'Full-dimensional saturation', sprintf('hour: %.1f',t(i))})   
-    %setDaspect(run3D, standard);
-    %saveas(f7, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
-end
 
 
 %% FUNTCION DEFINTIONS

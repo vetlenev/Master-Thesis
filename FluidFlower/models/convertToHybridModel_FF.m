@@ -91,6 +91,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     % Ensure transmissibilities are up-to-date
     trans = model.operators.T_all;
     trans(model.operators.internalConn) = model.operators.T;
+    trans_int = trans(model.operators.internalConn);
     
     % Find categories
     trans_category = ones(model.G.faces.num, 1);
@@ -127,8 +128,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     coarseColNo(CG.partition) = colNo;
     CG.cells.columns = coarseColNo;
     
+    %trans(trans < 1e-11) = 1e-11;
     disp('before sumTrans')
-    disp(min(trans))
+    disp(min(trans))  
       
     if opt.sumTrans
         % Upscale -> average transmissibilities        
@@ -143,12 +145,13 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
     
     disp('after sumTrans')
-    disp(min(model_coarse.operators.T_all))
+    disp(min(model_coarse.operators.T))
     % Grab rock from coarse model
     rock_c = model_coarse.rock;
      
     % Copy operators over and create a new VE model
     if isa(model, 'TwoPhaseFluidFlowerModel') || isa(model, 'GenericBlackOilModel')
+        disp('NB: Change back to WaterGasHybridModel_FF')
         model_ve = WaterGasHybridModel_FF(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
                                             'sealingCells', opt.sealingCells);
     elseif isa(model, 'OverallCompositionCompositionalModel')
@@ -164,7 +167,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         warning(['Found ', num2str(nnz(badc)), ' cells with zero height. Fixing...']);
         model_ve.G.cells.height(badc) = mv;
         %model_ve.G.cells.bottomDepth(badc) = model_ve.G.cells.bottomDepth(badc) + mv;
-        model_ve.G.cells.topDepth(badc) = model_ve.G.cells.topDepth(badc) + mv;
+        model_ve.G.cells.bottomDepth(badc) = model_ve.G.cells.bottomDepth(badc) - mv;
+        %model_ve.G.cells.topDepth(badc) = model_ve.G.cells.topDepth(badc) + mv;
     end
     %delta = model_ve.operators.connections.faceBottomDepth - model_ve.operators.connections.faceTopDepth;
     delta = model_ve.operators.connections.faceTopDepth - model_ve.operators.connections.faceBottomDepth; % Top and Bottom are swapped since z-coord is height, not depth
@@ -173,7 +177,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         warning(['Found ', num2str(nnz(badf)), ' faces with zero height. Fixing...']);
         model_ve.operators.connections.faceHeight(badf) = mv;
         %model_ve.operators.connections.faceBottomDepth(badf) = model_ve.operators.connections.faceBottomDepth(badf) + mv;
-        model_ve.operators.connections.faceTopDepth(badf) = model_ve.operators.connections.faceTopDepth(badf) + mv;
+        model_ve.operators.connections.faceBottomDepth(badf) = model_ve.operators.connections.faceBottomDepth(badf) - mv;
+        %model_ve.operators.connections.faceTopDepth(badf) = model_ve.operators.connections.faceTopDepth(badf) + mv;
     end
        
     
@@ -197,8 +202,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     model_ve.extraStateOutput = model.extraStateOutput;
 
     model_ve.operators.T = model_coarse.operators.T;
-    model_ve.operators.T_all = model_coarse.operators.T_all;
-    
+    model_ve.operators.T_all = model_coarse.operators.T_all;       
+
     % --- Add veBottom cells and connections ---
     op = model_ve.operators;
     isVE = model_ve.G.cells.discretization > 1;

@@ -153,28 +153,14 @@ classdef Faults < PolygonGrid
 
         function poly = makeQuadrilaterals(all_polys, poly, poly_num, poly_neighbors, ...
                                             fac_scale, Lx_glob, Lz_glob, Nx_glob, Nz_glob)
-            % Is this needed !?
+          
             poly_fault = Faults(all_polys, poly_num, fac_scale, false); 
             p_idx_pebi = strcat('p', string(poly_num), 'f');
             poly_fault.p_idx = p_idx_pebi;
             poly.(p_idx_pebi) = poly_fault;            
+                        
 
-            % --- part A: main vertical segment ---
-            polyA = Faults(all_polys, poly_num, fac_scale, false);   
-            p_idx = strcat('p', string(poly_num), 'fA');
-            polyA.p_idx = p_idx; 
-            % What about polyA.p
-            if poly_num == 12               
-                p5B = poly_neighbors{1,1};
-                p5C = poly_neighbors{2,1};
-
-                polyA = Faults.pinchOutGrid(polyA, [], p5B, p5C, ...
-                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
-
-                poly.(p_idx) = polyA;
-                return; % no more parts for p12 -> quit
-
-            elseif poly_num == 25
+            if poly_num == 25 % Only pinch-outs for poly25
                 p32 = poly_neighbors{1,1};
                 p29B = poly_neighbors{2,1};
                 p29C = poly_neighbors{3,1};
@@ -186,27 +172,232 @@ classdef Faults < PolygonGrid
                 p5A = poly_neighbors{9,1};
                 p13 = poly_neighbors{10,1};
                 p18 = poly_neighbors{11,1};
-                p30 = poly_neighbors{12,1};               
+                p30 = poly_neighbors{12,1}; 
+                
+                % --- part F: upper pinch-out ---
+                % Quadrilateral part
+                polyFq = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_q = strcat('p', string(poly_num), 'fFq');
+                polyFq.p_idx = p_idx_q;             
+                polyFq.fac_scale = 1.5; % to not get too dense points
+
+                % Triangular part
+                polyFt = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_t = strcat('p', string(poly_num), 'fFt');
+                polyFt.p_idx = p_idx_t;
+
+                % determine transition to triangle grid
+                x_tri_F = 1.31;
+
+                [polyFq, polyFt] = Faults.pinchOutGrid(polyFq, polyFt, p29B, p29C, x_tri_F, ...
+                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+
+                poly.(p_idx_q) = polyFq;
+                poly.(p_idx_t) = polyFt;
+
+                % --- part G: lower pinch-out ---
+                % Quadrilateral part
+                polyGq = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_q = strcat('p', string(poly_num), 'fGq');
+                polyGq.p_idx = p_idx_q;
+                polyGq.fac_scale = 1.5; % - !!! -
+
+                % Triangular part
+                polyGt = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_t = strcat('p', string(poly_num), 'fGt');
+                polyGt.p_idx = p_idx_t;
+
+                x_tri_G = 1.235;
+                [polyGq, polyGt] = Faults.pinchOutGrid(polyGq, polyGt, p19B, p19C, x_tri_G, ...
+                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+
+                poly.(p_idx_q) = polyGq;
+                poly.(p_idx_t) = polyGt;
+
+                % After pinch-outs are defined, continue with vertical
+                % segment.
+                polyA = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idxA = strcat('p', string(poly_num), 'fA');
+                polyA.p_idx = p_idxA; 
 
                 partA_top = findOverlappingNodes(poly_fault, p32, 'top');
 
-                partA_west = [p4.G.nodes.coords(p4.east_mask, :); ...
-                              p14.G.nodes.coords(p14.east_mask, :); ...
-                              p19C.G.nodes.coords(p19C.east_mask, :); ... 
-                              p19B.G.nodes.coords(p19B.east_mask, :); ... 
-                              p29C.G.nodes.coords(p29C.east_mask, :); ...                                                                                      
-                              p29B.G.nodes.coords(p29B.east_mask, :)];
+                partA_west = [polyFq.internal_east; ...
+                                p29B.G.nodes.coords(p29B.east_mask, :)];
+                %partA_west = unique(partA_west, 'rows', 'stable');
 
-                p11right_sub = findOverlappingNodes(poly_fault, p11right, 'east');
-                partA_east = [p11right_sub; ...
-                              p5A.G.nodes.coords(p5A.west_mask, :); ...
-                              p13.G.nodes.coords(p13.west_mask, :); ...
-                              p18.G.nodes.coords(p18.west_mask, :); ...
-                              p30.G.nodes.coords(p30.west_mask, :)];  
-                              
-                partA_bottom = partA_west(ismembertol(partA_west, partA_east, 'ByRows',true), :);
+                bottom_left_A = polyFq.internal_east(1,:);
+                p30_bottom = p30.G.nodes.coords(p30.bottom_mask, :);
+                bottom_right_A = p30_bottom(1,:);
+                Lx_bottom_A = bottom_right_A(1) - bottom_left_A(1);
+                Nx_bottom_A = ceil(Lx_bottom_A/Lx_glob * Nx_glob);
+                bottom_A = [bottom_left_A; bottom_right_A];
+                [x_interp, z_interp] = Faults.interpFault(bottom_A, Nx_bottom_A);           
+                partA_bottom = [x_interp, z_interp];
+
+                partA_east = p30.G.nodes.coords(p30.west_mask, :);
+
+                polyA.internal_top = partA_top;
+                polyA.internal_bottom = partA_bottom;
+                polyA.internal_west = partA_west;
+                polyA.internal_east = partA_east;
+    
+                polyA = Faults.distributeAndCollapseNodes(polyA, partA_west, partA_east, ...
+                                                                partA_top, partA_bottom, ...
+                                                                Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+                                                                
+                               
+                poly.(p_idxA) = polyA;
+
+                % - part B - 
+                polyB = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx = strcat('p', string(poly_num), 'fB');
+                polyB.p_idx = p_idx; 
+
+                partB_top = partA_bottom;
+                partB_west = [polyGq.internal_east; ...
+                              p19B.G.nodes.coords(p19B.east_mask, :); ...
+                              p29C.G.nodes.coords(p29C.east_mask, :)];
+                partB_west = unique(partB_west, 'rows', 'stable');
                 
+                bottom_left_B = polyGq.internal_east(1,:);
+                p18_west = p18.G.nodes.coords(p18.west_mask, :);
+                dist = Faults.euclideanDist(bottom_left_B, p18_west);
+                [~, min_idx] = min(dist);
+                bottom_right_B = p18_west(min_idx,:);
+                Lx_bottom_B = bottom_right_B(1) - bottom_left_B(1);
+                Nx_bottom_B = ceil(Lx_bottom_B/Lx_glob * Nx_glob);
+                bottom_B = [bottom_left_B; bottom_right_B];
+                [x_interp, z_interp] = Faults.interpFault(bottom_B, Nx_bottom_B);           
+                partB_bottom = [x_interp, z_interp];
+
+                partB_east = p18_west(p18_west(:,2) >= bottom_right_B(2)-eps, :);
+
+                polyB.internal_top = partB_top;
+                polyB.internal_bottom = partB_bottom;
+                polyB.internal_west = partB_west;
+                polyB.internal_east = partB_east;
+    
+                polyB = Faults.distributeAndCollapseNodes(polyB, partB_west, partB_east, ...
+                                                                partB_top, partB_bottom, ...
+                                                                Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+                poly.(p_idx) = polyB; 
+
+                % - part C -
+                polyC = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx = strcat('p', string(poly_num), 'fC');
+                polyC.p_idx = p_idx; 
+
+                partC_top = partB_bottom;
+                p14_east = p14.G.nodes.coords(p14.east_mask, :);
+                partC_west = [p14_east; ...
+                              p19C.G.nodes.coords(p19C.east_mask, :)];
+
+                bottom_left_C = p14_east(1,:);
+                p5_west = p5A.G.nodes.coords(p5A.west_mask, :);
+                dist = Faults.euclideanDist(bottom_left_C, p5_west);
+                [~, min_idx] = min(dist);
+                bottom_right_C = p5_west(min_idx,:);
+                Lx_bottom_C = bottom_right_C(1) - bottom_left_C(1);
+                Nx_bottom_C = ceil(Lx_bottom_C/Lx_glob * Nx_glob);
+                bottom_C = [bottom_left_C; bottom_right_C];
+                [x_interp, z_interp] = Faults.interpFault(bottom_C, Nx_bottom_C);           
+                partC_bottom = [x_interp, z_interp];
+
+                partC_east = [p5_west(p5_west(:,2) >= bottom_right_C(2)-eps, :); ...
+                              p13.G.nodes.coords(p13.west_mask, :); ...
+                              p18_west(p18_west(:,2) <= bottom_right_B(2)+eps, :)];
+                
+                polyC.internal_top = partC_top;
+                polyC.internal_bottom = partC_bottom;
+                polyC.internal_west = partC_west;
+                polyC.internal_east = partC_east;
+    
+                polyC = Faults.distributeAndCollapseNodes(polyC, partC_west, partC_east, ...
+                                                                partC_top, partC_bottom, ...
+                                                                Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+                poly.(p_idx) = polyC;
+
+                % - part D -
+                polyD = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx = strcat('p', string(poly_num), 'fD');
+                polyD.p_idx = p_idx; 
+
+                partD_top = partC_bottom;
+
+                bottom_right_D = p5_west(1,:);
+                p4_east = p4.G.nodes.coords(p4.east_mask, :);
+                dist = Faults.euclideanDist(bottom_right_D, p4_east);
+                [~, min_idx] = min(dist);
+                bottom_left_D = p4_east(min_idx,:);
+                Lx_bottom_D = bottom_right_D(1) - bottom_left_D(1);
+                Nx_bottom_D = ceil(Lx_bottom_D/Lx_glob * Nx_glob);
+                bottom_D = [bottom_left_D; bottom_right_D];
+                [x_interp, z_interp] = Faults.interpFault(bottom_D, Nx_bottom_D);           
+                partD_bottom = [x_interp, z_interp];
+
+                partD_west = p4_east(p4_east(:,2) >= bottom_left_D(2)-eps, :);
+                partD_east = p5_west(p5_west(:,2) <= bottom_right_C(2)+eps, :);
+
+                polyD.internal_top = partD_top;
+                polyD.internal_bottom = partD_bottom;
+                polyD.internal_west = partD_west;
+                polyD.internal_east = partD_east;
+    
+                polyD = Faults.distributeAndCollapseNodes(polyD, partD_west, partD_east, ...
+                                                                partD_top, partD_bottom, ...
+                                                                Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+                
+                poly.(p_idx) = polyD;
+                
+                % - part E -
+                polyE = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx = strcat('p', string(poly_num), 'fE');
+                polyE.p_idx = p_idx; 
+
+                % Order counterclockwise
+                polyE.internal_top = flip(partD_bottom);
+                polyE.internal_west = p4_east(p4_east(:,2) <= bottom_left_D(2), :);
+                polyE.internal_west = flip(polyE.internal_west);
+                p11right_west = p11right.G.nodes.coords(p11right.west_mask, :);
+                polyE.internal_east = p11right_west(p11right_west(:,2) >= polyE.internal_west(end,2), :);
+
+                polyE.bnodes = [polyE.internal_top; polyE.internal_west; polyE.internal_east];
+                [~, unique_idx] = uniquetol(polyE.bnodes, 'ByRows',true);
+                polyE.bnodes = polyE.bnodes(sort(unique_idx), :);
+
+                poly.(p_idx) = polyE;
+            
+            elseif poly_num == 12     
+                % Quadrilateral part
+                polyAq = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_q = strcat('p', string(poly_num), 'fAq');
+                polyAq.p_idx = p_idx_q;
+                % Triangular part
+                polyAt = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_t = strcat('p', string(poly_num), 'fAt');
+                polyAt.p_idx = p_idx_t;
+
+                p5B = poly_neighbors{1,1};
+                p5C = poly_neighbors{2,1};
+
+                x_tri = 2.30;
+
+                [polyAq, polyAt] = Faults.pinchOutGrid(polyAq, polyAt, p5B, p5C, x_tri, ...
+                                                    Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+
+                poly.(p_idx_q) = polyAq;
+                poly.(p_idx_t) = polyAt;
+
             elseif poly_num == 31
+                polyAq = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_q = strcat('p', string(poly_num), 'fAq');
+                polyAq.p_idx = p_idx_q; 
+
+                polyAt = Faults(all_polys, poly_num, fac_scale, false);   
+                p_idx_t = strcat('p', string(poly_num), 'fAt');
+                polyAt.p_idx = p_idx_t; 
+
                 p32 = poly_neighbors{1,1};
                 p28 = poly_neighbors{2,1};
                 p20 = poly_neighbors{3,1};
@@ -221,95 +412,60 @@ classdef Faults < PolygonGrid
                 
                 partA_top = findOverlappingNodes(poly_fault, p32, 'top');
 
+                z_tri = 0.69; % hard-coded location !
+
                 p11left_sub = findOverlappingNodes(poly_fault, p11left, 'west');
-                partA_west = [flip(p11left_sub);
+                p11left_q = p11left_sub(p11left_sub(:,2) >= z_tri, :);                
+                p11left_q = flip(p11left_q);
+                partA_west = [p11left_q;
                               p17.G.nodes.coords(p17.east_mask, :); ... 
                               p6.G.nodes.coords(p6.east_mask, :); ... 
                               p15.G.nodes.coords(p15.east_mask, :); ...                                                                                      
                               p20.G.nodes.coords(p20.east_mask, :); ...
                               p28.G.nodes.coords(p28.east_mask, :)];
                                               
-                partA_east = [p4.G.nodes.coords(p4.west_mask, :); ...
+                p4_west = p4.G.nodes.coords(p4.west_mask, :);
+                p4_q = p4_west(p4_west(:,2) >= z_tri, :);
+                partA_east = [p4_q; ...
                               p14.G.nodes.coords(p14.west_mask, :); ...
                               p19A.G.nodes.coords(p19A.west_mask, :); ...
-                              p29A.G.nodes.coords(p29A.west_mask, :)];  
+                              p29A.G.nodes.coords(p29A.west_mask, :)];
+                
+                bottom_left_A = partA_west(1,:);
+                bottom_right_A = partA_east(1,:);
+                Lx_bottom_A = bottom_right_A(1) - bottom_left_A(1);
+                Nx_bottom_A = ceil(Lx_bottom_A/Lx_glob * Nx_glob);
+                bottom_A = [bottom_left_A; bottom_right_A];
+                [x_interp, z_interp] = Faults.interpFault(bottom_A, Nx_bottom_A);           
+                partA_bottom = [x_interp, z_interp];
 
-                partA_bottom = partA_west(ismembertol(partA_west, partA_east, 'ByRows',true), :);                                            
+
+                polyAq.internal_top = partA_top;
+                polyAq.internal_bottom = partA_bottom;
+                polyAq.internal_west = partA_west;
+                polyAq.internal_east = partA_east;
+    
+                polyAq = Faults.distributeAndCollapseNodes(polyAq, partA_west, partA_east, ...
+                                                                partA_top, partA_bottom, ...
+                                                                Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+                               
+                poly.(p_idx_q) = polyAq;
+
+                % Triangular bottom part
+                partA_top = flip(polyAq.internal_bottom);
+                partA_west = p11left_sub(p11left_sub(:,2) < z_tri, :); 
+                %partA_west = flip(partA_west);
+                partA_east = p4_west(p4_west(:,2) < z_tri, :);
+
+                polyAt.bnodes = [partA_top; partA_west; partA_east];
+                [~, unique_idx] = uniquetol(polyAt.bnodes, 'ByRows', true); % stable to give in same order as list of neighbors
+                polyAt.bnodes = polyAt.bnodes(sort(unique_idx), :);
+
+                poly.(p_idx_t) = polyAt;
+
             end
-
-            partA_west = unique(partA_west, 'rows', 'stable'); % remove duplicating overlapping nodes
-            partA_east = unique(partA_east, 'rows', 'stable');
-            polyA.top_side = partA_top;
-            polyA.bottom_side = partA_bottom;
-            
-            %Nx_sub = size(partA_top, 1);
-            Nx_sub = max(size(partA_top,1), size(partA_bottom,1));
-            Nz_sub = max(size(partA_west,1), size(partA_east,1));
-            
-            main_west = size(partA_west,1) > size(partA_east,1);
-            main_top = size(partA_top,1) > size(partA_bottom,1);
-            if main_west % west side contains more points -> east will be collapsed side (containing most collapsed points)
-                cside_x = 'east'; 
-            else
-                cside_x = 'west';
-            end   
-            if main_top
-                cside_z = 'top';
-            else
-                cside_z = 'bottom';
-            end
-
-            polyA = Faults.collapsedGrid(polyA, cside_x, cside_z, Nx_sub, Nz_sub, ...
-                                         partA_west, partA_east, partA_top, partA_bottom, ...
-                                         Lx_glob, Lz_glob, Nx_glob, Nz_glob);
-        
-            if Nx_sub > 2 % collapse internal stacks according to closest side
-                Nx_int = Nx_sub - 2;
-                % Internals: copy z-coord of modified east or west side
-                west_side_z = polyA.G.nodes.coords(polyA.west_mask, 2);
-                west_int_z = west_side_z(2:end-1); % omit top and bottom nodes -> these are all fixed
-                east_side_z = polyA.G.nodes.coords(polyA.east_mask, 2);
-                east_int_z = east_side_z(2:end-1);
-                for i=1:ceil(Nx_int/2)                        
-                    polyA.G.nodes.coords((i+1)+Nx_sub:Nx_sub:Nx_sub*Nz_sub, 2) = west_int_z; % +Nx_sub to start at second row, not at bottom                     
-                    polyA.G.nodes.coords((Nx_sub-i)+Nx_sub:Nx_sub:Nx_sub*Nz_sub, 2) = east_int_z;
-                end
-
-                % Internals: uniformly distribute x-coords between west
-                % and east side
-                for k=2:Nz_sub-1
-                    horz_layer = (k-1)*Nx_sub+1:k*Nx_sub; % entire horizontal layer
-                    x_sub = polyA.G.nodes.coords(horz_layer, 1);                        
-                    x_min = x_sub(1);
-                    x_max = x_sub(end);
-                    dx = (x_max - x_min)/(Nx_sub-1);
-                    polyA.G.nodes.coords(horz_layer, 1) = x_min + cumsum(repmat(dx, Nx_sub, 1)) - dx;
-                end       
-            end                               
-
-            poly.(p_idx) = polyA;                
-
-            if poly_num == 25 % Only pinch-outs for poly25
-                % --- part B: upper pinch-out ---
-                polyB = Faults(all_polys, poly_num, 2, false);   
-                p_idx = strcat('p', string(poly_num), 'fB');
-                polyB.p_idx = p_idx;
-
-                polyB = Faults.pinchOutGrid(polyB, polyA, p29B, p29C, ...
-                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
-
-                poly.(p_idx) = polyB;
-
-                % --- part C: lower pinch-out ---
-                polyC = Faults(all_polys, poly_num, 2, false);   
-                p_idx = strcat('p', string(poly_num), 'fC');
-                polyC.p_idx = p_idx;
-
-                polyC = Faults.pinchOutGrid(polyC, polyA, p19B, p19C, ...
-                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
-
-                poly.(p_idx) = polyC;
-            end            
+                          
+                     
         end
    
 
@@ -320,9 +476,7 @@ classdef Faults < PolygonGrid
                 x_or_z = 2;                
             elseif strcmp(side, 'top') || strcmp(side, 'bottom')
                 x_or_z = 1;
-                %main_smallest = mean(nodes(:,1)) > mean(nodes_main(:,1));
-                %sgn_buff = main_smallest - (~main_smallest);
-                if use_buff
+                if use_buff % used for very skewed subgrids
                     buff = mean([nodes(1,1)-nodes_main(1,1), ...
                                  nodes(end,1)-nodes_main(end,1)]);
                 end
@@ -341,7 +495,8 @@ classdef Faults < PolygonGrid
             linked_idx = [linked_idx; size(nodes,1)];
 
             % Second: connect missed nodes to closest node in nodes_main
-            diff_idx = diff(linked_idx);
+            diff_idx = diff(linked_idx);            
+
             missed_idx = find(diff_idx > 1);
             missed_idx_adapt = missed_idx;
             for k=1:numel(missed_idx)
@@ -364,12 +519,8 @@ classdef Faults < PolygonGrid
 
         function poly = collapsedGrid(poly, cx, cz, Nx_sub, Nz_sub, ...
                                       part_west, part_east, part_top, part_bottom, ...
-                                      Lx_glob, Lz_glob, Nx_glob, Nz_glob, varargin)            
-            bottom_tip = true;
-            use_buff = false;
-            if nargin > 13
-                bottom_tip = varargin{1};
-            end
+                                      Lx_glob, Lz_glob, Nx_glob, Nz_glob, varargin)                        
+            use_buff = false;            
             % Determine what nodes should collapse
             if strcmp(cx, 'west')
                 nodes_cx = part_west; % collapsed horizontal side
@@ -386,7 +537,10 @@ classdef Faults < PolygonGrid
                 nodes_mz = part_top;
             end
             
-            if strcmp(poly.p_idx, 'p24fC') || strcmp(poly.p_idx, 'p23fA')
+            if strcmp(poly.p_idx, 'p24fC') || strcmp(poly.p_idx, 'p23fA') ...
+                    || strcmp(poly.p_idx, 'p25fA') || strcmp(poly.p_idx, 'p25fB') ...
+                    || strcmp(poly.p_idx, 'p25fC') || strcmp(poly.p_idx, 'p25fD') ...
+                    || strcmp(poly.p_idx, 'p31fAq')
                 use_buff = true;
             end
             
@@ -398,20 +552,16 @@ classdef Faults < PolygonGrid
                 Nz_new = numel(links_cx); 
             else
                 Nz_new = Nz_sub;
-            end
-            if strcmp(poly.p_idx, 'p25fA') || strcmp(poly.p_idx, 'p25fB') || ...
-                    strcmp(poly.p_idx, 'p25fC') || strcmp(poly.p_idx, 'p12fA') || ...
-                    strcmp(poly.p_idx, 'p31fA') || strcmp(poly.p_idx, 'p24fA')
-                Nx_new = Nx_sub;
-            elseif z_collapse
+            end            
+           
+            if z_collapse
                 [links_cz, links_mz] = Faults.collapseSides(poly, nodes_cz, nodes_mz, cz, use_buff);
                 Nx_new = numel(links_cz);
             else
                 Nx_new = Nx_sub;
             end
 
-            % Create new conform grid with collapsed points added to the dimensions                                             
-%            poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, Nx_sub, Nz_new-1);
+            % Create new conform grid with collapsed points added to the dimensions 
             poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, Nx_new, Nz_new-1);
 
             if strcmp(cx, 'west')
@@ -428,39 +578,20 @@ classdef Faults < PolygonGrid
                 cz_mask = poly.bottom_mask;
                 mz_mask = poly.top_mask;
             end
-
-            % Collapse bottom nodes into tip of fault
-            if bottom_tip
-                poly.G.nodes.coords(poly.bottom_mask, :) = repmat(part_bottom, nnz(poly.bottom_mask), 1);
-                poly.G.nodes.coords(poly.top_mask, :) = part_top;
-            elseif strcmp(poly.p_idx, 'p25fA') || strcmp(poly.p_idx, 'p25fB') || ...
-                    strcmp(poly.p_idx, 'p25fC') || strcmp(poly.p_idx, 'p12fA') || ...
-                    strcmp(poly.p_idx, 'p31fA') || strcmp(poly.p_idx, 'p24fA')
-                num_collapse = nnz(poly.bottom_mask) - size(part_bottom, 1);
-                dx_right = abs(poly.internal_east(end,1) - poly.internal_east(1,1));
-                dx_left = abs(poly.internal_west(end,1) - poly.internal_west(1,1));
-                part_bottom_orig = part_bottom;
-                if dx_right > dx_left % most irregularity on east side -> collapse on this side                    
-                    for i=1:num_collapse % duplicate/collapse bottom nodes
-                        part_bottom = [part_bottom; part_bottom_orig(end-i+1,:)];
-                    end
-                else
-                    for i=1:num_collapse
-                        part_bottom = [part_bottom; part_bottom_orig(i,:)];
-                    end
-                end
-                poly.G.nodes.coords(poly.bottom_mask, :) = part_bottom;
-                poly.G.nodes.coords(poly.top_mask, :) = part_top;
-            elseif z_collapse             
+                       
+            if z_collapse             
                 % Fix main vertical side
                 nodes_mz_new = zeros(Nx_new,2);
                 part_orig_idx = logical([1; diff(links_mz) == 1]); % if zero, we have a duplicate index indicating a collapsed node
                 nodes_mz_new(part_orig_idx,:) = nodes_mz;
-                counts = histcounts(links_mz)';
+                ulinks_mz = unique(links_mz);                
+                counts = histc(links_mz, ulinks_mz)'; % use histc, I don't understand last element of histcounts
+                %counts = histcounts(links_mz)';
                 collapsed_idx = find(counts > 1);
                 nodes_mz_new(~part_orig_idx,:) = nodes_mz(collapsed_idx, :);
                 poly.G.nodes.coords(mz_mask, :) = nodes_mz_new;
-                % Fix collapsed horizontal side -> extract collapsed points from links_cx
+                % Fix collapsed horizontal side -> extract collapsed points
+                % from links_cz
                 nodes_cz_new = nodes_cz(links_cz, :);
                 poly.G.nodes.coords(cz_mask, :) = nodes_cz_new;
             else
@@ -469,11 +600,12 @@ classdef Faults < PolygonGrid
             end
                      
             if x_collapse
-                % Fix main horizontal side (NB: remember new points added!)
+                % Fix main horizontal side (NB: new points may have been added!)
                 nodes_mx_new = zeros(Nz_new,2);
                 part_orig_idx = logical([1; diff(links_mx) == 1]); % if zero, we have a duplicate index indicating a collapsed node
                 nodes_mx_new(part_orig_idx,:) = nodes_mx;
-                counts = histcounts(links_mx)';
+                ulinks_mx = unique(links_mx);                
+                counts = histc(links_mx, ulinks_mx)';                
                 collapsed_idx = find(counts > 1);
                 nodes_mx_new(~part_orig_idx,:) = nodes_mx(collapsed_idx, :);
                 poly.G.nodes.coords(mx_mask, :) = nodes_mx_new;
@@ -486,51 +618,89 @@ classdef Faults < PolygonGrid
             end
         end
 
-        function poly = pinchOutGrid(poly, polyA, upper_N, lower_N, ...
+        function [poly_quad, poly_tri] = pinchOutGrid(poly_quad, poly_tri, upper_N, lower_N, x_tri, ...
                                      Lx_glob, Lz_glob, Nx_glob, Nz_glob)
-            part_top = upper_N.G.nodes.coords(upper_N.bottom_mask, :);      
-            part_bottom = lower_N.G.nodes.coords(lower_N.top_mask, :); 
-            part_west = part_top(ismembertol(part_top, part_bottom, 'ByRows',true), :);
-            if isempty(polyA) % pinch-out at boundary of global grid -> set east nodes manually
-                p = poly.p;
-                p_east = p(p(:,1) == max(p(:,1)), :);
-                z_min = min(p_east(:,2));
-                z_max = max(p_east(:,2));
-                Lz = z_max - z_min;
-                fac = Lz/Lz_glob;
-                Nz = ceil(poly.fac_scale*fac*Nz_glob);
-                dz = Lz/Nz;
-                z = z_min + cumsum(repmat(dz, Nz+1, 1)) - dz;
-                x = repmat(max(p(:,1)), Nz+1, 1);
-                part_east = [x,z];
-            else
-                polyA_west = polyA.G.nodes.coords(polyA.west_mask, :); % only west side overlaps with the pinch-outs
-                part_east = polyA_west(polyA_west(:,2) >= part_bottom(end,2) & ...
-                                        polyA_west(:,2) <= part_top(end,2), :); % in case additional nodes have been distributed for polyA at location of pinch-out
-            end
-            part_east = unique(part_east, 'rows'); % to avoid getting potential duplicates from collapsing nodes
-            %part_east = [part_bottom(ismembertol(part_bottom, polyA_west, 'ByRows',true), :); ...
-            %              part_top(ismembertol(part_top, polyA_west, 'ByRows',true), :)];
+            % Make quadrilateral grid
+            upper_bottom = upper_N.G.nodes.coords(upper_N.bottom_mask, :);                
+            lower_top = lower_N.G.nodes.coords(lower_N.top_mask, :);
+            % find line segment with x-coords closest to x_tri
+            [~, min_idx] = min(abs(upper_bottom(:,1)-x_tri) + abs(lower_top(:,1)-x_tri));
+            part_bottom = lower_top(min_idx:end, :);
+            part_top = upper_bottom(min_idx:end, :);
 
-            poly.top_side = part_top;
-            poly.bottom_side = part_bottom;
-            %Nx_int = 0; % start with no internal points
-            %Nx_sub = Nx_int + 2;
+            upper_east = upper_N.G.nodes.coords(upper_N.east_mask, :);
+            lower_east = lower_N.G.nodes.coords(lower_N.east_mask, :);
+            point_top_east = part_top(ismembertol(part_top, upper_east, 'ByRows',true), :);
+            point_bottom_east = part_bottom(ismembertol(part_bottom, lower_east, 'ByRows',true), :);
+           
+            point_top_west = part_top(1,:);
+            point_bottom_west = part_bottom(1,:);
+
+            p_east = [point_bottom_east; point_top_east];
+            x = p_east(:,1);
+            z = p_east(:,2);
+            z_min = min(z); z_max = max(z);
+            Lz = z_max - z_min;
+            fac = Lz/Lz_glob;
+            Nz = ceil(poly_quad.fac_scale*fac*Nz_glob);
+            dz = Lz/Nz;
+            z_interp = z_min + cumsum(repmat(dz, Nz+1, 1)) - dz;     
+            x_interp = interp1(round(z,10),x,round(z_interp,10),'linear');
+            part_east = [x_interp, z_interp];
+
+            p_west = [point_bottom_west; point_top_west];
+            x = p_west(:,1);
+            z = p_west(:,2);
+            z_min = min(z); z_max = max(z);
+            Lz = z_max - z_min;
+            dz = Lz/Nz; % use dimension of east part
+            z_interp = z_min + cumsum(repmat(dz, Nz+1, 1)) - dz;        
+            x_interp = interp1(round(z,10),x,round(z_interp,10),'linear');
+            part_west = [x_interp, z_interp];
+              
+            poly_quad.external_top = part_top;
+            poly_quad.external_west = part_west;
+            poly_quad.external_bottom = part_bottom;
+            poly_quad.external_east = part_east;
+            poly_quad.internal_east = poly_quad.external_east;
+
+            poly_quad.top_side = part_top;
+            poly_quad.bottom_side = part_bottom; 
+
             Nx_sub = max(size(part_top, 1), size(part_bottom, 1));
             Nz_sub = max(size(part_west,1), size(part_east,1));
 
-            poly = cartesianSubgrid(poly, Lx_glob, Lz_glob, Nx_glob, Nz_glob, Nx_sub, Nz_sub-1);
+            poly_quad = cartesianSubgrid(poly_quad, Lx_glob, Lz_glob, Nx_glob, Nz_glob, Nx_sub, Nz_sub-1);
             
-            poly.G.nodes.coords(poly.top_mask, :) = part_top;
-            poly.G.nodes.coords(poly.bottom_mask, :) = part_bottom;
-            poly.G.nodes.coords(poly.west_mask, :) = repmat(part_west, nnz(poly.west_mask), 1);
-            poly.G.nodes.coords(poly.east_mask, :) = part_east;
+            poly_quad.G.nodes.coords(poly_quad.top_mask, :) = part_top;
+            poly_quad.G.nodes.coords(poly_quad.bottom_mask, :) = part_bottom;
+            poly_quad.G.nodes.coords(poly_quad.west_mask, :) = part_west;
+            poly_quad.G.nodes.coords(poly_quad.east_mask, :) = part_east;
             
-            poly = interpolateInternal(poly, poly.top_mask, poly.bottom_mask, []);
+            poly_quad = interpolateInternal(poly_quad, poly_quad.top_mask, poly_quad.bottom_mask, []);
+            poly_quad.G.i = nan(poly_quad.G.cells.num, 1); % unstructured -> set to nan
+            poly_quad.G.j = nan(poly_quad.G.cells.num, 1);
+
+            % Make triangular grid
+            part_top = upper_bottom(upper_bottom(:,1) < x_tri, :);
+            part_top = flip(part_top);
+            part_bottom = lower_top(lower_top(:,1) < x_tri, :);
+            part_east = poly_quad.external_west;
+
+            poly_tri.external_top = part_top;
+            poly_tri.external_bottom = part_bottom;
+            poly_tri.internal_east = part_east;
+
+            poly_tri.bnodes = [part_top; part_bottom; part_east];
+            poly_tri.bnodes = unique(poly_tri.bnodes, 'rows', 'stable');
         end
 
         
         function poly = heterogeneousFault(all_polys, poly, fac_scale, Lx_glob, Lz_glob, Nx_glob, Nz_glob)
+            % Make composite quadrilateral-triangulated grid of bottom
+            % heteroegenous fault. 
+            % Yep, it gets pretty nasty...
+            
             % --- Upper piece: poly24 ---
             poly24 = poly.p24f;
             
@@ -538,14 +708,20 @@ classdef Faults < PolygonGrid
             polyA = Faults(all_polys, 24, fac_scale, false);
             polyA.p_idx = 'p24fA';
 
-            bottom_left_A = poly24.bnodes(8,:);
-            bottom_right_A = poly24.bnodes(end,:);
+            left_target =  [0.487, 0.720];
+            right_target = [0.508, 0.727];
+
+            dist_left = Faults.euclideanDist(left_target, poly24.bnodes);
+            dist_right = Faults.euclideanDist(right_target, poly24.bnodes);
+            [~, min_left] = min(dist_left);
+            [~, min_right] = min(dist_right);
+            bottom_left_A = poly24.bnodes(min_left, :);
+            bottom_right_A = poly24.bnodes(min_right, :);
             x = [bottom_left_A(1); bottom_right_A(1)];
             z = [bottom_left_A(2); bottom_right_A(2)];
             Lx = x(2) - x(1);
             fac = Lx/Lx_glob;
             Nx = ceil(polyA.fac_scale*fac*Nx_glob);
-            %Nx = size(poly24.external_top, 1) - 1; % num CELLS at bottom side
             dx = Lx/Nx;
             x_new = x(1) + cumsum(repmat(dx, Nx+1, 1)) - dx;
 
@@ -554,9 +730,9 @@ classdef Faults < PolygonGrid
             partA_top = findOverlappingNodes(polyA, poly.p6, 'top');
             partA_bottom = [x_new, z_new];
             p27_east = poly.p27.G.nodes.coords(poly.p27.east_mask, :);
-            partA_west = p27_east(p27_east(:,2) >= bottom_left_A(2), :);
+            partA_west = p27_east(p27_east(:,2) >= bottom_left_A(2)-eps, :);
             p17_west = poly.p17.G.nodes.coords(poly.p17.west_mask, :);
-            partA_east = p17_west(p17_west(:,2) >= bottom_right_A(2), :);
+            partA_east = p17_west(p17_west(:,2) >= bottom_right_A(2)-eps, :);
 
             polyA.internal_top = partA_top;
             polyA.internal_bottom = partA_bottom;
@@ -565,8 +741,7 @@ classdef Faults < PolygonGrid
 
             polyA = Faults.distributeAndCollapseNodes(polyA, partA_west, partA_east, ...
                                                             partA_top, partA_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p24fA = polyA;
 
@@ -576,7 +751,6 @@ classdef Faults < PolygonGrid
 
             bottom_right_B = poly24.internal_top;
             % Define remaining parts of bottom side
-            %Nx_bottom_left = size(poly.p24fA.internal_bottom,1) - size(bottom_right_B,1); % number of CELLS in bottom left part of B
             [~, xmin_idx] = min(abs(poly24.external_west(:,2) - bottom_right_B(1,2)));
             left_pt = poly24.external_west(xmin_idx, :);
             right_pt = bottom_right_B(1,:);
@@ -592,11 +766,11 @@ classdef Faults < PolygonGrid
 
             partB_bottom = [bottom_left_B; bottom_right_B];
             partB_top = partA_bottom;
-            partB_west = poly24.external_west(poly24.external_west(:,2) >= left_pt(2) & ... % bottom left of part B
-                                                poly24.external_west(:,2) <= partA_bottom(1,2), :); % top left of part B
+            partB_west = poly24.external_west(poly24.external_west(:,2) >= left_pt(2)-eps & ... % bottom left of part B
+                                                poly24.external_west(:,2) <= partA_bottom(1,2)+eps, :); % top left of part B
             partB_west = flip(partB_west); % to get in same order as coordinate masks
-            partB_east = poly24.external_east(poly24.external_east(:,2) >= min(poly24.external_east(:,2)) & ...
-                                                poly24.external_east(:,2) <= partA_bottom(end,2), :);
+            partB_east = poly24.external_east(poly24.external_east(:,2) >= min(poly24.external_east(:,2))-eps & ...
+                                                poly24.external_east(:,2) <= partA_bottom(end,2)+eps, :);
             
             polyB.internal_top = partB_top;
             polyB.internal_bottom = partB_bottom;
@@ -605,8 +779,7 @@ classdef Faults < PolygonGrid
 
             polyB = Faults.distributeAndCollapseNodes(polyB, partB_west, partB_east, ...
                                                             partB_top, partB_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p24fB = polyB; 
 
@@ -614,16 +787,12 @@ classdef Faults < PolygonGrid
             polyC = Faults(all_polys, 24, fac_scale, false);
             polyC.p_idx = 'p24fC';
             
-            partC_top = partB_bottom(partB_bottom(:,1) <= poly24.internal_top(1,1), :);
-
-            
-            %Nx_bottom_C = size(partC_top,1) - 1; % num CELLS at bottom
-            %[x_interp, z_interp] = Faults.interpFault(poly24.internal_bottom, Nx_bottom_C);
-            %partC_bottom = [x_interp, z_interp];
+            partC_top = partB_bottom(partB_bottom(:,1) <= poly24.internal_top(1,1)+eps, :);
+          
             partC_bottom = poly24.internal_bottom;
 
-            partC_west = poly24.external_west(poly24.external_west(:,2) >= partC_bottom(1,2) & ...
-                                              poly24.external_west(:,2) <= partC_top(1,2), :);
+            partC_west = poly24.external_west(poly24.external_west(:,2) >= partC_bottom(1,2)-eps & ...
+                                              poly24.external_west(:,2) <= partC_top(1,2)+eps, :);
             partC_west = flip(partC_west);
             partC_east = poly24.internal_east;
 
@@ -634,8 +803,7 @@ classdef Faults < PolygonGrid
 
             polyC = Faults.distributeAndCollapseNodes(polyC, partC_west, partC_east, ...
                                                             partC_top, partC_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p24fC = polyC;
 
@@ -647,11 +815,8 @@ classdef Faults < PolygonGrid
             polyA.p_idx = 'p9fA';
 
             partA_top = poly9.internal_top;
-            %Nx_bottom_A = size(partA_top, 1) - 1; % num CELLS, not nodes
-            %[x_interp, z_interp] = Faults.interpFault(poly9.internal_bottom, Nx_bottom_A);
-            %partA_bottom = [x_interp, z_interp];
             partA_bottom = poly9.internal_bottom;
-            partA_west = poly24.internal_east(poly24.internal_east(:,2) >= partA_bottom(1,2), :);
+            partA_west = poly24.internal_east(poly24.internal_east(:,2) >= partA_bottom(1,2)-eps, :);
             partA_east = poly9.external_east;
 
             polyA.internal_top = partA_top;
@@ -661,8 +826,7 @@ classdef Faults < PolygonGrid
 
             polyA = Faults.distributeAndCollapseNodes(polyA, partA_west, partA_east, ...
                                                             partA_top, partA_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p9fA = polyA;
 
@@ -691,8 +855,8 @@ classdef Faults < PolygonGrid
             bottom_left_A = [x_new(1:end-1), z_new(1:end-1)];
 
             partA_bottom = [bottom_left_A; bottom_right_A];
-            partA_west = poly21.internal_west(poly21.internal_west(:,2) >= bottom_left_A(1,2), :);
-            partA_east = poly21.external_east(poly21.external_east(:,2) >= bottom_right_A(end,2), :);
+            partA_west = poly21.internal_west(poly21.internal_west(:,2) >= bottom_left_A(1,2)-eps, :);
+            partA_east = poly21.external_east(poly21.external_east(:,2) >= bottom_right_A(end,2)-eps, :);
 
             polyA.internal_top = partA_top;
             polyA.internal_bottom = partA_bottom;
@@ -701,8 +865,7 @@ classdef Faults < PolygonGrid
 
             polyA = Faults.distributeAndCollapseNodes(polyA, partA_west, partA_east, ...
                                                             partA_top, partA_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p21fA = polyA;
 
@@ -721,10 +884,10 @@ classdef Faults < PolygonGrid
             partB_bottom = [x_interp, z_interp];
 
             partB_top = polyA.G.nodes.coords(polyA.bottom_mask, :);
-            partB_top = partB_top(partB_top(:,1) <= bottom_right_A(1,1), :);
+            partB_top = partB_top(partB_top(:,1) <= bottom_right_A(1,1)+eps, :);
 
-            partB_west = poly24.internal_east(poly24.internal_east(:,2) <= bottom_left_A(1,2), :);
-            partB_east = p7small_west(p7small_west(:,2) >= bottom_right_B(2), :);
+            partB_west = poly24.internal_east(poly24.internal_east(:,2) <= bottom_left_A(1,2)+eps, :);
+            partB_east = p7small_west(p7small_west(:,2) >= bottom_right_B(2)-eps, :);
 
             polyB.internal_top = partB_top;
             polyB.internal_bottom = partB_bottom;
@@ -733,8 +896,7 @@ classdef Faults < PolygonGrid
 
             polyB = Faults.distributeAndCollapseNodes(polyB, partB_west, partB_east, ...
                                                             partB_top, partB_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p21fB = polyB;
 
@@ -748,8 +910,7 @@ classdef Faults < PolygonGrid
 
             p7sG_bottom = poly.p7small.G.nodes.coords(poly.p7small.bottom_mask, :);
             bottom_right_C = p7sG_bottom(1,:);
-            dist = sqrt((bottom_right_C(1) - partC_west(:,1)).^2 + ...
-                        (bottom_right_C(2) - partC_west(:,2)).^2);
+            dist = Faults.euclideanDist(bottom_right_C, partC_west);
             [~, min_idx] = min(dist);
             bottom_left_C = partC_west(min_idx, :);
             Lx_bottom_C = bottom_right_C(1) - bottom_left_C(1);
@@ -757,9 +918,9 @@ classdef Faults < PolygonGrid
             bottom_C = [bottom_left_C; bottom_right_C];
             [x_interp, z_interp] = Faults.interpFault(bottom_C, Nx_bottom_C);           
             partC_bottom = [x_interp, z_interp];
-            partC_west = partC_west(partC_west(:,2) >= partC_bottom(1,2), :);
+            partC_west = partC_west(partC_west(:,2) >= partC_bottom(1,2)-eps, :);
 
-            partC_east = p7small_west(p7small_west(:,2) <= partC_top(end,2), :);
+            partC_east = p7small_west(p7small_west(:,2) <= partC_top(end,2)+eps, :);
 
             polyC.internal_top = partC_top;
             polyC.internal_bottom = partC_bottom;
@@ -768,8 +929,7 @@ classdef Faults < PolygonGrid
 
             polyC = Faults.distributeAndCollapseNodes(polyC, partC_west, partC_east, ...
                                                             partC_top, partC_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p21fC = polyC;
 
@@ -779,9 +939,9 @@ classdef Faults < PolygonGrid
 
             partD_top = [partC_bottom; p7sG_bottom(2:end,:)]; % 2:end to avoid duplicate nodes
             partD_bottom = poly21.internal_bottom;
-            partD_west = poly21.external_west(poly21.external_west(:,2) <= partC_bottom(1,2), :);
+            partD_west = poly21.external_west(poly21.external_west(:,2) <= partC_bottom(1,2)+eps, :);
             partD_west = flip(partD_west);
-            partD_east = poly21.external_east(poly21.external_east(:,2) <= p7sG_bottom(end,2), :);
+            partD_east = poly21.external_east(poly21.external_east(:,2) <= p7sG_bottom(end,2)+eps, :);
 
             polyD.internal_top = partD_top;
             polyD.internal_bottom = partD_bottom;
@@ -790,9 +950,7 @@ classdef Faults < PolygonGrid
 
             polyD = Faults.distributeAndCollapseNodes(polyD, partD_west, partD_east, ...
                                                             partD_top, partD_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);            
-            
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
             poly.p21fD = polyD;
                
             % --- Bottom piece: poly23 ---
@@ -803,11 +961,11 @@ classdef Faults < PolygonGrid
             polyA.p_idx = 'p23fA';
 
             partA_top = [poly.p26f.internal_bottom; poly.p22f.internal_bottom(2:end,:)];
+
             p2left_west = poly.p2left.G.nodes.coords(poly.p2left.west_mask, :);
             bottom_right_A = p2left_west(1,:);
             p3_east = poly.p3.G.nodes.coords(poly.p3.east_mask, :);
-            dist = sqrt((bottom_right_A(1) - p3_east(:,1)).^2 + ...
-                        (bottom_right_A(2) - p3_east(:,2)).^2);
+            dist = Faults.euclideanDist(bottom_right_A, p3_east);
             [~, min_idx] = min(dist);
             bottom_left_A = p3_east(min_idx, :);
             Lx_bottom_A = bottom_right_A(1) - bottom_left_A(1);
@@ -827,8 +985,7 @@ classdef Faults < PolygonGrid
 
             polyA = Faults.distributeAndCollapseNodes(polyA, partA_west, partA_east, ...
                                                             partA_top, partA_bottom, ...
-                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob, ...
-                                                            false, true);
+                                                            Lx_glob, Lz_glob, Nx_glob, Nz_glob);
 
             poly.p23fA = polyA;
 
@@ -847,20 +1004,22 @@ classdef Faults < PolygonGrid
             polyB.internal_east = partB_east;
 
             polyB.bnodes = [partB_top; partB_west; partB_east];
-            polyB.bnodes = unique(polyB.bnodes, 'rows', 'stable');
+            [~, unique_idx] = uniquetol(polyB.bnodes, 'ByRows',true);
+            polyB.bnodes = polyB.bnodes(sort(unique_idx), :);
 
             poly.p23fB = polyB;
         end
 
         function poly = distributeAndCollapseNodes(poly, part_west, part_east, part_top, part_bottom, ...
-                                                    Lx_glob, Lz_glob, Nx_glob, Nz_glob, bottom_tip, varargin)
-            part_west = unique(part_west, 'rows', 'stable'); % remove duplicating overlapping nodes
-            part_east = unique(part_east, 'rows', 'stable');
+                                                    Lx_glob, Lz_glob, Nx_glob, Nz_glob, varargin)
+            [~, unique_idx] = uniquetol(part_west, 'ByRows', true); % remove duplicating overlapping nodes
+            part_west = part_west(sort(unique_idx), :);
+            [~, unique_idx] = uniquetol(part_east, 'ByRows', true);
+            part_east = part_east(sort(unique_idx), :);          
             
             poly.top_side = part_top;
             poly.bottom_side = part_bottom;
 
-            %Nx_sub = size(part_top, 1);
             Nx_sub = max(size(part_top,1), size(part_bottom,1));
             Nz_sub = max(size(part_west,1), size(part_east,1));
             
@@ -879,98 +1038,57 @@ classdef Faults < PolygonGrid
 
             poly = Faults.collapsedGrid(poly, cside_x, cside_z, Nx_sub, Nz_sub, ...
                                          part_west, part_east, part_top, part_bottom, ...
-                                         Lx_glob, Lz_glob, Nx_glob, Nz_glob, bottom_tip);
+                                         Lx_glob, Lz_glob, Nx_glob, Nz_glob);
+
+            poly.G.i = nan(poly.G.cells.num, 1);
+            poly.G.j = nan(poly.G.cells.num, 1);
         
             if Nx_sub > 2 % collapse internal stacks according to closest side
                 Nz_sub = poly.G.cartDims(2)+1; % vertical dim may have increased if collapsed nodes added
                 Nx_sub = poly.G.cartDims(1)+1; % horizontal dim may also have changed
                 Nx_int = Nx_sub - 2;
-                interp = false;                
-                if nargin > 10
-                    interp = varargin{1};
-                end
-                           
-                   
-                if interp
-                    G_dum = poly.G;
-                    pt = unique(poly.G.nodes.coords(poly.west_mask, :), 'rows', 'stable');
-                    G_dum.nodes.coords(poly.west_mask, :) = interparc(Nz_sub, pt(:,1), pt(:,2));
-                    pt = unique(poly.G.nodes.coords(poly.east_mask, :), 'rows', 'stable');
-                    G_dum.nodes.coords(poly.east_mask, :) = interparc(Nz_sub, pt(:,1), pt(:,2));
-                    pt = unique(poly.G.nodes.coords(poly.top_mask, :), 'rows', 'stable');
-                    G_dum.nodes.coords(poly.top_mask, :) = interparc(Nx_sub, pt(:,1), pt(:,2));
-                    pt = unique(poly.G.nodes.coords(poly.bottom_mask, :), 'rows', 'stable');
-                    G_dum.nodes.coords(poly.bottom_mask, :) = interparc(Nx_sub, pt(:,1), pt(:,2));
+                
+                G_dum = poly.G;
+                west_side = poly.G.nodes.coords(poly.west_mask, :);
+                pt = unique(west_side, 'rows', 'stable');
+                G_dum.nodes.coords(poly.west_mask, :) = interparc(Nz_sub, pt(:,1), pt(:,2));                    
+                pt = unique(poly.G.nodes.coords(poly.east_mask, :), 'rows', 'stable');
+                G_dum.nodes.coords(poly.east_mask, :) = interparc(Nz_sub, pt(:,1), pt(:,2));
+                pt = unique(poly.G.nodes.coords(poly.top_mask, :), 'rows', 'stable');
+                G_dum.nodes.coords(poly.top_mask, :) = interparc(Nx_sub, pt(:,1), pt(:,2));
+                pt = unique(poly.G.nodes.coords(poly.bottom_mask, :), 'rows', 'stable');
+                G_dum.nodes.coords(poly.bottom_mask, :) = interparc(Nx_sub, pt(:,1), pt(:,2));
 
-                    for k=2:Nz_sub-1
-                        horz_layer = (k-1)*Nx_sub+1:k*Nx_sub; % entire horizontal layer
-                        subset = G_dum.nodes.coords(horz_layer, :);  
-                        x_min = subset(1,1); x_max = subset(end,1);
-                        z_min = subset(1,2); z_max = subset(end,2);
-                        x = [x_min; x_max];
-                        z = [z_min; z_max];
-                        dx = (x_max - x_min)/(Nx_sub-1);
-                        x_interp = x_min + cumsum(repmat(dx, Nx_sub, 1)) - dx;
-                        z_interp = interp1(round(x,10),z,round(x_interp,10),'linear'); % to avoid weird round-off error
-                        %poly.G.nodes.coords(horz_layer(1:end-1), :) = [x_interp(1:end-1), z_interp(1:end-1)];
-                        poly.G.nodes.coords(horz_layer(2:end-1), 1) = x_interp(2:end-1); % ONLY SET X-COORD
-                    end
-
-                    for i=2:Nx_sub-1
-                        vert_layer = i:Nx_sub:(Nz_sub-1)*Nx_sub+i; % entire vertical layer
-                        subset = G_dum.nodes.coords(vert_layer, :);  
-                        x_min = subset(1,1); x_max = subset(end,1);
-                        z_min = subset(1,2); z_max = subset(end,2);
-                        x = [x_min; x_max];
-                        z = [z_min; z_max];
-                        dz = (z_max - z_min)/(Nz_sub-1);
-                        %z_interp = poly.G.nodes.coords(vert_layer, 2);
-                        z_interp = z_min + cumsum(repmat(dz, Nz_sub, 1)) - dz;
-                        x_interp = interp1(round(z,10),x,round(z_interp,10),'linear'); % to avoid weird round-off error
-                        %poly.G.nodes.coords(vert_layer, 1) = x_interp;
-                        %poly.G.nodes.coords(vert_layer(1:end-1), :) = [x_interp(1:end-1), z_interp(1:end-1)];
-                        poly.G.nodes.coords(vert_layer(2:end-1), 2) = z_interp(2:end-1);
-                    end    
-                else
-                    % Internals: copy z-coord of modified east or west side
-                    west_side_z = poly.G.nodes.coords(poly.west_mask, 2);
-                    if numel(unique(west_side_z)) == 2 % internal node on west side is collapsed to top or bottom node -> set z-coord to midpoint between top and bottom
-                        west_int_z = (west_side_z(1)+west_side_z(end))/2;
-                    else
-                        west_int_z = west_side_z(2:end-1); % omit top and bottom nodes -> these are all fixed
-                    end                
-                    east_side_z = poly.G.nodes.coords(poly.east_mask, 2);
-                    if numel(unique(east_side_z)) == 2 %
-                        %east_int_z = (east_side_z(1)+east_side_z(end))/2;
-                        east_int_z = west_int_z;
-                    else
-                        east_int_z = east_side_z(2:end-1);
-                    end
-                    
-                    for i=1:ceil(Nx_int/2)                        
-                        poly.G.nodes.coords((i+1)+Nx_sub:Nx_sub:Nx_sub*(Nz_sub-1), 2) = west_int_z; % +Nx_sub to start at second row, not at bottom                     
-                        poly.G.nodes.coords((Nx_sub-i)+Nx_sub:Nx_sub:Nx_sub*(Nz_sub-1), 2) = east_int_z;
-                    end
-                  
-    
-                    % Internals: uniformly distribute x-coords between west
-                    % and east side
-                    for k=2:Nz_sub-1
-                        horz_layer = (k-1)*Nx_sub+1:k*Nx_sub; % entire horizontal layer
-                        x_sub = poly.G.nodes.coords(horz_layer, 1);                        
-                        x_min = x_sub(1);
-                        x_max = x_sub(end);
-    %                     if strcmp(poly.p_idx, 'p24fA')
-    %                         x_max = (min(poly.G.nodes.coords(poly.east_mask,1)) + max(poly.G.nodes.coords(poly.east_mask,1)))/2;
-    %                     end
-                        dx = (x_max - x_min)/(Nx_sub-1);
-                        horz_layer_orig = poly.G.nodes.coords(horz_layer, 1);
-                        poly.G.nodes.coords(horz_layer, 1) = x_min + cumsum(repmat(dx, Nx_sub, 1)) - dx;
-    %                     if strcmp(poly.p_idx, 'p24fA') % OR INTERPOLATE EACH STACK (EXCEPT COLLAPSED) BETWEEN TOP AND BOTTOM?
-    %                         poly.G.nodes.coords(k*Nx_sub, 1) = horz_layer_orig(end); % retain original collapsed point
-    %                     end
-                    end  
+                for k=2:Nz_sub-1
+                    horz_layer = (k-1)*Nx_sub+1:k*Nx_sub; % entire horizontal layer
+                    subset = G_dum.nodes.coords(horz_layer, :);  
+                    x_min = subset(1,1); x_max = subset(end,1);
+                    z_min = subset(1,2); z_max = subset(end,2);
+                    x = [x_min; x_max];
+                    z = [z_min; z_max];
+                    dx = (x_max - x_min)/(Nx_sub-1);
+                    x_interp = x_min + cumsum(repmat(dx, Nx_sub, 1)) - dx;
+                    z_interp = interp1(round(x,10),z,round(x_interp,10),'linear'); % to avoid weird round-off error
+                    %poly.G.nodes.coords(horz_layer(1:end-1), :) = [x_interp(1:end-1), z_interp(1:end-1)];
+                    poly.G.nodes.coords(horz_layer(2:end-1), 1) = x_interp(2:end-1); % ONLY SET X-COORD
                 end
+
+                for i=2:Nx_sub-1
+                    vert_layer = i:Nx_sub:(Nz_sub-1)*Nx_sub+i; % entire vertical layer
+                    subset = G_dum.nodes.coords(vert_layer, :);  
+                    x_min = subset(1,1); x_max = subset(end,1);
+                    z_min = subset(1,2); z_max = subset(end,2);
+                    x = [x_min; x_max];
+                    z = [z_min; z_max];
+                    dz = (z_max - z_min)/(Nz_sub-1);
+                    %z_interp = poly.G.nodes.coords(vert_layer, 2);
+                    z_interp = z_min + cumsum(repmat(dz, Nz_sub, 1)) - dz;
+                    x_interp = interp1(round(z,10),x,round(z_interp,10),'linear'); % to avoid weird round-off error
+                    %poly.G.nodes.coords(vert_layer, 1) = x_interp;
+                    %poly.G.nodes.coords(vert_layer(1:end-1), :) = [x_interp(1:end-1), z_interp(1:end-1)];
+                    poly.G.nodes.coords(vert_layer(2:end-1), 2) = z_interp(2:end-1); % ONLY SET Z-COORD
+                end    
+            
             end
                         
         end
@@ -983,6 +1101,11 @@ classdef Faults < PolygonGrid
             dx = (x(2) - x(1))/Nx_side;
             x_interp = x(1) + cumsum(repmat(dx, Nx_side+1, 1)) - dx;
             z_interp = interp1(round(x,10), z, round(x_interp,10), 'linear');
+        end
+
+        function dist = euclideanDist(pt, line)
+            dist = sqrt((pt(1) - line(:,1)).^2 + ...
+                        (pt(2) - line(:,2)).^2);
         end
 
    end

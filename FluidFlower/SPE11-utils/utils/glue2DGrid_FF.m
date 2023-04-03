@@ -131,8 +131,9 @@ function G = concatenate_grids(G1, G2)
    % cells
    G.cells.num = G1.cells.num + G2.cells.num;
    G.cells.facePos = [G1.cells.facePos; G2.cells.facePos(2:end) + G1.cells.facePos(end)-1];
-   G.cells.faces = [G1.cells.faces(:,1)', G2.cells.faces(:,1)' + G1.faces.num; ...
-                    G1.cells.faces(:,2)', G2.cells.faces(:,2)']';
+   G.cells.faces = [G1.cells.faces(:,1)', G2.cells.faces(:,1)' + G1.faces.num]';
+%    G.cells.faces = [G1.cells.faces(:,1)', G2.cells.faces(:,1)' + G1.faces.num; ...
+%                     G1.cells.faces(:,2)', G2.cells.faces(:,2)']';
    G.cells.indexMap = []; % @@ unused, but added for backwards compatibility
 
    % other
@@ -172,7 +173,7 @@ function G = ensure_conformal_boundaries(targetgrid, othergrid, tol)
 
    % inserting new nodes and faces
    G = targetgrid;
-   %G.cells.faces = G.cells.faces(:,1); % remove 'tags'
+   G.cells.faces = G.cells.faces(:,1); % remove 'tags'
    unique_ifaces = unique(ifaces);
 
    for ui = reshape(unique_ifaces, 1, [])
@@ -215,10 +216,10 @@ function G = ensure_conformal_boundaries(targetgrid, othergrid, tol)
       f_ix = find(G.cells.faces(:,1) == ui);  assert(numel(f_ix) == 1);
       G.cells.faces = [G.cells.faces(1:f_ix-1, 1);
                        (old_facenum + 1 : old_facenum + num_new_pts + 1)';
-                       G.cells.faces(f_ix+1:end, 1), ...
-                       G.cells.faces(1:f_ix-1, 2);
-                       
-                       G.cells.faces(f_ix+1:end, 2)];
+                       G.cells.faces(f_ix+1:end, 1)];
+    %                   G.cells.faces(1:f_ix-1, 2);
+    %                   ones(num_new_pts+1,1); % ! JUST ADD SOME DUMMY ORIENTIATIONS !
+    %                   G.cells.faces(f_ix+1:end, 2)];
       facenums(cell) = facenums(cell) + num_new_pts;
       G.cells.facePos = cumsum([1; facenums(:)]);
    end
@@ -336,8 +337,8 @@ function G = merge_all_faces(G, mfaces)
    reindex(mfaces(:, 1)) = mfaces(:,2);   
    G.cells.faces(:,1) = reindex(G.cells.faces(:,1));
    %reindex2 = G.cells.faces(:,2);
-   G2_mf2 = G.cells.faces(mfaces(:,2), 2);
-   G.cells.faces(mfaces(:,1), 2) = G2_mf2;
+   %G2_mf2 = G.cells.faces(mfaces(:,2), 2);
+   %G.cells.faces(mfaces(:,1), 2) = G2_mf2;
 end
 
 %--------------------------------------------------------------------------
@@ -379,17 +380,31 @@ function mergefaces = identify_mergefaces(loop1, loop2, cnodes, offset, varargin
       % --- Modified! ---
       node_match1 = cnodes(cnodes(:,1) == nodes1(2), 2);
       node_match2 = cnodes(cnodes(:,1) == nodes1(1), 2);      
-      nodes2 = [node_match1(end), ...
-                node_match2(end)];
-      % -----------------
+      % Loop through all possible combinations of node_match1 and
+      % node_match2 and use the pair that makes numel(f2_cur) >= 0, 
+      % i.e. the correct node set for collapsed cells.
+      for i=1:size(node_match1, 1)
+          for j=1:size(node_match2, 1)
+              nodes2 = [node_match1(i), ...
+                        node_match2(j)];
+     
+              f2_cur = find(prod(fnodes2 == nodes2, 2));
+      
+              if numel(f2_cur) ~= 1          
+                  % triangulated parts: flip nodes
+                  f2_cur = find(prod(fnodes2 == flip(nodes2), 2));
+              end
+              if numel(f2_cur) == 1
+                  break;
+              end                 
 
-      f2_cur = find(prod(fnodes2 == nodes2, 2));
-      % --- Modified! ---
-      if numel(f2_cur) ~= 1          
-          % triangulated parts: flip nodes
-          f2_cur = find(prod(fnodes2 == flip(nodes2), 2));
+          end
       end
       % -----------------
+      if numel(f2_cur) ~= 1
+          % don't merge collpsed face - this is not shared by both grids!
+          continue;
+      end
       assert(numel(f2_cur) == 1); % there should be exactly one matching face
 
       mergefaces = [ mergefaces; ...
@@ -425,13 +440,20 @@ function loop = boundary_loop(G)
 % counterclockwise order
 
    % identify all boundary faces
-   bfaces = find(any(G.faces.neighbors == 0, 2));
+   bfaces_dum = find(any(G.faces.neighbors == 0, 2));
+   if size(G.cells.faces, 2) == 1 % just make a dummy column (necessary to compute geometry)
+       G.cells.faces = [G.cells.faces(:,1), ones(size(G.cells.faces, 1), 1)];
+   end
+   G = computeGeometry(G);
+   bfaces = find(any(G.faces.neighbors == 0, 2) & G.faces.areas > 1e-10); % NB: important to include buffer to handle round-off errors
 
    % all faces should have exactly two nodes
    assert(unique(diff(G.faces.nodePos)) == 2);
 
    bnodes = reshape(G.faces.nodes, 2, [])';
+   bnodes_dum = bnodes(bfaces_dum,:);
    bnodes = bnodes(bfaces,:);
+   bnodes_collapsed = bnodes_dum(~ismember(bnodes_dum, bnodes, 'rows'), :);   
 
    % loop as long as there are remaining faces
    n_indices = bfaces * 0;
@@ -444,6 +466,13 @@ function loop = boundary_loop(G)
 
    count = 1;
    fix = 1;
+
+   % --- Modified ---
+   % Only select DIFFERENT node pairs, not the same (indicating collapsed
+   % nodes)
+   bnodes = bnodes(bnodes(:,1) ~= bnodes(:,2), :);
+   bfaces = bfaces(bnodes(:,1) ~= bnodes(:,2));
+   % ----------------
 
    while true
       if n_indices(count) == bnodes(fix, 1)
@@ -458,21 +487,63 @@ function loop = boundary_loop(G)
       bnodes(fix,:) = nan;
 
       fix = find(sum(bnodes == n_indices(count), 2), 1);      
-      
-      f_indices(count) = bfaces(fix);   
+            
+      if isempty(fix)
+          % if bnodes(fix, side) not found elsewhere in bnodes, this is a
+          % collapsed node whose associated face should not be included in
+          % boundary loop. Retrieve neighbor nodes sequentially until
+          % we find a "good" (non-collapsed) neighbor.
+          brow = any(ismember(bnodes_collapsed, n_indices(count)), 2);
+          collapsed_set = bnodes_collapsed(brow, :);
+          good_node = collapsed_set(collapsed_set ~= n_indices(count)); 
 
-      bfaces(fix) = nan;
-      if all(isnan(bfaces))
+          good_nodes = ismember(bnodes_collapsed, good_node);
+          num_candidates = nnz(good_nodes);
+          while num_candidates > 1
+              % For multiple collapsed nodes at same location, only select
+              % last ("good") collapsed node (at end of collapsed sequence), 
+              % since this one continues the boundary loop.
+               good_nodes = any(ismember(bnodes_collapsed, good_node), 2) + brow;
+               collapsed_other = bnodes_collapsed(good_nodes == 1, :);                  
+               good_node_other = collapsed_other(any(ismember(collapsed_other, good_node),2), :);
+               good_node_other = good_node_other(good_node_other ~= good_node);
+
+               good_nodes = ismember(bnodes_collapsed, good_node_other);
+               num_candidates = nnz(good_nodes);
+               brow = any(ismember(bnodes_collapsed, good_node), 2);
+               good_node = good_node_other;
+               % if this is remaining candidate, this is the good node
+          end         
+
+          bfaces(fix) = nan;                 
+          fix = find(sum(bnodes == good_node, 2), 1);
+
+          if nnz(~isnan(bfaces)) == 1
+            fix = find(~isnan(bfaces));
+          else
+            f_indices(count) = bfaces(fix);
+            n_indices(count) = good_node; 
+            
+          end
+      else
+          f_indices(count) = bfaces(fix);         
+          bfaces(fix) = nan;
+      end     
+      
+      if all(isnan(bfaces)) || all(ismember(bfaces(~isnan(bfaces)), f_indices))
          break;
       end
    end
 
-   if ~all(isnan(bfaces))
+   if ~all(isnan(bfaces)) && ~all(ismember(bfaces(~isnan(bfaces)), f_indices))
       % @@ support shouldn't be too hard to implement if needed
       error('Internal boundaries not yet supported');
-   end
+   end 
+
 
    % ensure clockwise orientation
+   n_indices = n_indices(n_indices > 0);
+   f_indices = f_indices(n_indices > 0);
    xy = G.nodes.coords(n_indices, :);
 
    if loop_orientation(xy(:,1), xy(:,2)) < 0

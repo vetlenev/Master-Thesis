@@ -127,8 +127,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     %pW = pW_center - isVE.*rhoW.*g.*G.cells.height/2; %  center -> top       
     
     % --- Accounting for residual sat in coarse model ---       
-    swr = f.krPts.w(1);   
-    snr = f.krPts.g(1);
+    swr = f.krPts.w(3,2);   
+    snr = f.krPts.g(3,2);
     
     if ~isfield(state0, 'vGsum')
         state0.vGsum = zeros(size(model.operators.N, 1), 1); % initially zero fluxes by default
@@ -146,15 +146,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
        state0.h_B = zeros(size(state0.sGnve));
        state0.h = zeros(size(state0.sGnve));
     end
-       
-    % Get cells partly residual filled and fully residual filled *from below*
-    %[c_prf, c_frf] = getResidualFilledCells(model, sG, state0.vGsum); % CHANGED FROM sG to sgMax !!
-    %[c_prf, c_mrf, c_frf] = getResidualFilledCellsMob(model, pv0, bG0, sG0, sgMax, state0.vGsum); % [partly residual filled, mobile residual filled, fully residual filled]    
-    
-    %sg = value(sG); % to avoid ADI/double warning when using sG for caluclations   
-    %[vW, vG, mobW, mobG, upcw, upcg, pG, ...
-    %    h, h_T, h_B, hHi_state, hBHi_state] = computeHybridFluxesVEboundary(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsum_sMax, cB, veB, cH, veH);
-    %[vW, vG, mobW, mobG, upcw, upcg] = computeHybridFluxesVEres(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, c_prf, c_frf);  
+        
     [vW, vG, mobW, mobG, upcw, upcg, ...
         h, h_max, h_T, h_B, cellsBH, hHi_state, hBHi_state] = computeHybridFluxes_FF(model, pW, sG, muW, muG, rhoW, rhoG, trans, sgMax, state0.vGsum, state0.vGsum_sMax, cB, veB, cH, veH);
             

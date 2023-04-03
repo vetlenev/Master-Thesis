@@ -77,8 +77,12 @@ classdef PolygonGrid
             Lz_max = mean(poly_t(:,2));
             Lz = Lz_max - Lz_min;
 
-            if nargin > 6
+            if nargin == 7
                 Nz = varargin{1};
+            elseif nargin > 7
+                fac_scale = varargin{2};
+                fac = fac_scale*Lz/Lz_glob;
+                Nz = ceil(fac * Nz_glob);
             else
                 fac = Lz/Lz_glob;
                 Nz = ceil(fac * Nz_glob);
