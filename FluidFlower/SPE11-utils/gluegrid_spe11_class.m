@@ -10,8 +10,10 @@ filename = 'draft_spe11_with_facies_markers.geo';
 %% Directory and seed
 rootdir = strrep(ROOTDIR, '\', '/');
 % NB: change this to your local path to FluidFlower folder
+simtype_dir = 'hybrid/extended/';
+output_filename = 'sealing_1_7_regions_muchCO2';
 data_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/data');
-plot_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/output/hybrid/extended/sealing_1_3_7_regions/');
+plot_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/output/', simtype_dir, output_filename, '/');
 mkdir(data_dir);
 mkdir(plot_dir);
 
@@ -475,7 +477,7 @@ fault_buffer = [fault_buffer; imperm_fault];
 fault_buffer = fault_buffer(~ismember(fault_buffer, nan_cells));
 
 %% Some plotting
-if true
+if false
     figure(3)
     %colormap('jet')
     plotGrid(Gg)    
@@ -546,9 +548,10 @@ end
 allSealingCells = {}; % cell-indices for sealing cells
 allSealingBFaces = {}; % boundary faces of sealing cells
 allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis)
-allLayersBFaces = {};
+allLayersBottom = {};
+allLayersCells = {};
 
-lowperm_facie = [1,4,7];
+lowperm_facie = [1,7]; % [1,4,7]
 
 lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
 if ismember(lowperm_facie, 1) % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
@@ -576,7 +579,9 @@ for i=1:numel(poly_idxs_new)
         allSealingBFaces = cat(2, allSealingBFaces, sealing_faces);
         allSealingBottom = cat(2, allSealingBottom, bottom_faces);
     end
-    allLayersBFaces = cat(2, allLayersBFaces, sealing_faces);
+    allLayersCells = cat(2, allLayersCells, sealing_cells);
+    allLayersBottom = cat(2, allLayersBottom, bottom_faces);    
+    %allLayersBottom.(pidx) = bottom_faces;
 end
 
 allSealingCells = vertcat(allSealingCells{:}); % no sealing cells if only face constraint
@@ -584,14 +589,13 @@ isFine.sealingCells = false(Gg.cells.num, 1);
 isFine.sealingCells(allSealingCells) = true;
 
 allSealingBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allSealingBFaces{:}));
-allLayersBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayersBFaces{:}));
-%allSealingBFaces = vertcat(allSealingBFaces{:});
+allLayersBottom_rem = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayersBottom{:}));
+
 isFine.sealingBFaces = false(Gg.faces.num, 1);
 isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
 
 isFine.layersBFaces = false(Gg.faces.num, 1);
-isFine.layersBFaces(allLayersBFaces) = true; % bounding faces of sealing cells
-
+isFine.layersBFaces(allLayersBottom_rem) = true; % bounding faces of sealing cells
 
 isFine.sealingBottom = allSealingBottom;
 
@@ -607,17 +611,17 @@ jj = Gg.j;
 % dt = ds.step.val;
 % t = cumsum(dt);
 % tot_time = t(end);
-tot_time = 18*hour; % 5*day
-t_control2 = 2*hour;% 2.5*hour;
-t_control3 = 4*hour; % 5*hour;
-dt1 = rampupTimesteps(t_control2, t_control2/70, 10); % t_control2/70
-dt2 = rampupTimesteps(t_control3-t_control2, (t_control3-t_control2)/70, 12); % (t_control3-t_control2)/120
-dt3 = rampupTimesteps(tot_time-t_control3, (tot_time-t_control3)/70, 12); % (tot_time-t_control3)/120
+tot_time = 2*day; % 5*day % 18*hour
+t_control2 = 5*hour;% 2.5*hour; % 2*hour
+t_control3 = 10*hour; % 5*hour; % 4*hour
+dt1 = rampupTimesteps(t_control2, t_control2/120, 10); % t_control2/70 % 100
+dt2 = rampupTimesteps(t_control3-t_control2, (t_control3-t_control2)/120, 12); % (t_control3-t_control2)/120 % 100
+dt3 = rampupTimesteps(tot_time-t_control3, (tot_time-t_control3)/100, 12); % (tot_time-t_control3)/120 % 70
 dt = [dt1; dt2; dt3];
 t = cumsum(dt);
 
-inj_rate_W1 = 1.6*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
-inj_rate_W2 = 1.6*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
+inj_rate_W1 = 3.5*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
+inj_rate_W2 = 3.5*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
 
 xc = Gg.cells.centroids(:,1);
 zc = Gg.cells.centroids(:,2);
@@ -664,8 +668,8 @@ schedule.step.control(t > t_control3) = 3;
 nearWell = false(Gg.cells.num, numel(W));
 openBC = false(Gg.cells.num, 1);
 
-horzWellDistRate = [0.06, 0.12]; % [0.03, 0.08] % ratio of total horizontal length considered "close" to well
-vertWellDistRate = [0.1, 0.15]; % [0.06, 0.12]
+horzWellDistRate = [0.05, 0.10]; % [0.03, 0.08] % ratio of total horizontal length considered "close" to well
+vertWellDistRate = [0.08, 0.12]; % [0.06, 0.12]
 for i = 1:numel(W)
     c = W(i).cells(1);
     hdist_i = abs(ii - ii(c)); 
@@ -705,6 +709,19 @@ end
 z = max(Gg.faces.centroids(:,2)) - Gg.cells.centroids(:,2);
 state0 = initResSol(Gg, 1.013e5*Pascal + fluid.rhoWS*norm(gravity)*z, [1,0]); % atmospheric pressure
 
+%% VE-to-VE vertical transition between facies
+external_faces = find(all(gN == 0, 2));
+gN_int = find(all(gN ~= 0, 2)); % interior neighbors
+gN1_int = gN(gN_int, 1);
+gN2_int = gN(gN_int, 2);
+
+facies_transition = zeros(Gg.faces.num, 1);
+facies_transition(gN_int) = Gg.facies(gN1_int) ~= Gg.facies(gN2_int);
+%facies_transition(gN_ext) = 1;
+
+isFine.faciesFaces = logical(facies_transition);
+faciesFaces = find(isFine.faciesFaces);
+
 %% Convert to hybrid model
 %Gg.cells.volumes(Gg.cells.volumes == 0) = eps;
 %model = TwoPhaseFluidFlowerModel(Gg, rock, fluid, 1, 1, 'useCNVConvergence', true);
@@ -718,6 +735,7 @@ remFineFaces = find(any(isFine.wellFaces,2) | isFine.bcFaces);
 faultFaces = find(isFine.faultFaces | isFine.bufferFaces);
 otherFineFaces = unique([remFineFaces; faultFaces]);
 [model_hybrid, model_coarse] = convertToHybridModel_FF(model, isFine.allFineCells, ...
+                                                        'sealingFaces', faciesFaces, ...
                                                         'otherFineFaces', otherFineFaces, ...                                                    
                                                         'sealingCells', sealingCells, ...
                                                         'sealingBFaces', isFine.sealingBFaces, ...
@@ -728,19 +746,12 @@ otherFineFaces = unique([remFineFaces; faultFaces]);
 Gh = model_hybrid.G;
 Gf = model.G;
 
-%% Assign hybrid facies
-hybrid_facies = zeros(Gh.cells.num, 1);
-ufac = unique(Gf.facies);
-% gc == Gf.cells.indexMap
-for i=1:numel(ufac)
-    fac = ufac(i);
-    hybrid_cells = Gh.partition(Gf.facies == fac);
-    hybrid_facies(hybrid_cells) = fac;
-end
-Gh.facies = hybrid_facies;
 
 %% Plot discretized grid
-fafa = [find(isFine.sealingBFaces); find(isFine.bufferFaces); find(any(isFine.wellFaces,2))];
+bc_faces = find(any(Gg.faces.neighbors == 0, 2));
+fafa = [find(isFine.faciesFaces); find(isFine.sealingBFaces); ...
+        find(isFine.bufferFaces); find(any(isFine.wellFaces,2)); ...
+        bc_faces; external_faces];
 
 f4 = figure(4);
 clf(4)
@@ -751,7 +762,7 @@ plotCellData(Gg, disc(ph),'edgealpha', 0)
 plotOutlinedGrid(Gg, W, bc, isFine.sealingBFaces | any(isFine.wellFaces,2) | isFine.faultFaces | isFine.bufferFaces | isFine.bcFaces);
 hold on
 plotFaces(Gf, fafa, 'edgecolor', 'yellow')
-cmap = colorcube(30000);
+cmap = colorcube(12500);
 %cmap= 'jet';
 colormap(cmap)
 xlabel('[m]')
@@ -759,7 +770,7 @@ ylabel('[m]')
 xlim([0,2.8])
 ylim([0,1.2])
 
-saveas(f4, strcat(plot_dir, 'hybrid_partition'), 'png');
+%saveas(f4, strcat(plot_dir, 'hybrid_partition'), 'png');
 
 %% Upscale settings
 schedule_hybrid = upscaleSchedule(model_hybrid, schedule);
@@ -768,9 +779,24 @@ nls = NonLinearSolver('maxIterations', 70);
 nls.useRelaxation = true;
 nls.maxTimestepCuts = 8;
 
-%% Simulate!
-[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+%% Simulate hybrid!
+%[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hybrid, ...
+                                    strcat('FF/', simtype_dir), 'NonLinearSolver', nls, 'Name', output_filename);
+
+[ok, status] = simulatePackedProblem(problem_hybrid);
+
+[ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
+
+%% Simulate fine!
 %[ws, states] = simulateScheduleAD(state0, model, schedule, 'NonLinearSolver', nls);
+
+% problem = packSimulationProblem(state0, model, schedule, ...
+%                                     strcat('FF/', simtype_dir), 'NonLinearSolver', nls, 'Name', output_filename);
+% 
+% [ok, status] = simulatePackedProblem(problem);
+% 
+% [ws, states, report] = getPackedSimulatorOutput(problem);
 
 %% Plot relaxed VE columns
 figure()
@@ -783,15 +809,14 @@ hold on
 plotFaces(Gf, find(isFine.sealingBFaces), 'edgecolor', 'red', 'linewidth', 1.5);
 
 %% Reconstruct fine state
-states_hybrid_fs = convertHybridStates_test(model_hybrid, model, states_hybrid);
-%states_hybrid_fs = convertHybridStates_FF(model_hybrid, model, states_hybrid);
+%states_hybrid_fs = convertHybridStates_test(model_hybrid, model, states_hybrid);
+states_hybrid_fs = convertHybridStates_FF(model_hybrid, model, states_hybrid);
 
 %% Plot settings
-
 c1 = [255, 255, 255]/255;
 c2 = [48, 37, 255]/255;
 c3 = [0, 255, 0]/255;
-cc = interp1([0; 1e-5; 1], [c1; c2; c3], (0:0.01:1)');
+cc = interp1([0; 1e-5; 1], [c1; c2; c3], (0:0.001:1)');
 % c1 = [48, 37, 255]/255;
 % c2 = [0, 255, 0]/255;
 % cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
@@ -806,6 +831,10 @@ t3 = t3(end);
 
 swr = fluid.krPts.w(3,2);
 %% Plot hybrid
+fafap = [find(isFine.faciesFaces); find(isFine.sealingBFaces); ...
+        find(isFine.bufferFaces)];
+W1_faces = Gg.cells.faces(Gg.cells.facePos(W1_cell):Gg.cells.facePos(W1_cell+1), 1);
+W2_faces = Gg.cells.faces(Gg.cells.facePos(W2_cell):Gg.cells.facePos(W2_cell+1), 1);
 
 for i = [t1, t2, t3]
     f5 = UtilFunctionsFF.fullsizeFig(5); clf(5)     
@@ -813,29 +842,32 @@ for i = [t1, t2, t3]
     plotFaces(Gh, (1:Gh.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on
     %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    %colormap(cc); caxis([0, 1-swr]); 
+    colormap(cc); 
+    %caxis([0, 1-swr]); 
     caxis([0, max(states_hybrid{end}.sGmax)])
     colorbar('location','southoutside');
     axis tight off
     title({'Hybrid saturation', sprintf('hour: %.1f',t(i))})   
     %setDaspect(run3D, standard);
-    saveas(f5, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
+    %saveas(f5, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
 end
 
-for i = [t1, t2, t3]
+for i = [t1, t2, t3] % 1:20:numel(states_hybrid_fs)
     f6 = UtilFunctionsFF.fullsizeFig(6); clf(6)
     %f1 = figure(1); clf
     plotCellData(Gf, states_hybrid_fs{i}.s(:,2), 'edgec', 'none');
     plotFaces(Gf, (1:Gf.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on
-    plotFaces(Gf, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    %colormap(cc); caxis([0, 1-swr]); 
+    plotFaces(Gf, fafap, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
+    plotFaces(Gf, [W1_faces; W2_faces], 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 2)
+    colormap(cc); 
+    %caxis([0, 0.1]); 
     caxis([0, max(states_hybrid_fs{end}.sGmax)]);
     colorbar('location','southoutside');
     axis tight off
     title({'Reconstructed fine-scale saturation', sprintf('hour: %.1f',t(i))})   
     %setDaspect(run3D, standard);
-    saveas(f6, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
+    %saveas(f6, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
 end
 
 %% Fine-scale solution
@@ -851,8 +883,72 @@ for i = [t1, t2, t3]
     axis tight off
     title({'Full-dimensional saturation', sprintf('hour: %.1f',t(i))})   
     %setDaspect(run3D, standard);
-    %saveas(f7, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
+    saveas(f7, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
 end
+
+
+%% Hybrid trap analysis
+Gsi = {}; Gfi = {}; Gts = {};
+cmaps = {}; fmaps = {}; nmaps = {};
+cmapf = {}; fmapf = {}; nmapf = {};
+tas = {};
+
+top_cells = Gf.cells.indexMap(Gf.j == min(Gf.j)); % global top surface
+bf = boundaryFaces(Gf);
+all_top_faces = zeros(numel(top_cells), 4);
+for i=1:numel(top_cells)
+    all_top_faces(i,:) = Gf.cells.faces(Gf.cells.facePos(top_cells(i)):Gf.cells.facePos(top_cells(i)+1)-1, 1);
+end
+top_faces = all_top_faces(:,4); % faces with normal vector pointing upwards
+bf_bc = intersect(bf, bc.face); % boundary faces with open bc
+top_faces_closed = top_faces(~ismember(top_faces, bf_bc)); % only extract global top surface faces NOT given as open boundary
+
+if ~isempty(top_faces_closed)
+    [Gs_glob, cmap_glob, fmap_glob, ~] = ExtractLayerSubgrid_FF(Gf, Gh, top_faces_closed, ...
+                                                                allLayersCells, allLayersBottom); % cell constraints, face constraints
+else
+    Gs_glob = [];
+    cmap_glob = [];
+    fmap_glob = [];
+end
+
+%% 
+poly_idxs_trap = cell(numel(poly_idxs_new), 2);
+for i=1:numel(poly_idxs_new)
+    poly_idxs_trap{i,1} = poly_idxs_new{i};
+end
+
+%% Subgrids and traps for VE top surfaces
+for i=1:numel(allLayersBottom)
+    subfaces = allLayersBottom{i}; % bottom faces of sealing layer    
+    pidx = string(poly_idxs_new{i});
+
+    [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid_FF(Gf, Gh, subfaces, pidx, ...
+                                                    [], allLayersBottom);  % allLayersCells
+    
+    Gs_fields = fieldnames(Gs);
+    for k=1:numel(Gs_fields)        
+        %pidx_k = strcat(pidx, '_', string(k));
+        pidx_k = Gs_fields{k};
+        gs = Gs.(pidx_k);
+        cm = cmap.(pidx_k); fm = fmap.(pidx_k); cm = cmap.(pidx_k);
+
+        if any(gs.cells.num) % only append non-zero subgrids
+            Gsi = cat(1, Gsi, gs); % subgrid for VE regions
+            Gtsi = topSurfaceGrid_FF(gs); % top surface of subgrid
+            tai = trapAnalysis(Gtsi, true);
+            Gts = cat(1, Gts, Gtsi);
+            tas = cat(1, tas, tai);
+            cmaps = cat(1, cmaps, cm);
+            fmaps = cat(1, fmaps, fm);
+            nmaps = cat(1, nmaps, nm);
+        end    
+    end
+end
+
+Gs_all = [Gs_glob; Gsi]; % [{Gs_glob}; Gsi];
+cmaps_all = [cmap_glob; cmaps];
+fmaps_all = [fmap_glob; fmaps];
 
 
 %% FUNTCION DEFINTIONS

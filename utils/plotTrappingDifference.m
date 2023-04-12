@@ -1,4 +1,5 @@
-function [max_diff, max_diff_year] = plotTrappingDifference(ax, report_hybrid, report_fine, varargin)
+function [max_diff, max_diff_year, max_CO2, ...
+            sum_diff, sum_CO2] = plotTrappingDifference(ax, report_hybrid, report_fine, varargin)
 % Generate a trapping inventory plot from a simulation result.  
 % 
 % The simulation result (set of states) first needs to be repackaged using the
@@ -56,17 +57,26 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     mass_fine = reshape([report_fine.masses]',8, [])';  
     mass_hybrid = reshape([report_hybrid.masses]',8, [])'; 
-    mass_diff = convertTo(abs(mass_fine - mass_hybrid), mega*kilo);
+    mass_diff = convertTo(abs(mass_fine - mass_hybrid), mega*kilo);  
 
-    [max_diff, max_diff_year] = max(sum(mass_diff, 2));
-    max_diff_year = t_hist(max_diff_year)/year();
-    mass_diff = mass_diff./max_diff*100;
-    
+    max_diff = struct; % max difference for each trap category
+    max_diff_year = struct; % year at which max difference occurred
+    max_CO2 = struct; % max CO2 mass for each trap category (fine-scale reference)
+    sum_diff = struct;
+    sum_CO2 = struct;
+    % Total mass
+    [max_diff_tot, max_CO2_tot, year_tot, ...
+        sum_diff_tot, sum_CO2_tot] = computeTrapCategory(mass_diff, mass_fine, t_hist);
+    max_diff.tot = max_diff_tot;
+    max_diff_year.tot = year_tot;
+    max_CO2.tot = max_CO2_tot;
+    sum_diff.tot = sum_diff_tot;
+    sum_CO2.tot = sum_CO2_tot;
+
     % Permuting volumes to comply with the ordering we want for reporting
     P = [1 2 3 4 6 5 7 8];
     mass_diff = mass_diff(:,P);
-
-    % Checking if subscale trapping and dissolution is present
+     % Checking if subscale trapping and dissolution is present
     sum_tmp = sum(mass_diff);
     skip_subscale = (sum_tmp(5) == 0);
     skip_dissolution = (sum_tmp(1) == 0);
@@ -75,7 +85,31 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
     if skip_dissolution
         names(1) = [];
-    end
+    end   
+
+    % Structural plume
+    trap_category = {'dis', 'struct_res', 'res', 'free_res', 'struct_sub', 'struct_mob', 'free_mob', 'exit'};
+    for i=1:size(mass_diff,2)
+        if (skip_dissolution && i==1) || (skip_subscale && i==4) % i==5
+            max_diff.(trap_category{i}) = [];
+            max_diff_year.(trap_category{i}) = [];
+            max_CO2.(trap_category{i}) = [];
+            sum_diff.(trap_category{i}) = [];
+            sum_CO2.(trap_category{i}) = [];
+        else
+            mass_diff_i = mass_diff(:,i);
+            mass_fine_i = mass_fine(:,i);
+            [max_diff_i, max_CO2_i, year_i, ...
+                sum_diff_i, sum_CO2_i] = computeTrapCategory(mass_diff_i, mass_fine_i, t_hist);
+            max_diff.(trap_category{i}) = max_diff_i;
+            max_diff_year.(trap_category{i}) = year_i;
+            max_CO2.(trap_category{i}) = max_CO2_i;
+            sum_diff.(trap_category{i}) = sum_diff_i;
+            sum_CO2.(trap_category{i}) = sum_CO2_i;
+        end
+    end       
+
+    mass_diff = mass_diff./max_diff_tot*100; % !!!      
     
     % Plotting trapping history
     area(ax, ...
@@ -118,4 +152,22 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     legend(names, ...
            'location', opt.legend_location, ...
            'orientation', opt.legend_orientation);
+end
+
+function [max_diff, max_CO2, max_diff_year, ...
+            sum_diff, sum_CO2] = computeTrapCategory(mass_diff, mass_fine, t_hist)
+    mass_fine = convertTo(mass_fine, mega*kilo);
+    if size(mass_diff, 2) > 1 % compute net mass from all trap categories
+        [max_diff, max_diff_year] = max(sum(mass_diff, 2));
+        max_CO2 = sum(mass_fine, 2);
+        sum_diff = sum(sum(mass_diff, 2));       
+        sum_CO2 = sum(sum(mass_fine, 2));
+    else
+        [max_diff, max_diff_year] = max(mass_diff);
+        max_CO2 = mass_fine;
+        sum_diff = sum(mass_diff);
+        sum_CO2 = sum(mass_fine);
+    end
+    max_CO2 = max_CO2(max_diff_year);
+    max_diff_year = t_hist(max_diff_year)/year();    
 end

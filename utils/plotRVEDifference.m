@@ -1,4 +1,4 @@
-function [max_diff, max_diff_year] = plotRVEDifference(ax, vols_hybrid, vols_fine, t, discr_region, varargin)
+function [max_diff, max_diff_year, max_CO2] = plotRVEDifference(ax, vols_hybrid, vols_fine, t, discr_region, varargin)
 % Generate a trapping inventory plot from a simulation result.  
 % 
 % The simulation result (set of states) first needs to be repackaged using the
@@ -49,7 +49,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     vols_diff = abs(vols_hybrid - vols_fine);       
 
     % Max difference between models through simulation
-    [max_diff, max_idx] = max(sum(vols_diff, 2));   
+    [max_diff, max_idx] = max(sum(vols_diff, 2));
+    max_CO2 = sum(vols_fine, 2);
+    max_CO2 = max_CO2(max_idx);
     max_diff_year = round(t(max_idx));
     
     % Plotting trapping history

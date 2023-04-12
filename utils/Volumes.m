@@ -45,6 +45,7 @@ classdef Volumes
             veB_global = find(veBottom);
             veB_global = veB_global(veB); % indicator for bottom faces for semi-perm layers
             db = unique(discr(cB)); % discretization region for bottom cells of semi-perm layers
+            
             for d=1:numel(db)
                 dc = discr(cB) == db(d);
                 bottom_conn = veB_global(dc);

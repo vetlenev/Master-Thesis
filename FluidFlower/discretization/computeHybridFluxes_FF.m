@@ -431,19 +431,24 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     isOriginalVE = model.G.cells.discretization(n_cells) ~= 1; % if coarse cell is originally a VE column (before treating transition regions)    
     
     if isfield(f, 'pcWG') % Fine: brooks-corey. VE: entry pressure (rest). Sealing: fine brooks-corey by default
-        pcWG = zeros(G.cells.num);
-        for fac=facies
-            fac_cells = G.facies == fac;
+        pcWG = 0*sG;
+        pcWG_U = 0*sG;
+        for fac=facies'
+            fac_cells = G.facies(n_cells) == fac;
             pcWG(fac_cells) = f.pcWG{fac}(sG(fac_cells));
-        end
+            p_entry = f.pcWG{fac}(1e-5);
+            pcWG_U(fac_cells) = (h(fac_cells).*(rhoW(fac_cells) - rhoG(fac_cells)) ...
+                                - H(fac_cells).*rhoW(fac_cells)).*g;
+            if any(fac_cells)
+                pcWG_U(fac_cells) = pcWG_U(fac_cells) + p_entry;
+            end
+        end               
         %pcWG = f.pcWG{1}(sG); % should work for both face and cell constraints        
         %pcWG = opt.p_entry;
     else
         pcWG = 0;    
-    end   
-    
-    % --- TRY TO CHANGE THIS FOR NVE CELLS TO BE h_max INSTEAD OF h ---
-    pcWG_U = (h.*(rhoW - rhoG) - H.*rhoW).*g + opt.p_entry;  
+        pcWG_U = (h.*(rhoW - rhoG) - H.*rhoW).*g + opt.p_entry;  
+    end               
     
     if strcmp(opt.ve_model, 'sharp_interface')            
         pcWG = isFine.*pcWG + isVE.*pcWG_U; % old pcWG is p_entry by default for VE cells
@@ -459,31 +464,31 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     if isprop(model, 'EOSModel')
         krw = f.krO(sW);
     else
-        krw = zeros(G.cells.num, 1);
-        krg = zeros(G.cells.num, 1);
-        for fac=facies
-            fac_cells = G.facies == fac;
+        krw = 0*sW;
+        krg = 0*sG;
+        for fac=facies'
+            fac_cells = G.facies(n_cells) == fac;
             krw(fac_cells) = f.krW{fac}(sW(fac_cells));
             krg(fac_cells) = f.krG{fac}(sG(fac_cells));
         end
     end
   
     %krg = f.krG(sG, SnMax);
-    mobW = zeros(G.cells.num, 1);
-    mobG = zeros(G.cells.num, 1);
-    for fac=facies
-        fac_cells = G.facies == fac;
+    mobW = 0*sW;
+    mobG = 0*sG;
+    for fac=facies'
+        fac_cells = G.facies(n_cells) == fac;
         swr = f.krPts.w(fac,2); 
         snr = f.krPts.g(fac,2);
         h_f = h(fac_cells);
         h_max_f = h_max(fac_cells);
         H_f = H(fac_cells);
 
-        krwVE = (f.krW{fac}(1-snr).*(h_max_f-h_f) + (H_f-h_max_f))./H; % water mobile in residual zone and pure brine zone
-        mobW(fac_cells) = (isVE(fac_cells).*krwVE + isFine(fac_cells).*krw)./muW;
+        krwVE = (f.krW{fac}(1-snr).*(h_max_f-h_f) + (H_f-h_max_f))./H_f; % water mobile in residual zone and pure brine zone
+        mobW(fac_cells) = (isVE(fac_cells).*krwVE + ~isVE(fac_cells).*krw(fac_cells))./muW(fac_cells);
 
         krgVE = f.krG{fac}(1-swr).*(h_f./H_f); % max CO2 sat in cells of mobile plume is 1-swr (sharp interface assumption) 
-        mobG(fac_cells) = (isVE(fac_cells).*krgVE + isFine(fac_cells).*krg)./muG;
+        mobG(fac_cells) = (isVE(fac_cells).*krgVE + ~isVE(fac_cells).*krg(fac_cells))./muG(fac_cells);
     end
         
 end

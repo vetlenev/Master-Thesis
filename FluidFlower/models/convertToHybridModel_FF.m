@@ -127,6 +127,17 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     coarseColNo = zeros(CG.cells.num, 1);
     coarseColNo(CG.partition) = colNo;
     CG.cells.columns = coarseColNo;
+
+    % Assign hybrid facies
+    hybrid_facies = zeros(CG.cells.num, 1);
+    ufac = unique(G.facies);
+    % gc == Gf.cells.indexMap
+    for i=1:numel(ufac)
+        fac = ufac(i);
+        hybrid_cells = CG.partition(G.facies == fac);
+        hybrid_facies(hybrid_cells) = fac;
+    end
+    CG.facies = hybrid_facies;
     
     %trans(trans < 1e-11) = 1e-11;
     disp('before sumTrans')
@@ -211,7 +222,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                     op.connections.veTransitionVerticalConn;        
     veAll = op.connections.veInternalConn | op.connections.veTransitionHorizontalConn;
     cn = op.N(veTransition, :);
-    c_vic = op.N(veAll, :);  
+    c_vic = op.N(veAll, :);
    
     cB = [];
     veB = [];

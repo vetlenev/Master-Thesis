@@ -373,7 +373,12 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     
     if isfield(f, 'pcWG') % Fine: brooks-corey. VE: entry pressure (rest). Sealing: fine brooks-corey by default
         % NB: Change cell-indexation to be correct region (not just 1)!
-        pcWG = f.pcWG{1}(sG); % should work for both face and cell constraints        
+        pcWG = 0*sG;
+        for fac=facies'
+            fac_cells = G.facies(n_cells) == fac;
+            pcWG(fac_cells) = f.pcWG{fac}(sG(fac_cells));
+            %pcWG(fac_cells) = f.pcWG{1}(sG(fac_cells));
+        end        
     else
         pcWG = 0;    
     end   
@@ -392,19 +397,37 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     if isprop(model, 'EOSModel')
         krw = f.krO(sW);
     else
-        krw = f.krW{3}(sW);
-        %for fac=unique(model.G.facies)
-        %krw(model.G.facies == fac) = f.krw{fac}(sW(model.G.facies == fac));
+        krw = 0*sW;
+        krg = 0*sG;
+        for fac=facies'
+            fac_cells = G.facies(n_cells) == fac;
+            krw(fac_cells) = f.krW{fac}(sW(fac_cells));
+            krg(fac_cells) = f.krG{fac}(sG(fac_cells));
+            %krw(fac_cells) = f.krW{3}(sW(fac_cells));
+            %krg(fac_cells) = f.krG{3}(sG(fac_cells));
+        end
     end
     
-    SnMax = (1-swr).*(h_max./H); % h_max local for each cell   
-    %krg = f.krG(sG, SnMax);      
-    krg = f.krG{3}(sG);
-    
-    krwVE = (f.krW{3}(1-snr).*(h_max-h) + (H-h_max))./H; % water mobile in residual zone and pure brine zone
-    mobW = (isVE.*krwVE + isFine.*krw)./muW;
-    krgVE = f.krG{3}(1-swr).*(h./H); % max CO2 sat in cells of mobile plume is 1-swr (sharp interface assumption) 
-    mobG = (isVE.*krgVE + isFine.*krg)./muG;
+    mobW = 0*sW;
+    mobG = 0*sG;
+    for fac=facies'
+        fac_cells = G.facies(n_cells) == fac;
+        swr = f.krPts.w(fac,2); 
+        snr = f.krPts.g(fac,2);
+        %swr = f.krPts.w(3,2); 
+        %snr = f.krPts.g(3,2);
+        h_f = h(fac_cells);
+        h_max_f = h_max(fac_cells);
+        H_f = H(fac_cells);
+
+        krwVE = (f.krW{fac}(1-snr).*(h_max_f-h_f) + (H_f-h_max_f))./H_f; % water mobile in residual zone and pure brine zone
+        %krwVE = (f.krW{3}(1-snr).*(h_max_f-h_f) + (H_f-h_max_f))./H_f; % water mobile in residual zone and pure brine zone
+        mobW(fac_cells) = (isVE(fac_cells).*krwVE + ~isVE(fac_cells).*krw(fac_cells))./muW(fac_cells);
+
+        krgVE = f.krG{fac}(1-swr).*(h_f./H_f); % max CO2 sat in cells of mobile plume is 1-swr (sharp interface assumption) 
+        %krgVE = f.krG{3}(1-swr).*(h_f./H_f); % max CO2 sat in cells of mobile plume is 1-swr (sharp interface assumption) 
+        mobG(fac_cells) = (isVE(fac_cells).*krgVE + ~isVE(fac_cells).*krg(fac_cells))./muG(fac_cells);
+    end        
     
 end
 

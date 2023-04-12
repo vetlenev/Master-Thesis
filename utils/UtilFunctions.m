@@ -175,17 +175,75 @@ classdef UtilFunctions
                n_sealing = data{15};
                n_rel = data{16};
                my_seed = data{17};
+               max_trap_diff = data{18};
+               max_RVE_diff = data{19};
                tot_time = tot_time_;
                median_time = median_time_;               
 
                T_new = table(id,pe_sealing,pe_rest,perm_sealing,perm_rest,trans_mult, ...
                             swr,snr,poro,num_years,inj_stop,pv_rate, ...
-                            nx,ny,nz,n_sealing,n_rel,my_seed,tot_time,median_time,info);
+                            nx,ny,nz,n_sealing,n_rel,my_seed,max_trap_diff,max_RVE_diff, ...
+                            tot_time,median_time,info);
                writetable(T_new, dirpath);               
            else % file exists -> append to bottom
                T_new = table({sim_id},data{1},data{2},data{3},data{4},data{5}, ...
                             data{6},data{7},data{8},data{9},data{10},data{11}, ...
-                            data{12},data{13},data{14},data{15},data{16},data{17},tot_time_,median_time_,info);
+                            data{12},data{13},data{14},data{15},data{16},data{17}, ...
+                            data{18},data{19},tot_time_,median_time_,info);
+               T = readtable(dirpath);
+               if ~any(strcmp(T.id,string(sim_id))) % only append if unique simulation not stored yet
+                   writetable(T_new, dirpath, 'WriteMode', 'Append', 'WriteVariableNames', false);
+               end
+           end
+            
+       end
+
+       function storeTrappingData(diff, CO2, dirpath, sim_id, varargin)           
+           if nargin > 3
+               info = {varargin{1}};
+           else
+               info = {''};
+           end
+
+           if ~isfile(dirpath) % file does not exist -> create table names
+               id = {sim_id};
+               trap_diff = round(diff.tot/CO2.tot * 100, 2);               
+               sr_diff = round(diff.struct_res/CO2.struct_res * 100, 2);
+               sr_diff(isinf(sr_diff)) = nan;
+               r_diff = round(diff.res/CO2.res * 100, 2);
+               r_diff(isinf(r_diff)) = nan;
+               fr_diff = round(diff.free_res/CO2.free_res * 100, 2);
+               fr_diff(isinf(fr_diff)) = nan;
+               sm_diff = round(diff.struct_mob/CO2.struct_mob * 100, 2);
+               sm_diff(isinf(sm_diff)) = nan;
+               fm_diff = round(diff.free_mob/CO2.free_mob * 100, 2);
+               fm_diff(isinf(fm_diff)) = nan;
+               exit_diff = round(diff.exit/CO2.exit * 100, 2);
+               exit_diff(isinf(exit_diff)) = nan;
+                           
+               T_new = table(id,trap_diff, sr_diff, r_diff, ...
+                                fr_diff, sm_diff, fm_diff, ...
+                                exit_diff, info);
+               writetable(T_new, dirpath);               
+           else % file exists -> append to bottom               
+               data = cell(7,1);
+               data{1} = round(diff.tot/CO2.tot * 100, 2);
+               data{1}(isinf(data{1})) = nan;
+               data{2} = round(diff.struct_res/CO2.struct_res * 100, 2);
+               data{2}(isinf(data{2})) = nan;
+               data{3} = round(diff.res/CO2.res * 100, 2);
+               data{3}(isinf(data{3})) = nan;
+               data{4} = round(diff.free_res/CO2.free_res * 100, 2);
+               data{4}(isinf(data{4})) = nan;
+               data{5} = round(diff.struct_mob/CO2.struct_mob * 100, 2);
+               data{5}(isinf(data{5})) = nan;
+               data{6} = round(diff.free_mob/CO2.free_mob * 100, 2);
+               data{6}(isinf(data{6})) = nan;
+               data{7} = round(diff.exit/CO2.exit * 100, 2);
+               data{7}(isinf(data{7})) = nan;
+
+               T_new = table({sim_id},data{1},data{2},data{3},data{4},data{5}, ...
+                              data{6},data{7},info);
                T = readtable(dirpath);
                if ~any(strcmp(T.id,string(sim_id))) % only append if unique simulation not stored yet
                    writetable(T_new, dirpath, 'WriteMode', 'Append', 'WriteVariableNames', false);
