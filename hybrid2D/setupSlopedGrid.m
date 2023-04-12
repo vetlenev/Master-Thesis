@@ -104,7 +104,6 @@ z = G.cells.centroids(:,3);
 
 % perm = logNormLayers(G.cartDims);
 % perm = perm./max(perm);
-% perm = perm.*200*milli*darcy;
 perm = repmat(100*milli*darcy, G.cells.num, 1);
 
 setZeroTrans = zeros(G.faces.num, 1);

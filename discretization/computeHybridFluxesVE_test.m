@@ -82,9 +82,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     all_coarse_cells = (1:G.cells.num)';
     
     sgMax_dummy = sgMax.*(snr > 0) + sG.*(snr == 0); % used to assign correct h_max to VE cells filled from bottom    
-%     if ~isempty(cellsVE) % once residual plume reaches top, set sgMax to maximum and use standard formulas       
-%         sgMax_dummy(cellsVE) = 1-swr; % would otherwise be discontinuous transition from H to snr*H
-%     end 
             
     % --- upscaledSat2height ---
     if strcmp(opt.ve_model, 'sharp_interface')
@@ -165,10 +162,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     [gdz_g, gdz_w] = deal(gdz);
     % Compute upscaled height difference for internal ve columns, at reference pressure heights for CO2 and water:
     gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
-    % if water pressure computed at bottom of VE cells
-    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
-    % if water pressure computed at top of VE cells
-    %gdz_w(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
+    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1)); 
     
     dpG   = op.Grad(pG) - rhoGf .* gdz_g;
     upcg  = (value(dpG)<=0);
@@ -246,7 +240,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
 %     pW = getPwFromHeight(B, t, b, h_global(c), h_max_global(c), pW(c), g, rhow, rhog, swr, snr, ...
 %                             'cNVE', cNVE, 'p_entry', opt.p_entry, 'res_type', []);
     pW = getPwFromHeight(B, t, b, h_global(c), h_T_global(c), pW(c), g, rhow, rhog, swr, snr, ...
-                                'cNVE', [], 'p_entry', opt.p_entry, 'res_type', []);
+                                'cNVE', [], 'p_entry', opt.p_entry(c), 'res_type', []); % opt.p_entry
 end
 
 function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransitionValuesVE_fine(model, pW, h_global, h_max_global, h_T_global, h_B_global, index, subs, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, varargin)    
@@ -292,7 +286,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
 %     pW_c = getPwFromHeight(C, t, b, h_global(c), h_max_global(c), pW_f, g, rhow, rhog, swr, snr, ...
 %                             'cNVE', cNVE, 'p_entry', opt.p_entry, 'res_type', []);
     pW_c = getPwFromHeight(C, t, b, h_global(c), h_T_global(c), pW_f, g, rhow, rhog, swr, snr, ...
-                            'cNVE', [], 'p_entry', opt.p_entry, 'res_type', []);
+                            'cNVE', [], 'p_entry', opt.p_entry(c), 'res_type', []); % opt.p_entry -> opt.p_entry(c)
     pW = isFine.*pW_f + ~isFine.*pW_c;
 end
 
@@ -421,6 +415,7 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     
     g = norm(model.gravity);
     f = model.fluid;
+    rock = model.rock;
     
     sW = 1 - sG;
     swr = f.krPts.w(1);
@@ -435,12 +430,17 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     
     if isfield(f, 'pcWG') % Fine: brooks-corey. VE: entry pressure (rest). Sealing: fine brooks-corey by default
         pcWG = f.pcWG(sG, n_cells); % should work for both face and cell constraints        
+%         up = uniquetol(rock.perm);
+%         for i=1:numel(up)
+%             perm_i = up{i};
+%             region_cells = rock.perm == perm_i;
+%             pcWG(region_cells) = f.pcWG{i}(sG(region_cells));
+%         end
     else
         pcWG = 0;    
     end   
     
-    % --- TRY TO CHANGE THIS FOR NVE CELLS TO BE h_max INSTEAD OF h ---
-    pcWG_U = (h.*(rhoW - rhoG) - H.*rhoW).*g + opt.p_entry;
+    pcWG_U = (h.*(rhoW - rhoG) - H.*rhoW).*g + opt.p_entry(n_cells); % + opt.p_entry 
     
     if strcmp(opt.ve_model, 'sharp_interface')            
         pcWG = isFine.*pcWG + isVE.*pcWG_U; % old pcWG is p_entry by default for VE cells

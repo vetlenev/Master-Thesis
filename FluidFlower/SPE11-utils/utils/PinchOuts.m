@@ -8,9 +8,6 @@ classdef PinchOuts < PolygonGrid
             %   poly_num: id of polygon to discretize                       
             obj = obj@PolygonGrid(polys, poly_num);            
             obj.p = side_points;
-%             obj.p = polys{poly_num}{2}(:,1:2);
-%             obj.p_orig = obj.p;
-%             obj.p = obj.p(1:end-1,:);
         end      
        
     end
@@ -19,6 +16,7 @@ classdef PinchOuts < PolygonGrid
    methods (Static)
        
        function [poly_side, closest_mask, xs_new] = separationPoint_pinchout(poly, poly_pts, G_glob)
+           % Think this function is similar to correct_dx_poly ...
             Nx = poly.G.cartDims(1);
             xs = poly_pts(:,1);
             zs = poly_pts(:,2);
@@ -85,6 +83,8 @@ classdef PinchOuts < PolygonGrid
        end
 
        function [z_new, remaining_idx] = interpolateZSide(poly_side, nodes_side, closest_idx, interp_method)           
+           % Interpolate z-coords at horizontal side (bottm or top) between
+           % provided data points at this curve.
             poly_pts_idx = zeros(size(nodes_side,1), 1);
             poly_pts_idx(closest_idx) = 1; % logical index for nodes closest to poly points
             %poly_pts_idx(pin_idx) = 1; % node closest to tip of pinch-out
@@ -121,18 +121,15 @@ classdef PinchOuts < PolygonGrid
             [~, z_sep_idx] = min(abs(polyA_east(:,2) - z_pinch));
             polyA_pinch = polyA_east(z_sep_idx, :);
             polyA_pinch_idx = ismember(polyA.G.nodes.coords, polyA_pinch, 'rows');
-
-            if true % Old: change both coordinates                
-                polyA.G.nodes.coords(polyA_pinch_idx,:) = pinch;            
-            else % New: only change x-coords, so nodes on east side remains uniform in vertical
-                %polyA.G.nodes.coords(polyA_pinch_idx,1) = pinch(1);
-            end
+           
+            polyA.G.nodes.coords(polyA_pinch_idx,:) = pinch;
         
             % 4. Interpolate nodes on east side to conform with pinch-point
             polyA = interpolateInternal(polyA, polyA.top_mask, polyA.bottom_mask, pinch, z_sep_idx, polyA.G.cartDims(1)+1);
        end
 
        function polyBC = coordCorrectionSubgridBC(polyBC, top_nodesB, bottom_nodesB, east_nodesA)
+           % Correct nodes for subgrid B and C of polygon with pinch-out.
             % 1. Change top and bottom sides
             polyBC.G.nodes.coords(polyBC.bottom_mask, :) = bottom_nodesB;
             polyBC.G.nodes.coords(polyBC.top_mask, :) = top_nodesB;
@@ -146,6 +143,8 @@ classdef PinchOuts < PolygonGrid
        end
 
        function [nodes, pts_overlap] = findOverlappingNodesPinch(poly, poly_A, poly_C, face)
+           % Find overlapping nodes for a polygon transitioning to a
+           % polygon containing pinch-out.
             pp = poly.p;
             pp_A = poly_A.p;
             pp_C = poly_C.p;
@@ -181,6 +180,9 @@ classdef PinchOuts < PolygonGrid
        end
 
        function [nodes_all, pts_overlap_all] = findOverlappingNodesMultiple(poly, poly_upper, face)
+           % Find nodes of current polygon overlapping with MULTIPLE upper
+           % polygonal neighbors. Think this function can substitute
+           % findOverlappingNodesPinch.
             pp = poly.p;
             %pmask = cell(numel(poly_upper), 1);
             pts_overlap = cell(numel(poly_upper), 1);
@@ -216,7 +218,7 @@ classdef PinchOuts < PolygonGrid
                     pmask_upper{i} = poly_upper{i}.west_mask;
                 end                
                 pts_overlap{i} = pp(ismembertol(pp, pp_upper{i}, 'ByRows', true), :);                
-                % Here we assume subgid 
+                % Find global min and max overlapping nodes.
                 min_overlap = min(min_overlap, min(pts_overlap{i}(:,x_or_z)));
                 max_overlap = max(max_overlap, max(pts_overlap{i}(:,x_or_z)));               
             end

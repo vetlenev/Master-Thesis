@@ -37,7 +37,7 @@ function [model_ve, model_coarse] = convertToMultiVEModel_test(model, varargin)
 %   transThreshold - Threshold to consider transmissibilities as "sealing"
 %                    if sealingFaces is defaulted.
 %   
-%   pe_rest - Entry pressure in high-permeable region (where VE columns)
+%   pe_all - Entry pressure in high-permeable region (where VE columns)
 %
 % RETURNS:
 %   model_ve     - A VE model on the coarse scale
@@ -82,7 +82,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
     opt = struct('remFineFaces', [], 'sealingFaces', [], 'sealingCells', [], 'sealingCells_faces', [], ...
                     'setSubColumnsFine', true, 'multiplier', 0, 'sumTrans', true, ...
-                    'transThreshold', 0, 'pe_rest', 0);
+                    'transThreshold', 0, 'pe_all', 0);
     opt = merge_options(opt, varargin{:});
 
     G = model.G;
@@ -144,18 +144,21 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     disp(min(model_coarse.operators.T_all))
     % Grab rock from coarse model
     rock_c = model_coarse.rock;
+
+    ph = CG.partition;
+    pe_hybrid = accumarray(ph, opt.pe_all, [], @mode);
      
     % Copy operators over and create a new VE model
     if isa(model, 'TwoPhaseWaterGasModel') %|| isa(model, 'TwoPhaseWaterGasModelHys')
         model_ve = WaterGasMultiVEModel_test(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
-                                            'sealingCells', opt.sealingCells, 'pe_rest', opt.pe_rest);
+                                            'sealingCells', opt.sealingCells, 'pe_rest', pe_hybrid); % 'pe_rest', opt.pe_rest
     elseif isa(model, 'OverallCompositionCompositionalModel')
         model_ve = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'NaturalVariablesCompositionalModel')
         model_ve = NaturalVariablesMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'TwoPhaseWaterGasModelDissolution')
         model_ve = WaterGasMultiVEModel_dissolution(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
-                                                    'sealingCells', opt.sealingCells, 'pe_rest', opt.pe_rest);
+                                                    'sealingCells', opt.sealingCells, 'pe_rest', pe_hybrid);
     else
         error(['VE not implemented for class ', class(model)]);
     end

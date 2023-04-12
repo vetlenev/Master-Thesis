@@ -178,7 +178,8 @@ function [topz, bottomz, height, topcells] = getCellHeights(G, opt)
     
     triangle_cells = diff(G.cells.facePos) == 3;
     imperm_cells = G.facies == 7;
-    structured_flow = ~triangle_cells & ~imperm_cells; % all structured (cartesian) cells with nonzero fluid flow
+    nan_cells = isnan(G.i);
+    structured_flow = ~triangle_cells & ~imperm_cells & ~nan_cells; % all structured (cartesian) cells with nonzero fluid flow
     assert(all(height(structured_flow) >= 0))
     height(height < 0) = 0;
     %height = abs(height);

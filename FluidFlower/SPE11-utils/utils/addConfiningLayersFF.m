@@ -93,6 +93,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
             sealingCells = G.cells.indexMap(sealingCells);    
         end
 
-        [faces, bottom_faces] = UtilFunctions.localBoundaryFaces(G, sealingCells, 'full_dim', opt.full_dim, 'FF', true);
+        [faces, bottom_faces] = UtilFunctionsFF.localBoundaryFaces(G, sealingCells, 'full_dim', opt.full_dim, 'FF', true);
     end
 end
