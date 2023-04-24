@@ -8,15 +8,19 @@ mrstModule add ad-core ad-blackoil ad-props co2lab matlab_bgl coarsegrid;
 mrstModule add mrst-gui test-suite
     
 rootdir = strrep(ROOTDIR, '\', '/');
-data_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid3D/test/data');
+%data_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid3D/test/data');
+n_rel = 1.5;
+n_layers = 20;
+%data_dir = strcat(rootdir, '../Master-Thesis/hybrid2D/caseStochastic/data/layers', string(n_layers));
+data_dir = strcat(rootdir, '../Master-Thesis/stochastic/data/layers', string(n_layers));
 mkdir(data_dir);
 
-my_seed = 8003;
+my_seed = 5004;
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
-%pe_sealing = 7*10^4*Pascal; %7*10^4*Pascal; % higher entry pressure in aquitards
-pe_sealing = [2*10^5, 7*10^4, 3*10^4]*Pascal;
+%pe_sealing = 7*10^4*Pascal; 
+pe_sealing = [1.5*10^5, 6*10^4]*Pascal; % 4*10^4]*Pascal
 pe_rest = 5*10^3*Pascal;%5*10^3*Pascal;
 % -----------------
 pe_regions = [pe_sealing, pe_rest];
@@ -35,11 +39,10 @@ run3D = false;
 sloped = true;
 standard = true;
 
-n_rel = 1.5;
-n_layers = 20;
-output_filename = 'stochastic';
+stochastic = true;
+output_filename =  strcat('layers', string(n_layers), '_rel', strrep(string(n_rel),'.','p'));
 
-if sloped && standard && strcmp(output_filename, 'stochastic')
+if sloped && standard && stochastic
     geometry_folder = 'caseStochastic';
 elseif sloped && standard
     geometry_folder = 'caseMultilayered';
@@ -72,8 +75,8 @@ if run3D
     hybrid_folder = 'hybrid3D';
 else   
     output_filename = strcat(output_filename, '_2D');    
-    nx = 50; ny = 1; nz = 100; % nx = 50, nz = 150
-    lx = 300; ly = 10; lz = 1000;     
+    nx = 60; ny = 1; nz = 130; % nx = 70, nz = 130
+    lx = 300; ly = 10; lz = 1000; % lx = 500, lz = 1200   
 
     if sloped
         [state0, models, schedule, ...
@@ -85,10 +88,11 @@ else
                                                     [nx,ny,nz], [lx,ly,lz], trans_mult);
     end
     vx = 0; vz = 0;
-    hybrid_folder = 'hybrid2D';
+    %hybrid_folder = 'hybrid2D';
+    hybrid_folder = 'stochastic';
 end
 
-output_filename = strcat(output_filename, '_layers', string(n_layers), '_rel', strrep(string(n_rel),'.','p'));
+%output_filename = strcat(output_filename, '_layers', string(n_layers), '_rel', strrep(string(n_rel),'.','p'));
 output_filename = char(output_filename);
 
 if useAdaptive    
@@ -217,7 +221,7 @@ nls = NonLinearSolver('maxIterations', 70);
 
 %% Pack and simulate problem
 problem = packSimulationProblem(state0, model_fine, schedule, ...
-            strcat('finescale/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename);
+            strcat('stochastic/finescale/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename); 
 
 % Simulate and get the output
 simulatePackedProblem(problem);
@@ -226,19 +230,19 @@ simulatePackedProblem(problem);
 
 %% Simple VE.
 % Simulate standard VE model, not accounting for sealing faces.
-model_ve = convertToMultiVEModel_test(model);
-schedule_ve = upscaleSchedule(model_ve, schedule);
-state0_ve = upscaleStateHybrid(model_ve, model, state0);
-
-problem_ve = packSimulationProblem(state0_ve, model_ve, schedule_ve, ...
-            strcat('ve/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename);
-
-[ok, status] = simulatePackedProblem(problem_ve);
-[ws_ve, states_ve, report_ve] = getPackedSimulatorOutput(problem_ve);
-
-%[ws_ve, states_ve] = simulateScheduleAD(state0_ve, model_ve, schedule_ve, 'NonLinearSolver', nls);
-
-states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
+% model_ve = convertToMultiVEModel_test(model);
+% schedule_ve = upscaleSchedule(model_ve, schedule);
+% state0_ve = upscaleStateHybrid(model_ve, model, state0);
+% 
+% problem_ve = packSimulationProblem(state0_ve, model_ve, schedule_ve, ...
+%             strcat('ve/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename);
+% 
+% [ok, status] = simulatePackedProblem(problem_ve);
+% [ws_ve, states_ve, report_ve] = getPackedSimulatorOutput(problem_ve);
+% 
+% %[ws_ve, states_ve] = simulateScheduleAD(state0_ve, model_ve, schedule_ve, 'NonLinearSolver', nls);
+% 
+% states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
 
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
@@ -251,10 +255,7 @@ states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'sched
                                             'multiplier', trans_mult, ...
                                             'sumTrans', true, ...
                                             'pe_all', pe_all); % ! pe_rest !
-                                       
-% model_hybrid.fluid.pcWG = @(s, n_sealing) ...
-%                             Capillary.runHybridPcSharp(s, dummy_s, swr, snr, pe_sealing, ...
-%                                                 pe_rest, n_sealing, model_hybrid.G);        
+                                              
 model_hybrid.fluid.pcWG = @(s, subcells) Capillary.runHybridPcSharp(s, dummy_s, swr, snr, ...
                                                                     pe_regions, subcells, model_hybrid);
                                         
@@ -282,29 +283,6 @@ zlabel('Depth [m]');
 title('Partition of hybrid VE model')
 %saveas(f4, strcat(plot_dir, 'hybrid_discretization'), 'png')
 
-figure(5)
-vtcA = model_hybrid.operators.connections.veTransitionHorizontalConn;
-vtcB = model_hybrid.operators.connections.veToFineVertical | model_hybrid.operators.connections.veTransitionVerticalConn;
-vtc_cA1 = model_hybrid.operators.N(vtcA, 1);
-vtc_cA2 = model_hybrid.operators.N(vtcA, 2);
-vtc_cB1 = model_hybrid.operators.N(vtcB, 1);
-vtc_cB2 = model_hybrid.operators.N(vtcB, 2);
-vtc_A = union(vtc_cA1, vtc_cA2);
-vtc_B = union(vtc_cB1, vtc_cB2);
-vtc = intersect(vtc_A, vtc_B);
-
-plotGrid(model_hybrid.G, 'edgealpha', 0.2, 'facecolor', 'none')
-all_coarse_cells = zeros(model_hybrid.G.cells.num, 1);
-all_coarse_cells(vtc_A) = 1;
-all_coarse_cells(vtc_B) = 1;
-%all_coarse_cells(1:200) = 1;
-plotCellData(model_hybrid.G, all_coarse_cells)
-%plotCellData(model_hybrid.G, model_hybrid.G.cells.discretization);
-view(vx, vz)
-axis equal tight
-setDaspect(run3D, standard);
-title('Combined veToFineVertical and veHorizontal transition regions')
-
 %% Set capillary state function
 nls.useRelaxation = true;
 
@@ -313,14 +291,87 @@ model_hybrid.FlowPropertyFunctions.CapillaryPressure = HybridCapillaryPressure(m
 
 %% Simulate Hybrid model
 problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hybrid, ...
-            strcat('hybrid/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename);
+                strcat('stochastic/hybrid/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename);
 
 [ok, status] = simulatePackedProblem(problem_hybrid);
 
 [ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
 
-%% Simulate schedule hybrid
-%[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
+%% FINE: Store nonlinear iteration count and walltime
+dirpath_iter = strcat(mrstOutputDirectory,'\stochastic\finescale\iter_counts.mat');
+dirpath_time = strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times.mat');
+
+iter_fine = struct;
+time_fine = struct;
+iter_fine.layers20.sum = []; iter_fine.layers40.sum = []; iter_fine.layers60.sum = [];
+iter_fine.layers20.median = []; iter_fine.layers40.median = []; iter_fine.layers60.median = [];
+iter_fine.layers20.mean = []; iter_fine.layers40.mean = []; iter_fine.layers60.mean = [];
+time_fine.layers20.sum = []; time_fine.layers40.sum = []; time_fine.layers60.sum = [];
+time_fine.layers20.median = []; time_fine.layers40.median = []; time_fine.layers60.median = [];
+fine_reports = dir(strcat(mrstOutputDirectory,'\stochastic\finescale\caseMultilayered\layers*'));
+
+for i=1:numel(fine_reports)
+    fine_dir = fine_reports(i).name;
+    layers = string(regexp(fine_dir, 'layers\d+', 'match'));    
+    fine_files = dir(strcat(fine_reports(i).folder, '\', fine_reports(i).name, '\', 'report*'));
+    iter_count = zeros(numel(fine_files), 1);
+    time_steps = zeros(numel(fine_files), 1);
+    for j=1:numel(fine_files)
+        fine_rep = load(strcat(fine_reports(i).folder, '\', fine_reports(i).name, '\', fine_files(j).name));
+        iter_count(j) = fine_rep.data.Iterations;
+        time_steps(j) = fine_rep.data.WallTime;
+    end
+    iter_fine.(layers).sum = cat(1, iter_fine.(layers).sum, sum(iter_count));
+    iter_fine.(layers).median = cat(1, iter_fine.(layers).median, median(iter_count));
+    iter_fine.(layers).mean = cat(1, iter_fine.(layers).mean, mean(iter_count));
+    time_fine.(layers).sum = cat(1, time_fine.(layers).sum, sum(time_steps));
+    time_fine.(layers).median = cat(1, time_fine.(layers).median, median(time_steps));
+end
+
+save(dirpath_iter, 'iter_fine');
+save(dirpath_time, 'time_fine');
+
+%% HYBRID: Store nonlinear iterations count and walltime
+dirpath_iter = strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts.mat');
+dirpath_time = strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times.mat');
+
+iter_hybrid = struct;
+time_hybrid = struct;
+iter_hybrid.layers20.sum = []; iter_hybrid.layers40.sum = []; iter_hybrid.layers60.sum = [];
+iter_hybrid.layers20.median = []; iter_hybrid.layers40.median = []; iter_hybrid.layers60.median = [];
+iter_hybrid.layers20.mean = []; iter_hybrid.layers40.mean = []; iter_hybrid.layers60.mean = [];
+time_hybrid.layers20.sum = []; time_hybrid.layers40.sum = []; time_hybrid.layers60.sum = [];
+time_hybrid.layers20.median = []; time_hybrid.layers40.median = []; time_hybrid.layers60.median = [];
+hybrid_reports = dir(strcat(mrstOutputDirectory,'\stochastic\hybrid\caseMultilayered\layers*'));
+
+for i=1:numel(hybrid_reports)
+    hybrid_dir = hybrid_reports(i).name;
+    layers = string(regexp(hybrid_dir, 'layers\d+', 'match'));    
+    hybrid_files = dir(strcat(hybrid_reports(i).folder, '\', hybrid_reports(i).name, '\', 'report*'));
+    iter_count = zeros(numel(hybrid_files), 1);
+    time_steps = zeros(numel(hybrid_files), 1);
+    for j=1:numel(hybrid_files)
+        hybrid_rep = load(strcat(hybrid_reports(i).folder, '\', hybrid_reports(i).name, '\', hybrid_files(j).name));
+        iter_count(j) = hybrid_rep.data.Iterations;
+        time_steps(j) = hybrid_rep.data.WallTime;
+    end
+    iter_hybrid.(layers).sum = cat(1, iter_hybrid.(layers).sum, sum(iter_count));
+    iter_hybrid.(layers).median = cat(1, iter_hybrid.(layers).median, median(iter_count));
+    iter_hybrid.(layers).mean = cat(1, iter_hybrid.(layers).mean, mean(iter_count));
+    time_hybrid.(layers).sum = cat(1, time_hybrid.(layers).sum, sum(time_steps));
+    time_hybrid.(layers).median = cat(1, time_hybrid.(layers).median, median(time_steps));
+end
+
+save(dirpath_iter, 'iter_hybrid');
+save(dirpath_time, 'time_hybrid');
+
+%% Read iters and walltime from files
+fine_iters = load(strcat(mrstOutputDirectory,'\stochastic\finescale\iter_counts.mat'), 'iter_fine').iter_fine;
+fine_time = load(strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times.mat'), 'time_fine').time_fine;
+hybrid_iters = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts.mat'), 'iter_hybrid').iter_hybrid;
+hybrid_time = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times.mat'), 'time_hybrid').time_hybrid;
+
+
 
 %% Reconstruct fine states
 %states_hybrid_fs = convertMultiVEStates_res(model_hybrid, model_fine, states_hybrid, states);
@@ -431,7 +482,7 @@ end
 
 view(vx, vz)
 axis equal tight
-title({'Top-surface subgrids under semi-perm layers', '(faded for caprock)'})
+title({'Top-surface subgrids under', 'semi-permeable layers'})
 setDaspect(run3D, standard);
 
 % Plot remaining fine-perm regions
@@ -462,12 +513,12 @@ fine_reports = makeFineReports(Gts, Gs_all, cmaps_all, fmaps_all, ... % top surf
                                 
 %% Plot trapping inventory
 fig10 = figure(10); plot(1); ax10 = get(fig10, 'currentaxes');
-plotTrappingDistribution(ax10, hybrid_reports, 'legend_location', 'northwest', 'logScale', true)
+plotTrappingDistributionResMerged(ax10, hybrid_reports, 'legend_location', 'northwest', 'logScale', true)
 title('Trapping inventory for hybrid model')
 %saveas(fig10, strcat(plot_dir, 'trapping_inventory_hybrid'), 'pdf');
 
 fig11 = figure(11); plot(1); ax11 = get(fig11, 'currentaxes');
-plotTrappingDistribution(ax11, fine_reports, 'legend_location', 'northwest', 'logScale', true)
+plotTrappingDistributionResMerged(ax11, fine_reports, 'legend_location', 'northwest', 'logScale', true)
 title('Trapping inventory for full-dimensional model')
 %saveas(fig11, strcat(plot_dir, 'trapping_inventory_fine'), 'pdf');
 
@@ -475,7 +526,7 @@ title('Trapping inventory for full-dimensional model')
 ff = 20;
 fig_ff = figure(ff); plot(1); ax_ff = get(fig_ff, 'currentaxes');
 [max_diff, max_diff_year, max_CO2, ...
-    sum_diff, sum_CO2] = plotTrappingDifference(ax_ff, hybrid_reports, fine_reports, 'legend_location', 'northwest', 'logScale', true);
+    sum_diff, sum_CO2] = plotTrappingDifferenceResMerged(ax_ff, hybrid_reports, fine_reports, 'legend_location', 'northwest', 'logScale', true);
 max_trap_diff = round(max_diff.tot/max_CO2.tot*100, 2);
 title({'Normalized absolute difference in trapping inventory', ...
         sprintf('Max difference: %.2d MT, at year: %.1f,', max_diff.tot, max_diff_year.tot), ...
@@ -533,7 +584,7 @@ cmap_discr = interp1([0; linspace(discr_plot_u(2), discr_plot_u(end), 7)'], ...
 %ccube = flipud(colorcube(50));
 colormap(cmap_discr)
 setDaspect(run3D, standard);
-%saveas(ff, strcat(plot_dir, 'partition_numbering'), 'png');
+saveas(ff, strcat(plot_dir, 'partition_numbering'), 'png');
 
 sn_f = states{end}.s(:,2); % fine saturations
 sn_h = states_hybrid{end}.s(:,2); % hybrid saturations
@@ -570,21 +621,21 @@ pv_rate = inj_rate/sum(poreVolume(G,rock))*(inj_stop*tot_time*year());
 n_sealing = numel(isFineCells.sealingCells);
 
 dirpath_fine = strcat(mrstOutputDirectory,'\',problem.BaseName,'\simulation_settings.txt');
-dirpath_ve = strcat(mrstOutputDirectory,'\',problem_ve.BaseName,'\simulation_settings.txt');
+%dirpath_ve = strcat(mrstOutputDirectory,'\',problem_ve.BaseName,'\simulation_settings.txt');
 dirpath_hybrid = strcat(mrstOutputDirectory,'\',problem_hybrid.BaseName,'\simulation_settings.txt');
 
 time_fine = zeros(numel(report), 1);
-time_ve = zeros('like', time_fine);
+%time_ve = zeros('like', time_fine);
 time_hybrid = zeros('like', time_fine);
 for i=1:numel(report)
     time_fine(i) = report{i}.WallTime;
-    time_ve(i) = report_ve{i}.WallTime;
+    %time_ve(i) = report_ve{i}.WallTime;
     time_hybrid(i) = report_hybrid{i}.WallTime;
 end
 time_fine_tot = round(sum(time_fine),1);
 time_fine_median = round(median(time_fine),3);
-time_ve_tot = round(sum(time_ve),1);
-time_ve_median = round(median(time_ve),3);
+%time_ve_tot = round(sum(time_ve),1);
+%time_ve_median = round(median(time_ve),3);
 time_hybrid_tot = round(sum(time_hybrid),1);
 time_hybrid_median = round(median(time_hybrid),3);
 
@@ -595,18 +646,23 @@ other_info = 'Multiple lowperm vals';
 
 UtilFunctions.storeProblemSettings(data, time_fine_tot, time_fine_median, ...
                                     dirpath_fine, problem.Name, other_info);
-UtilFunctions.storeProblemSettings(data, time_ve_tot, time_ve_median, ...
-                                    dirpath_ve, problem_ve.Name, other_info);
+% UtilFunctions.storeProblemSettings(data, time_ve_tot, time_ve_median, ...
+%                                     dirpath_ve, problem_ve.Name, other_info);
 UtilFunctions.storeProblemSettings(data, time_hybrid_tot, time_hybrid_median, ...
                                     dirpath_hybrid, problem_hybrid.Name, other_info);
 
 %% Store trapping data
-other_info = '';
-dirpath_trap = strcat(mrstOutputDirectory,'\trapping\layers',string(n_layers));
+%dirpath_trap = strcat(mrstOutputDirectory,'\trapping\layers',string(n_layers));
+dirpath_trap = strcat(mrstOutputDirectory,'stochastic\trapping\layers',string(n_layers));
 mkdir(dirpath_trap);
-fullfile_trap = strcat(dirpath_trap, '\trap_data.txt');
 
+fullfile_trap = strcat(dirpath_trap, '\trap_diff_max.txt');
+other_info = 'max difference for each category';
 UtilFunctions.storeTrappingData(max_diff, max_CO2, fullfile_trap, problem.Name, other_info);
+
+fullfile_trap = strcat(dirpath_trap, '\trap_diff_sum.txt');
+other_info = 'summed difference over all time steps';
+UtilFunctions.storeTrappingData(sum_diff, sum_CO2, fullfile_trap, problem.Name, other_info);
 
 %% Plot CO2 saturation for each model
 fafa = find(sealingFaces | sealingCells_faces);
@@ -614,7 +670,7 @@ fafa = find(sealingFaces | sealingCells_faces);
 c1 = [255, 255, 255]/255;
 c2 = [48, 37, 255]/255;
 c3 = [0, 255, 0]/255;
-cc = interp1([0; 1e-5; 1], [c1; c2; c3], (0:0.001:1)');
+cc = interp1([0; 1e-6; 1], [c1; c2; c3], (0:1e-6:1)');
 % c1 = [48, 37, 255]/255;
 % c2 = [0, 255, 0]/255;
 % cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
@@ -656,15 +712,31 @@ end
 
 fig_speed = figure();
 tt = [0; t];
-plot(tt(tt >= 0.01), tip_speed_fine(tt >= 0.01), '-b')
+
+t_store = tt(tt >= 0.01);
+tip_plume_fine = tip_speed_fine(tt >= 0.01);
+tip_plume_hybrid = tip_speed_hybrid(tt >= 0.01);
+avg_plume_fine = avg_speed_fine(tt >= 0.01);
+avg_plume_hybrid = avg_speed_hybrid(tt >= 0.01);
+
+plot(t_store, tip_plume_fine, '-b')
 hold on
-plot(tt(tt >= 0.01), tip_speed_hybrid(tt >= 0.01), '-r')
+plot(t_store, tip_plume_hybrid, '-r')
 hold on
-plot(tt(tt >= 0.01), avg_speed_fine(tt >= 0.01), '--b')
+plot(t_store, avg_plume_fine, '--b')
 hold on
-plot(tt(tt >= 0.01), avg_speed_hybrid(tt >= 0.01), '--r')
+plot(t_store, avg_plume_hybrid, '--r')
 hold on
-plot(tt(tt >= 0.01), repmat(z_well, nnz(tt >= 0.01), 1), '-k')
+plot(t_store, repmat(z_well, nnz(tt >= 0.01), 1), '-k')
+hold on
+
+z_min = min(G.faces.centroids(:,3));
+top_reached_fine = find(ismember(tip_plume_fine, z_min), 1);
+top_reached_hybrid = find(ismember(tip_plume_hybrid, z_min), 1);
+top_reached_idx = max(top_reached_fine, top_reached_hybrid);
+
+xline(t(top_reached_idx), '--k','Alpha',0.5)
+
 set(gca, 'XScale', 'log')
 xlim([0.01, max(t)])
 set(gca, 'YDir', 'reverse')
@@ -673,18 +745,13 @@ legend({'Tip: Fine', 'Tip: Hybrid', 'Average: Fine', 'Average: Hybrid'}, ...
 xlabel('Years since simulation start')
 ylabel('Depth (m)')
 title('Depth of mobile plume')
-%saveas(fig_speed, strcat(plot_dir, 'location_plume'), 'pdf');
+saveas(fig_speed, strcat(plot_dir, 'location_plume'), 'pdf');
 
 %% Mean and var difference in depth
-tip_plume_fine = tip_speed_fine(tt >= 0.01);
-tip_plume_hybrid = tip_speed_hybrid(tt >= 0.01);
-avg_plume_fine = avg_speed_fine(tt >= 0.01);
-avg_plume_hybrid = avg_speed_hybrid(tt >= 0.01);
-t_store = tt(tt >= 0.01);
-
 plume_depth_data = [t_store, tip_plume_fine, tip_plume_hybrid, ...
                              avg_plume_fine, avg_plume_hybrid];
 
+%save(strcat(mrstOutputDirectory, '\stochastic\plume_depth\', problem.Name, '.mat'), 'plume_depth_data')
 save(strcat(mrstOutputDirectory, '\plume_depth\', problem.Name, '.mat'), 'plume_depth_data')
 
 %% Plot 2D section
@@ -762,18 +829,14 @@ for i = 1:numel(substeps)
             g = model_hybrid.G;
             s = states_hybrid{ss}.s(:, 2);
             nm = 'Coarse solution';
-        else
-            g = G;
-            s = states_ve_fs{ss}.s(:, 2);
-            nm = 'VE reconstructed (no layers)';
         end
         %subplot(1, 2, 2-mod(j,2));       
         plotCellData(g, s, 'EdgeColor', 'none')           
         if ~isfield(g, 'parent')
-            plotOutlinedGrid(g, W, bc, sealingCells_faces | sealingFaces, 'lw', 1.5); 
+            plotOutlinedGrid(g, W, bc, sealingCells_faces | sealingFaces, 'lw', 0.8); 
             plotFaces(g, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
         else
-            plotOutlinedGrid(g.parent, W, bc, sealingCells_faces | sealingFaces, 'lw', 1.5); 
+            plotOutlinedGrid(g.parent, W, bc, sealingCells_faces | sealingFaces, 'lw', 0.8); 
         end
 
         view(vx, vz)
@@ -791,6 +854,260 @@ for i = 1:numel(substeps)
         end
     end   
 end
+
+
+%% Analyze stochastic results
+%trap_dir = strcat(mrstOutputDirectory,'\trapping\');
+trap_dir = strcat(mrstOutputDirectory,'\stochastic\trapping\');
+layers_dir = dir(strcat(trap_dir, 'layers*'));
+trap_data = struct;
+trap_data.categories = {'sr', 'r', 'sm', 'fm', 'exit'};
+
+for i=1:numel(layers_dir)
+    trap_diff_file = strcat(trap_dir, layers_dir(i).name, '\trap_diff_sum.txt');
+    trap_diff = readmatrix(trap_diff_file);
+    trap_diff(:,1) = []; % remove file-id from matrix
+    trap_diff(:,end) = []; % remove text-info from matrix
+    trap_data.(layers_dir(i).name) = trap_diff;
+end
+
+trap_stats = struct;
+trap_stats.categories = trap_data.categories;
+for i=1:numel(layers_dir) % mean and var for each trap category
+    layer = layers_dir(i).name;
+    trap_stats.(layer).mean = mean(trap_data.(layer), 1);
+    trap_stats.(layer).std = std(trap_data.(layer), 1);
+end
+
+plume_dir = strcat(mrstOutputDirectory,'\stochastic\plume_depth');
+plume_files = dir(plume_dir);
+plume_data = struct;
+for i=1:numel(plume_files)
+    plume_file = plume_files(i).name;
+    layers = string(regexp(plume_file, 'layers\d+', 'match'));
+    if isempty(layers)
+        continue;
+    end
+    plume_depths = load(strcat(plume_dir,'\',plume_file));   
+    plume_depths = plume_depths.plume_depth_data;
+    if ~isfield(plume_data, layers)
+        plume_data.(layers).tip_fine = plume_depths(:,2);
+        plume_data.(layers).tip_hybrid = plume_depths(:,3);
+        plume_data.(layers).avg_fine = plume_depths(:,4);
+        plume_data.(layers).avg_hybrid = plume_depths(:,2);
+    else
+        plume_data.(layers).tip_fine = cat(2, plume_data.(layers).tip_fine, plume_depths(:,2));
+        plume_data.(layers).tip_hybrid = cat(2, plume_data.(layers).tip_hybrid, plume_depths(:,3));
+        plume_data.(layers).avg_fine = cat(2, plume_data.(layers).avg_fine, plume_depths(:,4));
+        plume_data.(layers).avg_hybrid = cat(2, plume_data.(layers).avg_hybrid, plume_depths(:,5));
+    end
+end
+
+plume_stats = struct;
+fn = fieldnames(plume_data);
+plume_data.t = plume_depths(:,1);
+
+for i=1:numel(fn)
+    layers = string(fn(i));
+    plume_stats.(layers).mean = [mean(plume_data.(layers).tip_fine, 2), ...
+                                 mean(plume_data.(layers).tip_hybrid, 2), ...
+                                 mean(plume_data.(layers).avg_fine, 2), ...
+                                 mean(plume_data.(layers).avg_hybrid, 2)];
+    plume_stats.(layers).std = [std(plume_data.(layers).tip_fine, [], 2), ...
+                                std(plume_data.(layers).tip_hybrid, [], 2), ...
+                                std(plume_data.(layers).avg_fine, [], 2), ...
+                                std(plume_data.(layers).avg_hybrid, [], 2)];
+end
+
+%% Plot stochastic results
+W = schedule.control(1).W;
+z_well = mean(model.G.cells.centroids(W.cells, 3));
+% Tip of plume, mean and cumulative average difference
+fig_tip = figure(43);
+lstyle = {'-', '--', ':'};
+layers = [20, 40, 60];
+lime_green = [0/255 200/255 0/255];
+for i=1:numel(lstyle)
+    num_layers = strcat('layers', string(layers(i)));
+    tip_fine = plume_stats.(num_layers).mean(:,1);
+    tip_hybrid = plume_stats.(num_layers).mean(:,2);
+    yyaxis left
+    plot(plume_data.t, tip_fine, 'b', 'LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Fine:', {' '}, string(layers(i))));
+    hold on
+    plot(plume_data.t, tip_hybrid, 'r','LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Hybrid: ', {' '}, string(layers(i))));
+    hold on
+    yyaxis right
+    plot(plume_data.t, cumsum(abs(tip_hybrid - tip_fine))./(1:numel(plume_data.t))', ...
+                  'Color',lime_green, 'LineStyle', lstyle{i}, 'DisplayName', strcat('Diff:', {' '}, string(layers(i))));
+    hold on
+    set(gca,"YColor",lime_green)
+    set(gca, 'YDir', 'reverse')
+    ylabel('Depth (m)')
+end
+yyaxis left
+plot(plume_data.t, repmat(z_well, numel(plume_data.t), 1), '-k', 'HandleVisibility','off');
+set(gca, 'YColor', 'black')
+hold off
+set(gca, 'XScale', 'log')
+set(gca, 'YDir', 'reverse')
+xlim([0.01, max(plume_data.t)])
+legend('Location','northwest')
+xlabel('Years since simulation start')
+ylabel('Depth (m)')
+title('Depth of tip of plume')
+saveas(fig_tip, strcat(plot_dir, 'tip_depth'));
+saveas(fig_tip, strcat(plot_dir, 'tip_depth'), 'pdf');
+
+% Tip of plume: mean and variance
+fig_tip_var = figure(44);
+lstyle = {'-', '--', ':'};
+layers = [20, 40, 60];
+clr = {'b', 'r'};
+for i=1:numel(lstyle)
+    num_layers = strcat('layers', string(layers(i)));
+    tip_fine_mean = plume_stats.(num_layers).mean(:,1);
+    tip_fine_std = plume_stats.(num_layers).std(:,1);
+    tip_hybrid_mean = plume_stats.(num_layers).mean(:,2);
+    tip_hybrid_std = plume_stats.(num_layers).std(:,2); 
+
+    xt = plume_data.t;
+    %patch([xt; flip(xt)], [tip_fine_mean + tip_fine_std;  flip(tip_fine_mean - tip_fine_std)], [0.6  0.7  0.8])
+    plot(plume_data.t, tip_fine_std, 'b', 'LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Fine:', {' '}, string(layers(i))));
+    hold on
+    %patch([xt; flip(xt)], [tip_hybrid_mean + tip_hybrid_std;  flip(tip_hybrid_mean - tip_hybrid_std)], [0.6  0.7  0.8])
+    plot(plume_data.t, tip_hybrid_std, 'r','LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Hybrid: ', {' '}, string(layers(i))));
+    hold on
+end
+%plot(plume_data.t, repmat(z_well, numel(plume_data.t), 1), '-k', 'HandleVisibility','off');
+hold off
+set(gca, 'XScale', 'log')
+xlim([0.01, max(plume_data.t)])
+%set(gca, 'YDir', 'reverse')
+legend('Location','northwest')
+xlabel('Years since simulation start')
+ylabel('Depth (m)')
+title('Standard deviation in plume tip depth')
+saveas(fig_tip_var, strcat(plot_dir, 'tip_depth_var')); % fig file
+saveas(fig_tip_var, strcat(plot_dir, 'tip_depth_var'), 'pdf'); % pdf file
+
+%% Average depth of plume
+fig_avg = figure(45);
+lstyle = {'-', '--', ':'};
+layers = [20, 40, 60];
+lime_green = [0/255 200/255 0/255];
+for i=1:numel(lstyle)
+    num_layers = strcat('layers', string(layers(i)));
+    avg_fine = plume_stats.(num_layers).mean(:,3);
+    avg_hybrid = plume_stats.(num_layers).mean(:,4);
+    yyaxis left
+    plot(plume_data.t, avg_fine, 'b', 'LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Fine:', {' '}, string(layers(i))));
+    hold on
+    plot(plume_data.t, avg_hybrid, 'r','LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Hybrid: ', {' '}, string(layers(i))));
+    hold on
+    yyaxis right
+    plot(plume_data.t, cumsum(abs(avg_hybrid - avg_fine))./(1:numel(plume_data.t))', ...
+                  'Color',lime_green, 'LineStyle', lstyle{i}, 'DisplayName', strcat('Diff:', {' '}, string(layers(i))));
+    hold on
+    set(gca,"YColor",lime_green)
+    set(gca, 'YDir', 'reverse')
+    ylabel('Depth (m)')
+end
+yyaxis left
+plot(plume_data.t, repmat(z_well, numel(plume_data.t), 1), '-k', 'HandleVisibility','off');
+set(gca, 'YColor', 'black')
+hold off
+set(gca, 'XScale', 'log')
+set(gca, 'YDir', 'reverse')
+xlim([0.01, max(plume_data.t)])
+legend('Location','northwest')
+xlabel('Years since simulation start')
+ylabel('Depth (m)')
+title('Average depth of plume')
+saveas(fig_avg, strcat(plot_dir, 'avg_depth'));
+saveas(fig_avg, strcat(plot_dir, 'avg_depth'), 'pdf');
+
+
+% Avg of plume: standard dev
+fig_avg_var = figure(46);
+lstyle = {'-', '--', ':'};
+layers = [20, 40, 60];
+clr = {'b', 'r'};
+for i=1:numel(lstyle)
+    num_layers = strcat('layers', string(layers(i)));
+    tip_fine_mean = plume_stats.(num_layers).mean(:,3);
+    tip_fine_std = plume_stats.(num_layers).std(:,3);
+    tip_hybrid_mean = plume_stats.(num_layers).mean(:,4);
+    tip_hybrid_std = plume_stats.(num_layers).std(:,4); 
+
+    xt = plume_data.t;
+    %patch([xt; flip(xt)], [tip_fine_mean + tip_fine_std;  flip(tip_fine_mean - tip_fine_std)], [0.6  0.7  0.8])
+    plot(plume_data.t, tip_fine_std, 'b', 'LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Fine:', {' '}, string(layers(i))));
+    hold on
+    %patch([xt; flip(xt)], [tip_hybrid_mean + tip_hybrid_std;  flip(tip_hybrid_mean - tip_hybrid_std)], [0.6  0.7  0.8])
+    plot(plume_data.t, tip_hybrid_std, 'r','LineStyle', lstyle{i}, 'MarkerSize', 0.1, ...
+                                    'DisplayName', strcat('Hybrid: ', {' '}, string(layers(i))));
+    hold on
+end
+%plot(plume_data.t, repmat(z_well, numel(plume_data.t), 1), '-k', 'HandleVisibility','off');
+hold off
+set(gca, 'XScale', 'log')
+xlim([0.01, max(plume_data.t)])
+%set(gca, 'YDir', 'reverse')
+legend('Location','northwest')
+xlabel('Years since simulation start')
+ylabel('Depth (m)')
+title('Standard deviation in plume tip depth')
+saveas(fig_tip_var, strcat(plot_dir, 'avg_depth_var')); % fig file
+saveas(fig_tip_var, strcat(plot_dir, 'avg_depth_var'), 'pdf'); % pdf file
+
+%% Computing time
+fine_sim_file = strcat(mrstOutputDirectory,'\stochastic\finescale\caseMultilayered\simulation_settings.txt');
+hybrid_sim_file = strcat(mrstOutputDirectory,'\stochastic\hybrid\caseMultilayered\simulation_settings.txt');
+
+fine_sim = readtable(fine_sim_file);
+hybrid_sim = readtable(hybrid_sim_file);
+
+fine_time = struct;
+fine_time.layers20.tot = []; fine_time.layers20.med = [];
+fine_time.layers40.tot = []; fine_time.layers40.med = [];
+fine_time.layers60.tot = []; fine_time.layers60.med = [];
+hybrid_time = struct;
+hybrid_time.layers20.tot = []; hybrid_time.layers20.med = [];
+hybrid_time.layers40.tot = []; hybrid_time.layers40.med = [];
+hybrid_time.layers60.tot = []; hybrid_time.layers60.med = [];
+% Categorize into num layers
+for i=1:numel(fine_sim.id)
+    layers = string(regexp(fine_sim.id{i}, 'layers\d+', 'match'));
+    fine_time.(layers).tot = cat(1, fine_time.(layers).tot, fine_sim.tot_time(i));   
+    fine_time.(layers).med = cat(1, fine_time.(layers).med, fine_sim.median_time(i));
+    hybrid_time.(layers).tot = cat(1, hybrid_time.(layers).tot, hybrid_sim.tot_time(i));
+    hybrid_time.(layers).med = cat(1, hybrid_time.(layers).med, hybrid_sim.median_time(i));
+end
+
+sim_field = fieldnames(fine_time);
+for i=1:numel(sim_field)
+    layers = sim_field{i};
+    sim_layer = fine_time.(layers);
+    time_fields = fieldnames(sim_layer);
+    for j=1:numel(time_fields)
+        time_type = time_fields{j};
+        fine_layer_time = fine_time.(layers).(time_type);
+        fine_time.(layers).(time_type) = [mean(fine_layer_time), std(fine_layer_time)];
+        %sim_time.(layers).(time_type) = var(sim_layer_time);
+        hybrid_layer_time = hybrid_time.(layers).(time_type);
+        hybrid_time.(layers).(time_type) = [mean(hybrid_layer_time), std(hybrid_layer_time)];
+    end
+end
+
+%% Trap difference between models
+
 
 %% Functions:
 function [v_hybrid, v_fine] = discrCO2Vol(d, model_hybrid,  model_fine, state_hybrid_fs, state_fine)
@@ -826,4 +1143,11 @@ function setDaspect(run3D, standard, varargin)
            colorbar(varargin{1});
        end
     end
+end
+
+function [x_new, shaded_area] = filledVariance(x, y, var)
+    c1 = y + var;
+    c2 = y - var;
+    x_new = [x, fliplr(x)];
+    shaded_area = [c1, fliplr(c2)];    
 end

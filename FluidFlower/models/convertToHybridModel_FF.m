@@ -38,7 +38,7 @@ function [model_ve, model_coarse] = convertToHybridModel_FF(model, varargin)
 %   transThreshold - Threshold to consider transmissibilities as "sealing"
 %                    if sealingFaces is defaulted.
 %   
-%   pe_rest - Entry pressure in high-permeable region (where VE columns)
+%   p_entry - Entry pressure in facies
 %
 % RETURNS:
 %   model_ve     - A VE model on the coarse scale
@@ -83,7 +83,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
     opt = struct('sealingFaces', [], 'otherFineFaces', [], 'sealingCells', [], 'sealingBFaces', [], ...
                     'setSubColumnsFine', true, 'multiplier', 0, 'sumTrans', true, ...
-                    'transThreshold', 0, 'pe_rest', 0);
+                    'transThreshold', 0, 'p_entry', 0);
     opt = merge_options(opt, varargin{:});
 
     G = model.G;
@@ -164,7 +164,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if isa(model, 'TwoPhaseFluidFlowerModel') || isa(model, 'GenericBlackOilModel')
         disp('NB: Change back to WaterGasHybridModel_FF')
         model_ve = WaterGasHybridModel_FF(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
-                                            'sealingCells', opt.sealingCells);
+                                            'sealingCells', opt.sealingCells, 'p_entry', opt.p_entry);
     elseif isa(model, 'OverallCompositionCompositionalModel')
         model_ve = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'NaturalVariablesCompositionalModel')

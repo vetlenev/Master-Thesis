@@ -9,13 +9,19 @@ filename = 'draft_spe11_with_facies_markers.geo';
 
 %% Directory and seed
 rootdir = strrep(ROOTDIR, '\', '/');
+make_figs_thesis = false;
+make_pinch_fig = false;
+make_fig_bottomfault = false;
 % NB: change this to your local path to FluidFlower folder
 simtype_dir = 'hybrid/extended/';
-output_filename = 'sealing_1_7_regions_muchCO2';
+simtype_dir_fine = 'fine/';
+output_filename = 'sealing_1_2_3_regions_muchCO2';
 data_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/data');
 plot_dir = strcat(rootdir, '../Master-Thesis/FluidFlower/output/', simtype_dir, output_filename, '/');
+plot_dir_fine = strcat(rootdir, '../Master-Thesis/FluidFlower/output/', simtype_dir_fine, output_filename, '/');
 mkdir(data_dir);
 mkdir(plot_dir);
+mkdir(plot_dir_fine);
 
 my_seed = 295;
 seed = UtilFunctionsFF.setSeed(data_dir, my_seed);
@@ -23,7 +29,7 @@ rng(seed)
 
 %% SET PARAMETERS
 node_density = 0.5; % The density of nodes inside triangulated parts of faults. Should be < 1 to not get to dense triangles (standard: 0.3)
-nx_glob = 200; % standard: nx_glob=250, nz_glob=150, works for this setting...
+nx_glob = 200; % 200! % standard: nx_glob=250, nz_glob=150, works for this setting...
 nz_glob = 150;
 
 %% Other definitions
@@ -73,6 +79,20 @@ poly.top.G = computeGeometry(poly.top.G);
 % Top:
 [poly.top, closest_top] = correct_dx_poly(poly.top, G_glob, poly.top.top_mask, 'top');
 
+if make_figs_thesis
+    fig_top = figure();
+    plotGrid(poly.top.G, 'facecolor', 'blue');
+    hold on
+    scatter(poly.top.bottom_side(:,1), poly.top.bottom_side(:,2), 60, 'MarkerFaceColor', 'yellow', 'LineWidth', 1, 'MarkerEdgeColor', 'black');
+    hold on
+    scatter(poly.top.bottom_side_new(:,1), poly.top.bottom_side_new(:,2), 10, 'MarkerFaceColor', 'red');
+    xlim([min(poly.top.bottom_side(:,1)), max(poly.top.bottom_side(:,1))])
+    ylim([1, 1.2])
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_0'));
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_0'), 'pdf');
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_0'), 'png');
+end
+
 %% Interpolation
 % Interpolate z-values at surface of polygon
 poly.top = interpolateZ_remaining(poly.top, closest_bottom, ...
@@ -80,8 +100,42 @@ poly.top = interpolateZ_remaining(poly.top, closest_bottom, ...
 poly.top = interpolateZ_remaining(poly.top, closest_top, ...
                                 poly.top.top_mask, 'top', 'linear');
 
+if make_figs_thesis
+    fig_top = figure();
+    plotGrid(poly.top.G, 'facecolor', 'blue', 'facealpha', 0.3);
+    hold on
+    scatter(poly.top.G.nodes.coords(poly.top.top_mask, 1), poly.top.G.nodes.coords(poly.top.top_mask, 2), 7, 'MarkerFaceColor', 'k', 'MarkerEdgeColor','none') %[50, 205, 50]/255
+    hold on
+    scatter(poly.top.G.nodes.coords(poly.top.bottom_mask, 1), poly.top.G.nodes.coords(poly.top.bottom_mask, 2), 7, 'MarkerFaceColor', 'k', 'MarkerEdgeColor','none')
+    hold on
+    scatter(poly.top.bottom_side(:,1), poly.top.bottom_side(:,2), 60, 'MarkerFaceColor', 'yellow', 'LineWidth', 1, 'MarkerEdgeColor', 'black');
+    hold on
+    scatter(poly.top.bottom_side_new(:,1), poly.top.bottom_side_new(:,2), 10, 'MarkerFaceColor', 'red');  
+    xlim([min(poly.top.bottom_side(:,1)), max(poly.top.bottom_side(:,1))])
+    ylim([1, 1.2])
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_a'));
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_a'), 'pdf');
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_a'), 'png');
+end
+
 % Interpolate x+z values in interior
 poly.top = interpolateInternal(poly.top, poly.top.top_mask, poly.top.bottom_mask, []);
+
+if make_figs_thesis
+    fig_top = figure();
+    plotGrid(poly.top.G, 'facecolor', 'blue', 'facealpha', 0.3);
+    hold on
+    scatter(poly.top.G.nodes.coords(:, 1), poly.top.G.nodes.coords(:, 2), 7, 'MarkerFaceColor', 'k', 'MarkerEdgeColor','none')
+    hold on    
+    scatter(poly.top.bottom_side(:,1), poly.top.bottom_side(:,2), 60, 'MarkerFaceColor', 'yellow', 'LineWidth', 1, 'MarkerEdgeColor', 'black');
+    hold on
+    scatter(poly.top.bottom_side_new(:,1), poly.top.bottom_side_new(:,2), 10, 'MarkerFaceColor', 'red');  
+    xlim([min(poly.top.bottom_side(:,1)), max(poly.top.bottom_side(:,1))])
+    ylim([1, 1.2])
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_b'));
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_b'), 'pdf');
+    saveas(fig_top, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_top_b'), 'png');
+end
 
 %% Finally, update grid
 poly.top.G = computeGeometry(poly.top.G);
@@ -99,6 +153,19 @@ poly = cell2struct(struct2cell(poly), {'p32'});
 %% Create subgrid for neighboring polygon below
 [poly, nodes_overlap, pts_overlap] = glueToUpperPolygon(polys, poly, 30, 32, ...
                                                         nodes_overlap, pts_overlap, G_glob);
+
+if make_figs_thesis
+    fig_top_glued = figure();
+    plotGrid(poly.p32.G, 'facecolor', 'blue', 'facealpha', 0.3);
+    hold on
+    plotGrid(poly.p30.G, 'facecolor', 'red', 'facealpha', 0.3);
+    hold on
+    scatter(poly.p30.top_side(:,1), poly.p30.top_side(:,2), 50, 'MarkerFaceColor','yellow', 'MarkerEdgeColor','black');
+    hold on
+    scatter(nodes_overlap.p30(:,1), nodes_overlap.p30(:,2), 25, 'MarkerFaceColor','red', 'MarkerEdgeColor','none');
+    xlim([0, max(poly.p32.G.nodes.coords(:,1))])
+    ylim([min(poly.p30.G.nodes.coords(:,2)), 1.2])
+end
 
 [poly, nodes_overlap, pts_overlap] = glueToUpperPolygon(polys, poly, 18, 30, ...
                                                         nodes_overlap, pts_overlap, G_glob, true, 1.5);
@@ -225,6 +292,20 @@ poly = Faults.makeQuadrilaterals(polys, poly, 25, poly25_neighbors, ...
 [poly, p25Ft] = Faults.QuasiRandomPointDistribution(poly, "p25fFt", G_glob, 2*node_density, false, colors);
 [poly, p25Gt] = Faults.QuasiRandomPointDistribution(poly, "p25fGt", G_glob, 2*node_density, false, colors);
 
+%% Save pinch-out fig
+if make_pinch_fig
+    fig_pinch = figure();
+    plotGrid(poly.p29A.G, 'facecolor', 'red', 'facealpha', 0.7)
+    plotGrid(poly.p29B.G, 'facecolor', 'red', 'facealpha', 0.5)
+    plotGrid(poly.p29C.G, 'facecolor', 'red', 'facealpha', 0.3)    
+    plotGrid(poly.p25fFq.G, 'facecolor', [0, 191, 255]/255)
+    plotGrid(poly.p25fFt.G, 'facecolor', [0, 191, 255]/255)
+    hold on
+    scatter(nodes_overlap.p29C(:,1), nodes_overlap.p29C(:,2), 23, 'MarkerFaceColor', 'yellow')
+    hold on
+    scatter(poly.p29B.G.nodes.coords(poly.p29B.bottom_mask, 1), poly.p29B.G.nodes.coords(poly.p29B.bottom_mask, 2), 23, 'MarkerFaceColor', 'yellow')
+end
+
 %% Triangulation of Right Fault
 poly12_neighbors = cell(2, 2);
 poly12_neighbors{1,1} = poly.p5B; poly12_neighbors{1,2} = 'top';
@@ -338,8 +419,29 @@ poly = Faults.heterogeneousFault(polys, poly, 1.5, Lx, Lz, Nx, Nz);
 % Triangulate bottom-most part
 [poly, p23B] = Faults.QuasiRandomPointDistribution(poly, "p23fB", G_glob, node_density, false, colors);
 
+%% Plot part of bottom fault
+if make_fig_bottomfault
+    fig_bfault = figure();
+    plotGrid(poly.p23fA.G, 'facecolor', [1, 191, 255]/255)
+    plotGrid(poly.p26f.G, 'facecolor', 'red')
+    plotGrid(poly.p22f.G, 'facecolor', [128, 0, 128]/255)
+    hold on
+    %scatter(poly.p26f.internal_east(:,1), poly.p26f.internal_east(:,2), 25, 'MarkerFaceColor','yellow','MarkerEdgeColor','black')
+    %hold on
+    w23 = poly.p23fA.G.nodes.coords(poly.p23fA.west_mask, :);
+    [uwe23, ~, ic] = uniquetol(we, 'ByRows', true);
+    counts = accumarray(ic, 1);
+    collapsed_nodes = unique(we(counts(ic) == 2, :), 'rows');
+    scatter(collapsed_nodes(:,1), collapsed_nodes(:,2), 25, 'MarkerFaceColor','yellow','MarkerEdgeColor','black')
+    xlim([min(poly.p23fA.G.nodes.coords(:,1)), max(poly.p22f.G.nodes.coords(:,1))])  
+    ylim([min(poly.p23fA.G.nodes.coords(:,2)), max(poly.p26f.G.nodes.coords(:,2))])
+    saveas(fig_bfault, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_bottomfault'));
+    saveas(fig_bfault, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_bottomfault'), 'pdf');
+    saveas(fig_bfault, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_bottomfault'), 'png');
+end
+
 %% Plots / tests
-figure(2)
+fig_grid = UtilFunctions.fullsizeFig(2);
 xlim([0, 2.8])
 ylim([0, 1.2])
 %colormap('jet')
@@ -362,6 +464,9 @@ for i = 1:numel(poly_idxs) % plot subgrids first
     end
 end
 
+saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'));
+saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'), 'png');
+saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'), 'pdf');
 %plotGrid(poly.p25pA.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25pA.facies,:))
 
 %% Glue-preparation
@@ -510,8 +615,8 @@ fluid = rmfield(fluid, 'pcOG');
 b = 1; % unit formation volume factor
 fluid.bW = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
 fluid.bG = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
-fluid.muW = @(p, varargin) 3e-5*Pascal*second + 0.*p;
-fluid.muG = @(p, varargin) 8e-4*Pascal*second + 0.*p;
+fluid.muW = @(p, varargin) 3e-5*Pascal*second + 0.*p; %3e-5*Pascal*second + 0.*p;
+fluid.muG = @(p, varargin) 8e-4*Pascal*second + 0.*p; %8e-4*Pascal*second + 0.*p;
 %fluid = assignRelPerm(fluid);
 
 facies_all = deck.REGIONS.SATNUM;
@@ -551,9 +656,10 @@ allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis
 allLayersBottom = {};
 allLayersCells = {};
 
-lowperm_facie = [1,7]; % [1,4,7]
+lowperm_facie = [1,2,3]; % [1,4,7]
 
-lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
+%lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
+lowperm_cells = find(ismember(Gg.facies, lowperm_facie));
 if ismember(lowperm_facie, 1) % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
     p7small_cells = poly.sim.cell_range.p7small(1):poly.sim.cell_range.p7small(2); % poly.glued -> poly.sim
     lowperm_p7small = ismember(lowperm_cells, p7small_cells);
@@ -584,9 +690,8 @@ for i=1:numel(poly_idxs_new)
     %allLayersBottom.(pidx) = bottom_faces;
 end
 
-allSealingCells = vertcat(allSealingCells{:}); % no sealing cells if only face constraint
 isFine.sealingCells = false(Gg.cells.num, 1);
-isFine.sealingCells(allSealingCells) = true;
+isFine.sealingCells(vertcat(allSealingCells{:})) = true;
 
 allSealingBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allSealingBFaces{:}));
 allLayersBottom_rem = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayersBottom{:}));
@@ -595,7 +700,7 @@ isFine.sealingBFaces = false(Gg.faces.num, 1);
 isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
 
 isFine.layersBFaces = false(Gg.faces.num, 1);
-isFine.layersBFaces(allLayersBottom_rem) = true; % bounding faces of sealing cells
+isFine.layersBFaces(allLayersBottom_rem) = true; % bounding faces of each layer
 
 isFine.sealingBottom = allSealingBottom;
 
@@ -717,20 +822,63 @@ gN2_int = gN(gN_int, 2);
 
 facies_transition = zeros(Gg.faces.num, 1);
 facies_transition(gN_int) = Gg.facies(gN1_int) ~= Gg.facies(gN2_int);
-%facies_transition(gN_ext) = 1;
 
-isFine.faciesFaces = logical(facies_transition);
-faciesFaces = find(isFine.faciesFaces);
+%isFine.faciesFaces = logical(facies_transition);
+%faciesFaces = find(isFine.faciesFaces);
+faciesFaces = find(facies_transition);
+
+%% Erase VE-connection if entry pressure exceeded
+p_entry = zeros(numel(unique(Gg.facies)), 1);
+p_entry_cells = zeros(Gg.cells.num, 1);
+for fac=1:numel(p_entry)
+    p_entry(fac) = fluid.pcWG{fac}(1e-5);
+    fac_cells = Gg.facies == fac;
+    p_entry_cells(fac_cells) = p_entry(fac);
+end
+
+facies_N = Gg.faces.neighbors(faciesFaces, :);
+facies_centroid = reshape(Gg.cells.centroids(facies_N, 2), [], 2); % reshaoe to get two columns (one for each neighbor)
+%facie_upper = zeros(size(facies_N, 1), 1);
+%facie_lower = zeros(size(facies_N, 1), 1);
+for i=1:size(facies_centroid, 1)
+    [~, row_max] = max(facies_centroid(i,:));
+    facie_upper = facies_N(i, row_max);
+    row_min = 3 - row_max;
+    facie_lower = facies_N(i, row_min);
+    % CHECK INSTEAD IF P_ENTRY IS HIGHER THAN P_ENTRY IN LAYER WHERE CLOSEST INJECTION OCCURS!
+    W_cells = [W1_cell, W2_cell];
+    W_centroids = Gg.cells.centroids(W_cells, 1); % closest in horizontal distance
+
+    [~, closest_idx] = min(abs(Gg.cells.centroids(facie_upper, 1) - W_centroids));
+    closest_well = W_cells(closest_idx);
+    above_well = Gg.cells.centroids(facie_upper, 2) > Gg.cells.centroids(closest_well, 2);
+    %isVE = isnan(Gg.i(facie_upper)) && isnan(Gg.i(facie_lower));    
+    in_middle = Gg.cells.centroids(facie_upper, 2) > min(poly.p31fAt.bnodes(:,2)) && ...
+                Gg.cells.centroids(facie_upper, 2) < max(poly.p31fAq.internal_top(:,2)) && ...
+                Gg.cells.centroids(facie_upper, 1) > min(poly.p31fAq.internal_east(:,1)) && ...
+                Gg.cells.centroids(facie_upper, 1) < max(poly.p25fA.internal_west(:,1));
+
+    if p_entry_cells(facie_upper) <= p_entry_cells(facie_lower) || ...
+            (p_entry_cells(facie_upper) <= p_entry_cells(closest_well) && ...
+            above_well) || (Gg.facies(facie_upper) == 4 && Gg.facies(facie_lower) == 5)
+        faciesFaces(i) = 0;
+    end
+end
+
+faciesFaces = faciesFaces(faciesFaces ~= 0); % remove unwanted connections
+isFine.faciesFaces = false(Gg.faces.num, 1);
+isFine.faciesFaces(faciesFaces) = true;
 
 %% Convert to hybrid model
 %Gg.cells.volumes(Gg.cells.volumes == 0) = eps;
 %model = TwoPhaseFluidFlowerModel(Gg, rock, fluid, 1, 1, 'useCNVConvergence', true);
 fluid.rhoWS = 500*kilogram/meter^3;
-model = GenericBlackOilModel(Gg, rock, fluid);
+%model = GenericBlackOilModel(Gg, rock, fluid);
+model = TwoPhaseFluidFlowerModel(Gg, rock, fluid, 1, 1, 'useCNVConvergence', true);
 model.oil = false;
 model = validateModel(model);
 %model.water = false;
-pe_rest = 4.65*10^4*Pascal; % 5*10^5
+%pe_rest = 4.65*10^4*Pascal; % 5*10^5
 remFineFaces = find(any(isFine.wellFaces,2) | isFine.bcFaces);
 faultFaces = find(isFine.faultFaces | isFine.bufferFaces);
 otherFineFaces = unique([remFineFaces; faultFaces]);
@@ -742,7 +890,7 @@ otherFineFaces = unique([remFineFaces; faultFaces]);
                                                         'setSubColumnsFine', false, ...
                                                         'multiplier', 1, ...
                                                         'sumTrans', true, ...
-                                                        'pe_rest', pe_rest);
+                                                        'p_entry', p_entry);
 Gh = model_hybrid.G;
 Gf = model.G;
 
@@ -783,7 +931,9 @@ nls.maxTimestepCuts = 8;
 %[ws_hybrid, states_hybrid] = simulateScheduleAD(state0_hybrid, model_hybrid, schedule_hybrid, 'NonLinearSolver', nls);
 problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hybrid, ...
                                     strcat('FF/', simtype_dir), 'NonLinearSolver', nls, 'Name', output_filename);
-
+% warn = warning('query', 'last');
+% w_id = warn.identifier;
+% warning('off', w_id);
 [ok, status] = simulatePackedProblem(problem_hybrid);
 
 [ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
@@ -791,12 +941,12 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 %% Simulate fine!
 %[ws, states] = simulateScheduleAD(state0, model, schedule, 'NonLinearSolver', nls);
 
-% problem = packSimulationProblem(state0, model, schedule, ...
-%                                     strcat('FF/', simtype_dir), 'NonLinearSolver', nls, 'Name', output_filename);
-% 
-% [ok, status] = simulatePackedProblem(problem);
-% 
-% [ws, states, report] = getPackedSimulatorOutput(problem);
+problem = packSimulationProblem(state0, model, schedule, ...
+                                    strcat('FF/', simtype_dir), 'NonLinearSolver', nls, 'Name', output_filename);
+
+[ok, status] = simulatePackedProblem(problem);
+
+[ws, states, report] = getPackedSimulatorOutput(problem);
 
 %% Plot relaxed VE columns
 figure()
@@ -830,35 +980,36 @@ t3 = find(schedule.step.control == 3);
 t3 = t3(end);
 
 swr = fluid.krPts.w(3,2);
+
 %% Plot hybrid
 fafap = [find(isFine.faciesFaces); find(isFine.sealingBFaces); ...
         find(isFine.bufferFaces)];
 W1_faces = Gg.cells.faces(Gg.cells.facePos(W1_cell):Gg.cells.facePos(W1_cell+1), 1);
 W2_faces = Gg.cells.faces(Gg.cells.facePos(W2_cell):Gg.cells.facePos(W2_cell+1), 1);
 
-for i = [t1, t2, t3]
-    f5 = UtilFunctionsFF.fullsizeFig(5); clf(5)     
-    plotCellData(Gh, states_hybrid{i}.s(:,2), 'edgec', 'none');
-    plotFaces(Gh, (1:Gh.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
-    hold on
-    %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    colormap(cc); 
-    %caxis([0, 1-swr]); 
-    caxis([0, max(states_hybrid{end}.sGmax)])
-    colorbar('location','southoutside');
-    axis tight off
-    title({'Hybrid saturation', sprintf('hour: %.1f',t(i))})   
-    %setDaspect(run3D, standard);
-    %saveas(f5, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
-end
+% for i = [t1, t2, t3]
+%     f5 = UtilFunctionsFF.fullsizeFig(5); clf(5)     
+%     plotCellData(Gh, states_hybrid{i}.s(:,2), 'edgec', 'none');
+%     plotFaces(Gh, (1:Gh.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
+%     hold on
+%     %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
+%     colormap(cc); 
+%     %caxis([0, 1-swr]); 
+%     caxis([0, max(states_hybrid{end}.sGmax)])
+%     colorbar('location','southoutside');
+%     axis tight off
+%     title({'Hybrid saturation', sprintf('hour: %.1f',t(i))})   
+%     %setDaspect(run3D, standard);
+%     %saveas(f5, sprintf(strcat(plot_dir, 'coarse_sat_%d'), i), 'png');       
+% end
 
-for i = [t1, t2, t3] % 1:20:numel(states_hybrid_fs)
+for i = [t1, t2, t3]
     f6 = UtilFunctionsFF.fullsizeFig(6); clf(6)
     %f1 = figure(1); clf
     plotCellData(Gf, states_hybrid_fs{i}.s(:,2), 'edgec', 'none');
     plotFaces(Gf, (1:Gf.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on
-    plotFaces(Gf, fafap, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
+    plotFaces(Gf, fafap, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.4)
     plotFaces(Gf, [W1_faces; W2_faces], 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 2)
     colormap(cc); 
     %caxis([0, 0.1]); 
@@ -867,23 +1018,25 @@ for i = [t1, t2, t3] % 1:20:numel(states_hybrid_fs)
     axis tight off
     title({'Reconstructed fine-scale saturation', sprintf('hour: %.1f',t(i))})   
     %setDaspect(run3D, standard);
-    %saveas(f6, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
+    %saveas(f6, sprintf(strcat(plot_dir, 'reconstructed_sat_%d'), i), 'png');       
 end
 
 %% Fine-scale solution
-for i = [t1, t2, t3]
+for i = [t1, t2, t3] %1:20:numel(states)
     f7 = UtilFunctionsFF.fullsizeFig(7); clf(7)     
     plotCellData(Gf, states{i}.s(:,2), 'edgec', 'none');
     plotFaces(Gf, (1:Gf.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on
-    %plotFaces(G, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.7)
-    %colormap(cc); caxis([0, 1-swr]); 
+    plotFaces(Gf, fafap, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.4)
+    plotFaces(Gf, [W1_faces; W2_faces], 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 2)
+    colormap(cc); 
+    % caxis([0, 1-swr]); 
     caxis([0, max(states{end}.sMax(:,2))])
     colorbar('location','southoutside');
     axis tight off
     title({'Full-dimensional saturation', sprintf('hour: %.1f',t(i))})   
     %setDaspect(run3D, standard);
-    saveas(f7, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
+    %saveas(f7, sprintf(strcat(plot_dir_fine, 'fine_sat_%d'), i), 'png');       
 end
 
 
@@ -919,19 +1072,19 @@ for i=1:numel(poly_idxs_new)
 end
 
 %% Subgrids and traps for VE top surfaces
-for i=1:numel(allLayersBottom)
-    subfaces = allLayersBottom{i}; % bottom faces of sealing layer    
+for i=1:numel(allSealingBottom) % allLayersBottom
+    subfaces = allSealingBottom{i}; % bottom faces of sealing layer (facies 1)
     pidx = string(poly_idxs_new{i});
 
     [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid_FF(Gf, Gh, subfaces, pidx, ...
-                                                    [], allLayersBottom);  % allLayersCells
+                                                    allSealingCells, allSealingBottom);  % allLayersCells, allLayersBottom
     
     Gs_fields = fieldnames(Gs);
     for k=1:numel(Gs_fields)        
         %pidx_k = strcat(pidx, '_', string(k));
         pidx_k = Gs_fields{k};
         gs = Gs.(pidx_k);
-        cm = cmap.(pidx_k); fm = fmap.(pidx_k); cm = cmap.(pidx_k);
+        cm = cmap.(pidx_k); fm = fmap.(pidx_k); nm = nmap.(pidx_k);
 
         if any(gs.cells.num) % only append non-zero subgrids
             Gsi = cat(1, Gsi, gs); % subgrid for VE regions
@@ -953,8 +1106,7 @@ fmaps_all = [fmap_glob; fmaps];
 
 %% FUNTCION DEFINTIONS
 function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, poly_obj, poly_num, poly_num_upper, ...
-                                                                        nodes_overlap, pts_overlap, G_glob, varargin)
-    
+                                                                        nodes_overlap, pts_overlap, G_glob, varargin)   
     fac_scale = 1;
     if nargin == 8
         inter_horz = varargin{1};
@@ -1036,7 +1188,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     
     [poly, closest_bottom] = correct_dx_poly(poly, G_glob, ...
                                                 poly.bottom_mask, 'bottom'); % manually define nodes on bottom side
-    
+       
     poly = interpolateZ_remaining(poly, closest_bottom, ...
                                     poly.bottom_mask, 'bottom', 'linear');
            

@@ -20,6 +20,12 @@ end
 
 num_states = numel(states);
 W = schedule.control(1).W;
+t = schedule.step.val;
+inj_rate = schedule.control(1).W.val;
+well_on = schedule.step.control == 1;
+cum_inj = cumsum(t.*inj_rate.*well_on); % DOES NOT WORK?
+t = cumsum(schedule.step.val);
+
 z_well = mean(G.cells.centroids(W.cells,3)); % assume CO2 is injected uniformly through cell perforation    
 k_well = fix(mean(kk(W.cells)));
 k_min = min(kk);
@@ -33,10 +39,12 @@ avg_depth(1) = z_well;
 reached_top = false;
 
 for i=1:num_states
-    sn = states{i}.s(:,2);   
+    sn = states{i}.s(:,2);    
 
     plume_mask = sn > snr; % 1e-5 to avoid round-off errors % sn > snr doesn't work if open top boundary since hybrid model will never reach sn > snr for topmost VE layer
     z_plume = G.cells.centroids(plume_mask, 3);
+
+    plume_vol = sn(plume_mask) .* G.cells.volumes(plume_mask); % DOES NOT WORK ?
       
     if isempty(z_plume)
         z_tip = z_well;
@@ -58,8 +66,10 @@ for i=1:num_states
     if (~reached_top && k_tip <= k_min) || reached_top % tip plume has reached open top boundary -> subsequent speeds unknown!
         reached_top = true;
         tip_depth(i+1) = z_min;     
-    else
+    elseif t(i) > 0.01*year
         %tip_depth(i+1) = abs(z_tip - z_well)/t;
+        tip_depth(i+1) = min(z_tip, tip_depth(i)); % tip depth can't suddenly increase
+    else
         tip_depth(i+1) = z_tip;
     end
         
