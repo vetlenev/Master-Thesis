@@ -44,16 +44,24 @@ G0 = computeGeometry(G); % original grid before adding sealing layers/faces
 nx = G.cartDims(1); ny = G.cartDims(2); nz = G.cartDims(3);
 x0 = G0.cells.centroids(:,1);
 z0 = G0.cells.centroids(:,3);
-%dz = (max(z0)/nz)/2;
 lz = max(G0.faces.centroids(:,3));
 [ii, jj, kk] = gridLogicalIndices(G0); % for OLD grid
 
+vertWellDistRate = 0.07;
+
 % Define positions of layers BEFORE skewing grid
-rz = 0.95*lz.*rand(n_layers,1);
-rh = (0.02-0.005).*rand(n_layers,1) + 0.005;
+%rz = 0.95*lz.*rand(n_layers,1);
+rz = linspace(0, (1-1.5*vertWellDistRate)*lz, n_layers)';
+%rh = (0.02-0.005).*rand(n_layers,1) + 0.005;
+rh = 0.001;
 rzh = rz + rh.*lz;    
-rx = 0.9*nx.*rand(n_layers,1);
-rxh = max(nx-1.3*rx, 0).*rand(n_layers,1) + 1.3*rx;
+%rx = 0.9*nx.*rand(n_layers,1);
+%rxh = max(nx-1.3*rx, 0).*rand(n_layers,1) + 1.3*rx;
+max_start_x = 0.85; % 0.80
+rx = linspace(0, max_start_x*nx, n_layers)';
+rx = rx(randperm(length(rx)));
+rxh = rx + (1-max_start_x)*nx + 0.1*rand(n_layers,1)*nx;
+rxh = min(rxh, nx); % to avoid going out of bounds
 
 z_pos = [rz, rzh];
 i_range = [rx, rxh];
@@ -87,7 +95,7 @@ z = G.cells.centroids(:,3);
 perm = repmat(100*milli*darcy, G.cells.num, 1);
 
 setZeroTrans = zeros(G.faces.num, 1);
-sealingCellsPerm = [0.01, 0.1, 1]*milli*darcy; 
+sealingCellsPerm = [0.01, 0.1]*milli*darcy; 
 
 allSealingFaces = {}; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
@@ -196,9 +204,9 @@ krn_PI = @(s) fluid.krG(s); % primary imbibition
 
 %fluid.krG = @(s, sMax) Hysteresis.Killough(s, sMax, 1-swr, snr, krn_PD, krn_PI);
                        
-tot_time = 400*year;
+tot_time = 200*year;
 inj_stop = 0.1; % 0.1
-pv_rate = 0.08; % 0.1
+pv_rate = 0.05; % 0.1
 
 pv = poreVolume(G, rock);
 inj_rate = pv_rate*sum(pv)/(inj_stop*tot_time); % inject pv_rate of total pore volume over injection time
@@ -221,7 +229,6 @@ bc = pside(bc, G, pressure_side, 100*barsa, 'sat', [1, 0]);
 bc.value = bc.value + fluid.rhoWS.*G.faces.centroids(bc.face, 3)*norm(gravity);
 
 horzWellDistRate = 0.1; % ratio of total horizontal length considered "close" to well
-vertWellDistRate = 0.07;
 for i = 1:numel(W)
     c = W(i).cells(1);
     hdist = abs(ii - ii(c)); %hdist = abs(x - x(c));
@@ -235,10 +242,10 @@ if ~isempty(bc)
 end
    
 nsteps_before_inj = 250;
-nsteps_after_inj = 500;
-dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/nsteps_before_inj, 15); % 10
+nsteps_after_inj = 300;
+dt = rampupTimesteps(inj_stop*tot_time, inj_stop*tot_time/nsteps_before_inj, 10); % 10
 %dt = [dt; repmat((1-inj_stop)*tot_time/nsteps_after_inj, nsteps_after_inj, 1)];
-dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/nsteps_after_inj, 20)];
+dt = [dt; rampupTimesteps((1-inj_stop)*tot_time, (1-inj_stop)*tot_time/nsteps_after_inj, 15)];
 
 times = cumsum(dt)/year();
 n_steps = numel(dt);

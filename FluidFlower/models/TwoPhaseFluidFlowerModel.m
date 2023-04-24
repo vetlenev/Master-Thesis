@@ -22,6 +22,14 @@ classdef TwoPhaseFluidFlowerModel < ThreePhaseBlackOilModel
             model.t     = model.computeTemperatureField(G, tsurf, tgrad);
             model.name  = 'GasWater_2ph';
             model.gravity = gravity;
+
+            opt = struct;
+            opt.useDepth = true;
+            if ~isfield(model.G, 'parent') % only add cell heights if full-dim grid
+                [model.G.cells.topDepth, model.G.cells.bottomDepth, ...
+                    model.G.cells.height] = getCellHeights(model.G, opt);
+            end
+
             model = merge_options(model, varargin{:});
         end
 
@@ -50,10 +58,14 @@ classdef TwoPhaseFluidFlowerModel < ThreePhaseBlackOilModel
                state.sGmax = max(state.sGmax, sG);
            else
                state.sGmax = sG;
-           end
-           %state.sGmax = min(1,state.sGmax);
+           end           
            % ---
-           state.sGmax = min(1-model.fluid.krPts.w(1), state.sGmax);
+           G = model.G;
+           facies = unique(G.facies);
+           for fac=facies'
+               fac_cells = G.facies == fac;
+               state.sGmax(fac_cells) = min(1-model.fluid.krPts.w(fac,2), state.sGmax(fac_cells));
+           end
            % ---
            state.sGmax = max(0,state.sGmax);
         end

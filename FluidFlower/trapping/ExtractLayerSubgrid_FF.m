@@ -30,7 +30,7 @@ function [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid_FF(Gf, Gh, bottom_faces, p
         subcells_sep = {};
         k = 1;
 
-        if ~all(subcells(:)) % remove neighbors outside domain
+        if ~all(subcells(:)) % remove neighbors outside domain (relevant for impermeable fault)
            ob_cells = ~all(subcells, 2); % out of bound cells
            ob_cells_idx = find(ob_cells);
            subcells_sep{k} = subcells(1:ob_cells_idx(1)-1, :);
@@ -52,7 +52,7 @@ function [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid_FF(Gf, Gh, bottom_faces, p
         % Split top surface into multiple sub-surfaces
         for p_num=1:numel(subcells_sep)
             subcells = subcells_sep{p_num};
-            p_idx = strcat(pidx, '_', string(p_num));
+            p_idx = strcat(pidx, '_', string(p_num)); % to keep track of distinct parts of the top surface subgrid
 
             [~, col_idx] = max(jj(subcells), [], 2); % choose bottom neighbor, not top
             subcells = diag(subcells(:, col_idx));

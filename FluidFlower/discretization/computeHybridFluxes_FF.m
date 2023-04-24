@@ -140,7 +140,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     h_B_global(cBH) = hB_ve.BH;
     % ----------------------------   
        
-    p_entry = f.pe_rest;    
+    p_entry = f.p_entry;    
     
     %[pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, isFine);
     [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h_global, h_max_global, H, rhoW, rhoG, muW, muG, ...
@@ -236,7 +236,9 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     h = a_M.*H;  
     h_max = (a_R + a_M).*H;
     
-    g = -norm(model.gravity);
+    % we take norm of g inside getPwFromHeight_FF anyway, so it doesn't
+    % matter if we use minus or plus here:
+    g = norm(model.gravity); % -norm(model.gravity)
     rhow = rhoW(c);
     rhog = rhoG(c);
     
@@ -277,7 +279,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     h = a_M.*H;  
     h_max = (a_R + a_M).*H;
     
-    g = -norm(model.gravity);
+    g = norm(model.gravity); % -norm(model.gravity)
     rhow = rhoW(c);
     rhog = rhoG(c);
     C = (T + B)/2;
@@ -436,11 +438,11 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
         for fac=facies'
             fac_cells = G.facies(n_cells) == fac;
             pcWG(fac_cells) = f.pcWG{fac}(sG(fac_cells));
-            p_entry = f.pcWG{fac}(1e-5);
+            %p_entry = f.pcWG{fac}(1e-5);
             pcWG_U(fac_cells) = (h(fac_cells).*(rhoW(fac_cells) - rhoG(fac_cells)) ...
                                 - H(fac_cells).*rhoW(fac_cells)).*g;
             if any(fac_cells)
-                pcWG_U(fac_cells) = pcWG_U(fac_cells) + p_entry;
+                pcWG_U(fac_cells) = pcWG_U(fac_cells) + opt.p_entry(fac);
             end
         end               
         %pcWG = f.pcWG{1}(sG); % should work for both face and cell constraints        

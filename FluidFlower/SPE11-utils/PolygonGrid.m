@@ -401,7 +401,7 @@ classdef PolygonGrid
             remaining_idx = ~poly_pts_idx & face_idx; % all points on face not equal to poly points
             x_new = x_sub(remaining_idx); % remaining bottom points -> needs to be interpolated
         
-            z_new = interp1(x, z, x_new, interp_method);
+            z_new = interp1(round(x,10), z, round(x_new,10), interp_method);
         
             obj.G.nodes.coords(remaining_idx, 2) = z_new;           
         end

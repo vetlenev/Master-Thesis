@@ -636,6 +636,10 @@ function [Gt, orient] = construct_grid_from_top_faces(G, tcells, tfaces)
       Gt.cells.ij = [I, J];
       Gt.cells.indexMap = sub2ind(Gt.cartDims, I, J);
       Gt.cells.global = G.cells.indexMap(tcells);
+   else
+       Gt.cells.ij = [G.i(tcells), G.j(tcells)];
+       Gt.cells.indexMap = (1:size(Gt.cells.ij, 1))';
+       Gt.cells.global = G.cells.indexMap(tcells);
    end
    
    % Forwarding the essential information about edge orientation 
@@ -787,38 +791,39 @@ function seq = determine_facetag_sequence(G)
 % looking only at the first "regular" grid cell.
    assert(isfield(G, 'cartDims')); % should only be attempted for cartesian grids!
    
-   % Identify "model cell", with 6 faces
-   cix = find_model_3D_cell(G);
-   assert(~isempty(cix)); % if empty, no cell in 3D grid has all 6 faces,
-                          % where each face has 4 nodes.
+   % Identify "model cell", with 4 faces
+   cix = find_model_2D_cell(G);
+   assert(~isempty(cix)); % if empty, no cell in 3D grid has all 4 faces,
+                          % where each face has 2 nodes.
    
    faces = G.cells.faces(G.cells.facePos(cix):G.cells.facePos(cix+1)-1, :);
    faces = sortrows(faces, 2); % now should be sorted according to logical direction
-   faces = faces(1:5,1); % discard tags, and bottom face (which we do not need)
+   faces = faces(1:3,1); % discard tags, and bottom face (which we do not need)
    
    nodes = G.faces.nodes(mcolon(G.faces.nodePos(faces), G.faces.nodePos(faces+1)-1));
-   assert(numel(nodes) == 20);
-   nodes = reshape(nodes, 4, 5); % column 5 corresponds to the nodes of the top face
+   assert(numel(nodes) == 6); % 6 nodes in total after removing bottom face
+   nodes = reshape(nodes, 2, 3); % column 3 corresponds to the nodes of the top face
 
-   ixfun = @(u, v) find(arrayfun(@(x) numel(intersect(nodes(:,x), [u, v]))==2, 1:4));
+   ixfun = @(u, v) find(arrayfun(@(x) numel(intersect(nodes(:,x), [u, v]))==2, 1:2)); % 1:4
    
-   seq = zeros(4,1);
-   seq(1) = ixfun(nodes(1, end), nodes(2, end)); % cardinal dir. for first top edge
-   seq(2) = ixfun(nodes(2, end), nodes(3, end)); % cardinal dir. for 2nd top edge
-   seq(3) = ixfun(nodes(3, end), nodes(4, end)); % cardinal dir. for 3rd top edge
-   seq(4) = ixfun(nodes(4, end), nodes(1, end)); % cardinal dir. for 4th top edge
+   %seq = zeros(4,1);
+   %seq(1) = ixfun(nodes(1, end), nodes(2, end)); % cardinal dir. for first top edge
+   %seq(2) = ixfun(nodes(2, end), nodes(3, end)); % cardinal dir. for 2nd top edge
+   %seq(3) = ixfun(nodes(3, end), nodes(4, end)); % cardinal dir. for 3rd top edge
+   %seq(4) = ixfun(nodes(4, end), nodes(1, end)); % cardinal dir. for 4th top edge
+   seq = ixfun(nodes(1, end), nodes(2, end));
    
 end
 
 % ----------------------------------------------------------------------------
 
-function cix = find_model_3D_cell(G)
+function cix = find_model_2D_cell(G)
 
-   % Search for a cell in the 3D grid that is a topological hexahedron,
-   % i.e. 6 faces where each face has 4 distinct corners
+   % Search for a cell in the 2D grid that is a topological hexahedron,
+   % i.e. 4 faces where each face has 2 distinct corners
    
    % candidate cells are those with 6 faces
-   candidates = find(diff(G.cells.facePos)==6);
+   candidates = find(diff(G.cells.facePos)==4);
    
    % Search for a candidate whose faces are all quadrilaterals
    found = false;
@@ -829,7 +834,7 @@ function cix = find_model_3D_cell(G)
 
       num_sides = G.faces.nodePos(faces+1) - G.faces.nodePos(faces);
       
-      found = all(num_sides == 4);
+      found = all(num_sides == 2);
       if found
          break;
       end

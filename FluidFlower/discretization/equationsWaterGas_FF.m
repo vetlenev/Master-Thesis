@@ -69,14 +69,30 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     trans = s.T .* transMult;
     
-    % Check for capillary pressure
-    pcWG = 0;
+    % Region support for capillary pressure
+    facies = unique(G.facies);
+    %pcWG = 0;
     if isfield(f, 'pcWG')
-        pcWG = f.pcWG{3}(sG);
+        % loop through facies ...
+        pcWG = 0*sG;
+        for fac=facies'
+            fac_cells = G.facies == fac;
+            pcWG(fac_cells) = f.pcWG{fac}(sG(fac_cells));
+        end       
+        %pcWG = f.pcWG{3}(sG);
     end
     % ----------------------------------------------------------------------------
+    
     sW = 1-sG;       
-    [krW, krG] = model.evaluateRelPerm({sW, sG});
+    % Region support for relperm
+    krW = 0*sW;
+    krG = 0*sG;
+    for fac=facies'
+        fac_cells = G.facies == fac;
+        krW(fac_cells) = f.krW{fac}(sW(fac_cells));
+        krG(fac_cells) = f.krG{fac}(sG(fac_cells));
+    end
+    %[krW, krG] = model.evaluateRelPerm({sW, sG});
     
     % computing densities, mobilities and upstream indices
     [bW, mobW, fluxW, vW, upcw] = compMFlux(p       , f.bW, f.muW, f.rhoWS, trMult, krW, s, trans, model);
@@ -141,8 +157,12 @@ function [b, mob, fluxS, fluxR, upc] = compMFlux(p, bfun, mufun, rhoS, trMult, k
     end
 
     rhoFace = s.faceAvg(b*rhoS);
+    g = -norm(model.gravity);
+    z = (model.G.cells.bottomDepth + model.G.cells.topDepth)/2;
+    %z = model.G.cells.centroids(:,2);
+    g_dz = g.*s.Grad(z);
     
-    dp   = s.Grad(p) - rhoFace .* model.getGravityGradient();
+    dp   = s.Grad(p) - rhoFace .* g_dz; % (-model.getGravityGradient()); % NB: minus to get correct sign for gravity
     upc  = (value(dp)<=0);
     fluxR = -s.faceUpstr(upc, mob) .* trans .* dp;
     fluxS = s.faceUpstr(upc, b) .* fluxR;
