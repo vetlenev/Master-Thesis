@@ -31,3 +31,6 @@ Folders:
 
 `discretization`
 - Discretization of governing equations on coarse and fine scales, including treatment of transitions between different discretization regions.
+
+Link to thesis project:
+- Under construction ...
