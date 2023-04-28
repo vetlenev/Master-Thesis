@@ -19,7 +19,7 @@ Folders:
 - Folder to store seeds and figures generated for simulations on two-dimensional heterogeneous formation with stochastic distribution of semi-permeable layers. 
 
 `trapping`
-- Codes extending the trap analysis from ```mrst-co2lab``` to be applicable for hybrid modelling.
+- Codes extending the trap analysis from ```mrst-co2lab``` (https://www.sintef.no/projectweb/mrst/modules/co2lab/) to be applicable for hybrid modelling.
 - Also includes trap analysis for full-dimensional model for comparison of models.
 
 `models`
