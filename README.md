@@ -1,5 +1,5 @@
 # Master-Thesis
-Student: Vetle Nevland.
+Student: Vetle Nevland.__
 Supervisors: Knut-Andreas Lie, Odd Andersen.
 
 Codes and files relevant for my master thesis on hybrid modelling of CO2 storage with applications to FluidFlower (https://fluidflower.w.uib.no/).
