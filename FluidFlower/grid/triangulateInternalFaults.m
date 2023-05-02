@@ -6,8 +6,7 @@ function [poly_obj, nodes_overlap] = triangulateInternalFaults(poly_obj, poly_nu
     Lz_glob = max(G_glob.faces.centroids(:,1));
     N_glob = G_glob.cartDims;
     Nx_glob = N_glob(1); Nz_glob = N_glob(2);
-
-    %p_idx = strcat('p', string(poly_num), 'PEBI');  
+  
     p_idx = strcat('p', string(poly_num), 'f');
     poly = poly_obj.(p_idx);
     external_nodes = poly.bnodes;

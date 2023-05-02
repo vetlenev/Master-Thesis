@@ -41,11 +41,11 @@ function [vW, vG, mobW, mobG, upcw, upcg, ...
 %               - cellsBH{4}: connections associated with cB
 %               - cellsBH{5}: connections associated with cH
 %               - cellsBH{6}: connections associated with cBH
-%   hHi_state   - cell array of heights for cH cells
-%               - hHi_state{1}: height of late migrating plume
-%               - hHi_state{2}: height of associated virtual VE cell
-%   hBHi_state  - cell array of heights for cBH cells
-%                   (same elements as hHi_state)
+%   cHorz_state   - cell array of heights for cH cells
+%                 - hHi_state{1}: height of late migrating plume
+%                 - hHi_state{2}: height of associated virtual VE cell
+%   cBottomHorz_state  - cell array of heights for cBH cells
+%                       (same elements as cHorz_state)
 %{
 Copyright 2009-2022 SINTEF Digital, Mathematics & Cybernetics.
 
@@ -82,9 +82,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     all_coarse_cells = (1:G.cells.num)';
     
     sgMax_dummy = sgMax.*(snr > 0) + sG.*(snr == 0); % used to assign correct h_max to VE cells filled from bottom    
-%     if ~isempty(cellsVE) % once residual plume reaches top, set sgMax to maximum and use standard formulas       
-%         sgMax_dummy(cellsVE) = 1-swr; % would otherwise be discontinuous transition from H to snr*H
-%     end 
             
     % --- upscaledSat2height ---
     if strcmp(opt.ve_model, 'sharp_interface')
@@ -112,7 +109,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     h_T_global = h_max_global.*(snr > 0) + h_global.*(snr == 0);
     h_B_global = H + 0*h_global; % last term to convert to AD-varible
                
-    % --- Special treatment of cells having BOTH bottom and horizontal VE fluxes ---   
+    % --- Special treatment for RVE cells ---   
     [h_ve, hmax_ve, hT_ve, hB_ve, ...
         cellsBH, cHorz_state, cBottomHorz_state] = veBottomHorizontalHeights(model, cB, veB, cH, veH, sG, sgMax, vG, vG_smax, H, swr, snr, pv);
     
@@ -141,8 +138,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     % ----------------------------   
        
     p_entry = f.p_entry;    
-    
-    %[pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, H, rhoW, rhoG, muW, muG, isFine, isFine);
+
     [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h_global, h_max_global, H, rhoW, rhoG, muW, muG, ...
                                                 isFine, all_coarse_cells, h_global, h_max_global, {}, {}, ...
                                                 cellsNVE, 've_model', opt.ve_model, 'p_entry', p_entry);
@@ -165,12 +161,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     [gdz_g, gdz_w] = deal(gdz);
     % Compute upscaled height difference for internal ve columns, at reference pressure heights for CO2 and water:
     gdz_g(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
-    %gdz_g(vIc) = g*(G.cells.topDepth(n1) - G.cells.topDepth(n2));
-    % if water pressure computed at bottom of VE cells
-    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));        
-    %gdz_w(vIc) = g*(G.cells.bottomDepth(n1) - G.cells.bottomDepth(n2));
-    % if water pressure computed at top of VE cells, uncomment:
-    %gdz_w(vIc) = g*(G.cells.topDepth(n2) - G.cells.topDepth(n1));
+    gdz_w(vIc) = g*(G.cells.bottomDepth(n2) - G.cells.bottomDepth(n1));
     
     dpG   = op.Grad(pG) - rhoGf .* gdz_g;
     upcg  = (value(dpG)<=0);
@@ -214,8 +205,6 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     opt = merge_options(opt, varargin{:});
     
     c = model.operators.N(subs, index);
-    cNVE = ismember(c, cellsNVE);
-    cNVEMob = ismember(c, cellsNVEMob);
     
     isFine = model.G.cells.discretization(c) == 1;
 
@@ -223,15 +212,12 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     T = model.operators.connections.faceTopDepth(subs, index);
     b = model.G.cells.bottomDepth(c);
     B = model.operators.connections.faceBottomDepth(subs, index);
-
-    %sG = getGasSaturationFromHeight(T, t, B, b, h_global(c));   
+      
     swr = model.fluid.krPts.w(3,2);
     snr = model.fluid.krPts.g(3,2);
     % 
     [a_M, a_R, sG] = getGasSatFromHeightVirtual_FF(T, t, B, b, h_global(c), h_T_global(c), h_B_global(c), swr, snr);
-%     [a_M, a_R, sG] = getGasSatFromHeightFine_test(c, T, t, B, b, h_global(c), h_T_global(c), h_B_global(c), swr, snr, ...
-%                                                    opt.cHorz, opt.cBottomHorz, opt.hHi, opt.hBHi, opt.Hi, opt.BHi); % specific for relaxed VE cols
-%     
+
     H = model.operators.connections.faceHeight(subs, index);
     h = a_M.*H;  
     h_max = (a_R + a_M).*H;
@@ -245,20 +231,18 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     pW_f = pW(c);
     muw = muW(c);
     mug = muG(c);      
-    
-    %pW = getWaterPressureFromHeight(B, t, B, b, h_global(c), h_max_global(c), pW(c), swr, snr, g, rhow, rhog, 'cNVE', cNVE, 'p_entry', opt.p_entry);   
+      
     pW = getPwFromHeight_FF(B, t, b, h_global(c), h_T_global(c), pW(c), g, rhow, rhog, swr, snr, ...
                                 'cNVE', [], 'p_entry', opt.p_entry, 'res_type', []);
 end
 
-function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransitionValuesVE_fine(model, pW, h_global, h_max_global, h_T_global, h_B_global, index, subs, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, varargin)    
+function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransitionValuesVE_fine(model, pW, h_global, h_max_global, h_T_global, h_B_global, index, ...
+                                                                                                subs, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, varargin)    
     opt = struct('ve_model', 'sharp_interface', 'p_entry', 0, ...
                  'cHorz', [], 'cBottomHorz', [], 'hHi', [], 'hBHi', [], 'Hi', [], 'BHi', []);
     opt = merge_options(opt, varargin{:});
     
     c = model.operators.N(subs, index);
-    cNVE = ismember(c, cellsNVE); 
-    cNVEMob = ismember(c, cellsNVEMob);
     t = model.G.cells.topDepth(c);
     
     isFine = model.G.cells.discretization(c) == 1;
@@ -268,11 +252,9 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     b = model.G.cells.bottomDepth(c);
     B = model.operators.connections.faceBottomDepth(subs, index);
     H = model.operators.connections.faceHeight(subs, index);
-    
-    %sG = getGasSaturationFromHeight(T, t, B, b, h_global(c));
+
     swr = model.fluid.krPts.w(3,2);
-    snr = model.fluid.krPts.g(3,2);    
-       
+    snr = model.fluid.krPts.g(3,2);           
     
     [a_M, a_R, sG] = getGasSatFromHeightVirtual_FF(T, t, B, b, h_global(c), h_T_global(c), h_B_global(c), swr, snr);   
 
@@ -422,15 +404,10 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     facies = unique(G.facies);
     
     sW = 1 - sG;
-    swr = f.krPts.w(3,2);
-    snr = f.krPts.g(3,2);
     isVE = ~isFine;   
     if numel(isVE) == 1
         isVE = repmat(isVE, numel(n_cells), 1);
     end
-      
-    n_sealing = ismember(n_cells, model.G.sealingCells);   
-    isOriginalVE = model.G.cells.discretization(n_cells) ~= 1; % if coarse cell is originally a VE column (before treating transition regions)    
     
     if isfield(f, 'pcWG') % Fine: brooks-corey. VE: entry pressure (rest). Sealing: fine brooks-corey by default
         pcWG = 0*sG;
@@ -438,15 +415,12 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
         for fac=facies'
             fac_cells = G.facies(n_cells) == fac;
             pcWG(fac_cells) = f.pcWG{fac}(sG(fac_cells));
-            %p_entry = f.pcWG{fac}(1e-5);
             pcWG_U(fac_cells) = (h(fac_cells).*(rhoW(fac_cells) - rhoG(fac_cells)) ...
                                 - H(fac_cells).*rhoW(fac_cells)).*g;
             if any(fac_cells)
                 pcWG_U(fac_cells) = pcWG_U(fac_cells) + opt.p_entry(fac);
             end
-        end               
-        %pcWG = f.pcWG{1}(sG); % should work for both face and cell constraints        
-        %pcWG = opt.p_entry;
+        end 
     else
         pcWG = 0;    
         pcWG_U = (h.*(rhoW - rhoG) - H.*rhoW).*g + opt.p_entry;  
@@ -459,10 +433,7 @@ function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H,
     % Gas pressure  
     pG = pW + pcWG;
  
-    % Mobility
-    swr = f.krPts.w(3,2);
-    snr = f.krPts.g(3,2);
-    %sGmax = h_max./H .* (1-swr); % inverse formula - assumes sharp interface!
+    % Mobility    
     if isprop(model, 'EOSModel')
         krw = f.krO(sW);
     else

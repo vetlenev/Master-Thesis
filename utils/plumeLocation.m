@@ -1,5 +1,5 @@
 function [tip_depth, avg_depth, z_well] = plumeLocation(model, states, schedule, snr)
-%MIGRATIONSPEED Summary of this function goes here
+%Compute location of tip and average plume over time.
 % PARAMETERS:
 %   model    - either fine, VE or hybrid model
 %   states   - computed states from model 
@@ -10,6 +10,7 @@ function [tip_depth, avg_depth, z_well] = plumeLocation(model, states, schedule,
 % RETURNS:
 %   tip_speed - migration speed of tip of mobile plume for each state
 %   avg_speed - migration speed of average position of mobile plume
+%   z_well    - mean vertical location of injection well(s)
 
 if isfield(model.G, 'parent')
     G = model.G.parent;

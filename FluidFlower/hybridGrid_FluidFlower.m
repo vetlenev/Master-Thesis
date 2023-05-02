@@ -1,3 +1,5 @@
+%%% Script for generating semi-structured grid for FluidFlower,
+%%% including hybrid modeling.
 %% Load modules and geometry
 mrstModule add matlab_bgl coarsegrid
 
@@ -29,7 +31,7 @@ rng(seed)
 
 %% SET PARAMETERS
 node_density = 0.5; % The density of nodes inside triangulated parts of faults. Should be < 1 to not get to dense triangles (standard: 0.3)
-nx_glob = 200; % 200! % standard: nx_glob=250, nz_glob=150, works for this setting...
+nx_glob = 200; % standard: nx_glob=250, nz_glob=150, works for this setting...
 nz_glob = 150;
 
 %% Other definitions
@@ -279,8 +281,8 @@ poly31_neighbors{9,1} = poly.p14; poly31_neighbors{9,2} = 'east';
 poly31_neighbors{10,1} = poly.p19A; poly31_neighbors{10,2} = 'east';
 poly31_neighbors{11,1} = poly.p29A; poly31_neighbors{11,2} = 'east';
 
-% Quadrilateration
-poly = Faults.makeQuadrilaterals(polys, poly, 31, poly31_neighbors, ...
+% Unstructured grid: quadrilaterals + triangles
+poly = Faults.makeUnstructuredGrid(polys, poly, 31, poly31_neighbors, ...
                                     2, Lx, Lz, Nx, Nz);
 
 [poly, p31At] = Faults.QuasiRandomPointDistribution(poly, "p31fAt", G_glob, node_density, false, colors);
@@ -301,9 +303,9 @@ poly25_neighbors{10,1} = poly.p13; poly25_neighbors{10,2} = 'east';
 poly25_neighbors{11,1} = poly.p18; poly25_neighbors{11,2} = 'east';
 poly25_neighbors{12,1} = poly.p30; poly25_neighbors{12,2} = 'east';
 
-% Quadrilateration
-poly = Faults.makeQuadrilaterals(polys, poly, 25, poly25_neighbors, ...
+poly = Faults.makeUnstructuredGrid(polys, poly, 25, poly25_neighbors, ...
                                     2, Lx, Lz, Nx, Nz);
+
 % Triangulate bottom part of fault and end-point of pinch-outs
 [poly, p25E] = Faults.QuasiRandomPointDistribution(poly, "p25fE", G_glob, node_density, false, colors);
 [poly, p25Ft] = Faults.QuasiRandomPointDistribution(poly, "p25fFt", G_glob, 2*node_density, false, colors);
@@ -328,7 +330,7 @@ poly12_neighbors = cell(2, 2);
 poly12_neighbors{1,1} = poly.p5B; poly12_neighbors{1,2} = 'top';
 poly12_neighbors{2,1} = poly.p5C; poly12_neighbors{2,2} = 'bottom';
 
-poly = Faults.makeQuadrilaterals(polys, poly, 12, poly12_neighbors, ...
+poly = Faults.makeUnstructuredGrid(polys, poly, 12, poly12_neighbors, ...
                                     1.5, Lx, Lz, Nx, Nz);
 
 [poly, p12At] = Faults.QuasiRandomPointDistribution(poly, "p12fAt", G_glob, node_density, false, colors);
@@ -426,7 +428,6 @@ end
                                                     nodes_overlap, pts_overlap, G_glob);
 
 %% Triangulate internal parts separately
-%bf_polys = [24,9,21,26,22,23]; % polygons constituting bottom fault
 bf_polys = [26,22]; % other polygons are cartesian quadrilaterals
 
 % Triangulate irregular twin polygons
@@ -481,10 +482,9 @@ for i = 1:numel(poly_idxs) % plot subgrids first
     end
 end
 
-saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'));
-saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'), 'png');
-saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'), 'pdf');
-%plotGrid(poly.p25pA.G, 'EdgeAlpha', 0.3, 'FaceColor', colors(poly.p25pA.facies,:))
+%saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'));
+%saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'), 'png');
+%saveas(fig_grid, strcat(rootdir, '../Master-Thesis/FluidFlower/geometry/figs/FF_fullgrid'), 'pdf');
 
 %% Glue-preparation
 % Remove all PEBI-polygons to check if triangulation causes problems
@@ -540,12 +540,13 @@ poly.glued.G = computeGeometry(poly.glued.G);
 figure(4)
 plotGrid(poly.glued.G)
 plotCellData(poly.glued.G, double(isnan(poly.glued.G.i)))
+title('Unstructured cells')
 
 %% Remove impermeable layers from glued grid
 Gg = poly.glued.G;
 poly.sim = poly.glued;
 [G_sim, gc, gf] = extractSubgrid(poly.glued.G, poly.glued.G.facies ~= 7);
-% gc == G_sim.cells.indexMap 
+% G_sim.cells.indexMap equals gc
 G_sim.i = Gg.i(gc);
 G_sim.j = Gg.j(gc);
 G_sim.facies = Gg.facies(gc);
@@ -555,10 +556,7 @@ for i=1:numel(poly_idxs)
     px = poly_idxs{i};
     G_sub = poly.(px).G; 
     pg = poly.glued;
-    % --------------------
-    % TODO: Find mapping from glued facies to sim facies!
-    % --------------------
-    if all(pg.G.facies(pg.cell_range.(px)) == 7) % not included in new grid
+    if all(pg.G.facies(pg.cell_range.(px)) == 7) % facie 7 (impermeable) not included in simulation-grid
         poly.sim.cell_range = rmfield(poly.sim.cell_range, px);
     else
         poly.sim.cell_range.(px) = find(ismember(gc, pg.cell_range.(px)));
@@ -580,15 +578,15 @@ fault_idx = nan_N(sum(nan_N, 2) == 1, :); % index of nan cell for each neighbor 
 % select cartesian neighbor, not triangle cell
 fault_buffer = zeros(size(fault_N,1),1);
 for i=1:size(fault_N,1)
-    fault_buffer(i) = fault_N(i, ~fault_idx(i,:)); % ~nn will select no-nan neighbor, i.e., the cartesian cell
+    fault_buffer(i) = fault_N(i, ~fault_idx(i,:)); % will select no-nan neighbor, i.e., the cartesian cell
 end
 fault_buffer = fault_buffer(fault_buffer ~= 0);
 
-% Add impermeable fault (by extracting cells adjacent to "internal"
-% boundary) -> to give correct VE discretization
+% Add buffer cells for impermeable fault
 bcells = Gg.faces.neighbors(boundaryFaces(Gg),:);
 bcells_all = bcells(:);
 bcells_all = bcells_all(bcells_all ~= 0);
+% NB: hard-coded according to dimensions given for CSP 11A!
 imperm_fault = bcells_all(Gg.cells.centroids(bcells_all,1) > 0.5 & ...
                             Gg.cells.centroids(bcells_all,1) < 1.5 & ...
                             Gg.cells.centroids(bcells_all,2) > 0.5 & ...
@@ -597,20 +595,6 @@ imperm_fault = bcells_all(Gg.cells.centroids(bcells_all,1) > 0.5 & ...
 fault_buffer = [fault_buffer; imperm_fault];
 
 fault_buffer = fault_buffer(~ismember(fault_buffer, nan_cells));
-
-%% Some plotting
-if false
-    figure(3)
-    %colormap('jet')
-    plotGrid(Gg)    
-    colorbar('southoutside')
-    %plotCellData(Gg, double(Gg.i == 46))
-    ss = zeros(Gg.cells.num,1);
-    ss(fault_buffer) = 1;    
-    plotCellData(Gg, ss)
-    hold on
-    plotFaces(Gg, boundaryFaces(Gg), 'EdgeColor', 'red', 'linewidth', 2)
-end
 
 %% Read deck -> assign fluids and rock
 deck = readEclipseDeck('deck/CSP11A.DATA');
@@ -632,8 +616,8 @@ fluid = rmfield(fluid, 'pcOG');
 b = 1; % unit formation volume factor
 fluid.bW = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
 fluid.bG = @(p, varargin) 1 + 0.*p; %b*constantReciprocalFVF(p, varargin{:});
-fluid.muW = @(p, varargin) 3e-5*Pascal*second + 0.*p; %3e-5*Pascal*second + 0.*p;
-fluid.muG = @(p, varargin) 8e-4*Pascal*second + 0.*p; %8e-4*Pascal*second + 0.*p;
+fluid.muW = @(p, varargin) 3e-5*Pascal*second + 0.*p; 
+fluid.muG = @(p, varargin) 8e-4*Pascal*second + 0.*p;
 %fluid = assignRelPerm(fluid);
 
 facies_all = deck.REGIONS.SATNUM;
@@ -644,10 +628,9 @@ for i=1:numel(unique(facies_all))
     perm(Gg.facies == i) = unique(deck.GRID.PERMX(facies_all == i));
     poro(Gg.facies == i) = unique(deck.GRID.PORO(facies_all == i));
 end
-%poro(Gg.facies == 7) = 0.5; % just set to a positive value to avoid errors
 
 rock = makeRock(Gg, perm, poro);
-rock.regions.saturation = Gg.facies;
+rock.regions.saturation = Gg.facies; % allow region support
 
 %% Setup model, schedule, state ...
 isFine = struct;
@@ -669,21 +652,20 @@ end
 
 allSealingCells = {}; % cell-indices for sealing cells
 allSealingBFaces = {}; % boundary faces of sealing cells
-allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis)
-allLayersBottom = {};
-allLayersCells = {};
+allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis -> NOT IMPLEMENTED YET)
+%allLayersBottom = {}; % bottom faces for each layer --> for trap analysis
 
-lowperm_facie = [1,2,3]; % [1,4,7]
+% --- SET FACIES TO BE MODELED AS FULL-DIM CELLS (not satisfying VE) ---
+lowperm_facie = [1,2,3]; 
+% ----------------------------------------------------------------------
 
-%lowperm_cells = find(Gg.facies == lowperm_facie(1) | Gg.facies == lowperm_facie(2));
 lowperm_cells = find(ismember(Gg.facies, lowperm_facie));
 if ismember(lowperm_facie, 1) % Small p7 part is included in isFine.fault -> remove from sealing cells in structured regions
     p7small_cells = poly.sim.cell_range.p7small(1):poly.sim.cell_range.p7small(2); % poly.glued -> poly.sim
     lowperm_p7small = ismember(lowperm_cells, p7small_cells);
     lowperm_cells(lowperm_p7small) = [];
 end
-%facie_polys = struct; % append polys part of this facies
-lowperm_cells_split = struct; % lowperm cells in separate arrays for each polygon
+
 poly_idxs_new = fieldnames(poly.sim.cell_range);
 for i=1:numel(poly_idxs_new)
     pidx = string(poly_idxs_new{i});
@@ -694,17 +676,12 @@ for i=1:numel(poly_idxs_new)
     if isempty(sealing_faces) || isempty(bottom_faces) || isempty(sealing_cells)
         continue; % don't add sealing layer if triangulated cells
     end
-    if all(ismember(pcells, lowperm_cells))
-        %facie_polys.(pidx) = poly.(pidx);
-        lowperm_cells_split.(pidx) = pcells;
-                
+    if all(ismember(pcells, lowperm_cells))                
         allSealingCells = cat(2, allSealingCells, sealing_cells);
         allSealingBFaces = cat(2, allSealingBFaces, sealing_faces);
         allSealingBottom = cat(2, allSealingBottom, bottom_faces);
     end
-    allLayersCells = cat(2, allLayersCells, sealing_cells);
-    allLayersBottom = cat(2, allLayersBottom, bottom_faces);    
-    %allLayersBottom.(pidx) = bottom_faces;
+    %allLayersBottom = cat(2, allLayersBottom, bottom_faces);
 end
 
 isFine.sealingCells = false(Gg.cells.num, 1);
@@ -716,10 +693,9 @@ allLayersBottom_rem = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayer
 isFine.sealingBFaces = false(Gg.faces.num, 1);
 isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
 
-isFine.layersBFaces = false(Gg.faces.num, 1);
-isFine.layersBFaces(allLayersBottom_rem) = true; % bounding faces of each layer
-
 isFine.sealingBottom = allSealingBottom;
+%isFine.layersBFaces = false(Gg.faces.num, 1);
+%isFine.layersBFaces(allLayersBottom_rem) = true; % bounding faces of each layer
 
 %% Operational schedule
 bf = boundaryFaces(Gg);
@@ -733,9 +709,9 @@ jj = Gg.j;
 % dt = ds.step.val;
 % t = cumsum(dt);
 % tot_time = t(end);
-tot_time = 2*day; % 5*day % 18*hour
-t_control2 = 5*hour;% 2.5*hour; % 2*hour
-t_control3 = 10*hour; % 5*hour; % 4*hour
+tot_time = 2*day; 
+t_control2 = 5*hour;
+t_control3 = 10*hour;
 dt1 = rampupTimesteps(t_control2, t_control2/120, 10); % t_control2/70 % 100
 dt2 = rampupTimesteps(t_control3-t_control2, (t_control3-t_control2)/120, 12); % (t_control3-t_control2)/120 % 100
 dt3 = rampupTimesteps(tot_time-t_control3, (tot_time-t_control3)/100, 12); % (tot_time-t_control3)/120 % 70
@@ -852,29 +828,24 @@ for fac=1:numel(p_entry)
 end
 
 facies_N = Gg.faces.neighbors(faciesFaces, :);
-facies_centroid = reshape(Gg.cells.centroids(facies_N, 2), [], 2); % reshaoe to get two columns (one for each neighbor)
+facies_centroid = reshape(Gg.cells.centroids(facies_N, 2), [], 2); % reshape to get two columns (one for each neighbor)
 
 for i=1:size(facies_centroid, 1)
-    [~, row_max] = max(facies_centroid(i,:));
-    facie_upper = facies_N(i, row_max);
-    row_min = 3 - row_max;
-    facie_lower = facies_N(i, row_min);
-    % CHECK INSTEAD IF P_ENTRY IS HIGHER THAN P_ENTRY IN LAYER WHERE CLOSEST INJECTION OCCURS!
+    [~, row_upper] = max(facies_centroid(i,:));
+    facie_upper = facies_N(i, row_upper);
+    row_lower = 3 - row_upper;
+    facie_lower = facies_N(i, row_lower);
+
     W_cells = [W1_cell, W2_cell];
-    W_centroids = Gg.cells.centroids(W_cells, 1); % closest in horizontal distance
+    W_centroids = Gg.cells.centroids(W_cells, 1); % to check horizontal distance to well
 
     [~, closest_idx] = min(abs(Gg.cells.centroids(facie_upper, 1) - W_centroids));
     closest_well = W_cells(closest_idx);
     above_well = Gg.cells.centroids(facie_upper, 2) > Gg.cells.centroids(closest_well, 2);
-    %isVE = isnan(Gg.i(facie_upper)) && isnan(Gg.i(facie_lower));    
-    in_middle = Gg.cells.centroids(facie_upper, 2) > min(poly.p31fAt.bnodes(:,2)) && ...
-                Gg.cells.centroids(facie_upper, 2) < max(poly.p31fAq.internal_top(:,2)) && ...
-                Gg.cells.centroids(facie_upper, 1) > min(poly.p31fAq.internal_east(:,1)) && ...
-                Gg.cells.centroids(facie_upper, 1) < max(poly.p25fA.internal_west(:,1));
-
+    
     if p_entry_cells(facie_upper) <= p_entry_cells(facie_lower) || ...
-            (p_entry_cells(facie_upper) <= p_entry_cells(closest_well) && ...
-            above_well) || (Gg.facies(facie_upper) == 4 && Gg.facies(facie_lower) == 5)
+            (p_entry_cells(facie_upper) <= p_entry_cells(closest_well) && above_well) || ...
+            (Gg.facies(facie_upper) == 4 && Gg.facies(facie_lower) == 5) % specific treatment for these ...
         faciesFaces(i) = 0;
     end
 end
@@ -916,13 +887,11 @@ f4 = figure(4);
 clf(4)
 disc = model_hybrid.G.cells.discretization;
 ph = model_hybrid.G.partition;
-%plotGrid(Gg, find(disc(ph) == 1798), 'edgecolor', 'yellow')
 plotCellData(Gg, disc(ph),'edgealpha', 0)
 plotOutlinedGrid(Gg, W, bc, isFine.sealingBFaces | any(isFine.wellFaces,2) | isFine.faultFaces | isFine.bufferFaces | isFine.bcFaces);
 hold on
 plotFaces(Gf, fafa, 'edgecolor', 'yellow')
 cmap = colorcube(12500);
-%cmap= 'jet';
 colormap(cmap)
 xlabel('[m]')
 ylabel('[m]')
@@ -989,7 +958,6 @@ for i = [t1, t2, t3]
     plotFaces(Gh, (1:Gh.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on    
     colormap(cc); 
-    %caxis([0, 1-swr]); 
     caxis([0, max(states_hybrid{end}.sGmax)])
     colorbar('location','southoutside');
     axis tight off
@@ -998,20 +966,17 @@ for i = [t1, t2, t3]
 end
 
 for i = [t1, t2, t3]
-    f6 = UtilFunctionsFF.fullsizeFig(6); clf(6)
-    %f1 = figure(1); clf
+    f6 = UtilFunctionsFF.fullsizeFig(6); clf(6)   
     plotCellData(Gf, states_hybrid_fs{i}.s(:,2), 'edgec', 'none');
     plotFaces(Gf, (1:Gf.faces.num)', 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.1)
     hold on
     plotFaces(Gf, fafap, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.4)
     plotFaces(Gf, [W1_faces; W2_faces], 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 2)
-    colormap(cc); 
-    %caxis([0, 0.1]); 
+    colormap(cc);  
     caxis([0, max(states_hybrid_fs{end}.sGmax)]);
     colorbar('location','southoutside');
     axis tight off
-    title({'Reconstructed fine-scale saturation', sprintf('hour: %.1f',t(i))})   
-    %setDaspect(run3D, standard);
+    title({'Reconstructed fine-scale saturation', sprintf('hour: %.1f',t(i))})      
     %saveas(f6, sprintf(strcat(plot_dir, 'reconstructed_sat_%d'), i), 'png');       
 end
 
@@ -1023,8 +988,7 @@ for i = [t1, t2, t3] %1:20:numel(states)
     hold on
     plotFaces(Gf, fafap, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.4)
     plotFaces(Gf, [W1_faces; W2_faces], 'edgec', 'red', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 2)
-    colormap(cc); 
-    % caxis([0, 1-swr]); 
+    colormap(cc);  
     caxis([0, max(states{end}.sMax(:,2))])
     colorbar('location','southoutside');
     axis tight off
@@ -1036,7 +1000,26 @@ end
 
 %% FUNTCION DEFINTIONS
 function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, poly_obj, poly_num, poly_num_upper, ...
-                                                                        nodes_overlap, pts_overlap, G_glob, varargin)   
+                                                                        nodes_overlap, pts_overlap, G_glob, varargin)  
+    % Create a structured, Cartesian grid for a given polygon layer,
+    % whose top surface conforms to bottom surface of its upper neigbhor
+    % (assuming grid for upper neighbor has already been generated).
+    % Resulting grids are compatible for gluing.
+    % 
+    % INPUTS:
+    %   all_polys: polygonal points for each polygon of FluidFlower
+    %   poly_obj: struct with properties of discretized polygon
+    %   poly_num: index of polygon to discretize
+    %   poly_num_upper: index of the polygon's upper neighbor
+    %   nodes_overlap: struct of overlapping nodes used for gluing grids
+    %   pts_overlap: struct of overlapping original polygonal points
+    %   G_glob: global, virtual background grid for FluidFlower
+    %
+    % RETURNS:
+    %   poly_obj: updated poly_obj struct
+    %   nodes_overlap: updated nodes_overlap struct
+    %   pts_overlap: updated pts_overlap struct
+    %
     fac_scale = 1;
     if nargin == 8
         inter_horz = varargin{1};
@@ -1097,7 +1080,6 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     Nx = N(1); Nz = N(2);   
     
     if numel(poly_upper) > 1 % Upper neighbor contains a pinch-out
-        %[nodes_overlap.(p_idx), pts_overlap.(p_idx)] = PinchOuts.findOverlappingNodesPinch(poly, poly_upper{1}, poly_upper{2}, 'top');
         [nodes_overlap.(p_idx), pts_overlap.(p_idx)] = PinchOuts.findOverlappingNodesMultiple(poly, poly_upper, 'top');
     else
         [nodes_overlap.(p_idx), pts_overlap.(p_idx)] = findOverlappingNodes(poly, poly_upper, 'top'); 
@@ -1105,7 +1087,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = glueToUpperPolygon(all_polys, 
     
     num_x_overlap = size(nodes_overlap.(p_idx), 1);
 
-    [poly, split_pts] = reorderPts(poly, poly_num); % two last args required for edge-cases
+    [poly, split_pts] = reorderPts(poly, poly_num);
     
     [top_side, bottom_side] = topAndBottomSurfaces(poly, split_pts, poly_num, pts_overlap); % poly_num required for edge-cases
     
@@ -1143,6 +1125,27 @@ end
 
 function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOuts(all_polys, poly_obj, poly_num, poly_num_upper, poly_num_pinch, ...
                                                                         nodes_overlap, pts_overlap, G_glob, varargin)   
+    % Create a structured, Cartesian grid for a layer with a pinch-out,
+    % Layer is separated into three parts (A, B and C), where A conforms to
+    % the tip of the pinch-out, B conforms to the top surface of the
+    % pinch-out, and C conforms to the bottom surface of the pinch-out.
+    % Resulting grids are compatible for gluing.
+    % 
+    % INPUTS:
+    %   all_polys: polygonal points for each polygon of FluidFlower
+    %   poly_obj: struct with properties of discretized polygon
+    %   poly_num: index of polygon to discretize
+    %   poly_num_upper: index of the polygon's upper neighbor
+    %   poly_num_pinch: index of polygon representing the pinch-out
+    %   nodes_overlap: struct of overlapping nodes used for gluing grids
+    %   pts_overlap: struct of overlapping original polygonal points
+    %   G_glob: global, virtual background grid for FluidFlower
+    %
+    % RETURNS:
+    %   poly_obj: updated poly_obj struct
+    %   nodes_overlap: updated nodes_overlap struct
+    %   pts_overlap: updated pts_overlap struct
+    %
     p_idx = strcat('p', string(poly_num));   
 
     p_name = fieldnames(poly_obj); 
@@ -1217,7 +1220,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOuts(all_polys, poly_
     [z_new, rem_idx] = PinchOuts.interpolateZSide(poly.bottom_side_new, bottom_nodes, closest_mask, 'linear'); % changed first argument from poly.bottom_side to poly.bottom_side_new
     bottom_nodes(rem_idx,2) = z_new;
 
-    % Find top/bottom-node closest to tip of pinch        
+    % Find top/bottom-node closest to tip of pinch --> determines separation point for subgrid A and subgrids B and C.      
     dist_pinch = @(node) sqrt((node(:,1)-x_pinch).^2 + (node(:,2)-z_pinch).^2);
     top2pinch = dist_pinch(top_nodes);
     bottom2pinch = dist_pinch(bottom_nodes);
@@ -1225,14 +1228,10 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOuts(all_polys, poly_
     [~, pin_idx] = min(net_dist);
   
     sep_point_top = top_nodes(pin_idx,:);
-    sep_point_bottom = bottom_nodes(pin_idx,:);
-    % -----------------    
-
-    % Using separation points, divide polygon into pXA, pXB and pXC (for
-    % polygon of number X):
+    sep_point_bottom = bottom_nodes(pin_idx,:);    
+    
     x_top = top_nodes(:,1);
     x_bottom = bottom_nodes(:,1);    
-
 
     % --- A: Make catesian subgrid of pXA based on nodes and points to left
     % of separation point ---
@@ -1263,7 +1262,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOuts(all_polys, poly_
 
     % Get nodes of east side (needed when gluing pXB and pXC)
     NxA = polyA.G.cartDims(1)+1; NzA = polyA.G.cartDims(2)+1; % +1 since we are indexing NODES not CELLS
-    east_nodesA = polyA.G.nodes.coords(NxA:NxA:NxA*NzA, :); % correct indexing ???
+    east_nodesA = polyA.G.nodes.coords(NxA:NxA:NxA*NzA, :);
     east_nodesAC = east_nodesA(1:z_sep_idx, :); % from bottom to pinch
     east_nodesAB = east_nodesA(z_sep_idx:end, :); % from pinch to top
 
@@ -1279,7 +1278,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOuts(all_polys, poly_
     polyB = PinchOuts(all_polys, poly_num, side_ptsB);       
     polyB.bottom_side = bottom_ptsB;
     polyB.top_side = top_ptsB;
-    NzB = NzA - z_sep_idx; % NB: number of CELLS not NODES
+    NzB = NzA - z_sep_idx; % subtract num cells below tip of pinch to get num cells for subgrid B
     polyB = cartesianSubgrid(polyB, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_x_pXB, NzB);
    
     [bottom_nodesB, closest_mask, xs_new] = PinchOuts.separationPoint_pinchout(polyB, bottom_ptsB, G_glob);
@@ -1304,7 +1303,7 @@ function [poly_obj, nodes_overlap, pts_overlap] = gluePinchOuts(all_polys, poly_
     % --- C: Make cartesian subgrid of pXC. ---
     bottom_nodesC = bottom_nodes(x_bottom >= sep_point_bottom(:,1), :);
     num_x_pXC = num_x_pXB; % enforce same number of columns (not strictly necessary, but ensures same number of nodes for bottom and top side of full polygon subgrid
-    NzC = z_sep_idx - 1; % -1 to remove end-node
+    NzC = z_sep_idx - 1; % -1 to get num CELLS
 
     bottom_ptsC = [sep_point_bottom; bottom_pts(bottom_pts(:,1) >= sep_point_bottom(:,1), :)]; % polygon data points on top side RIGHT of separation point, including top separation point   
     side_ptsC = [top_ptsC; bottom_ptsC];

@@ -8,7 +8,7 @@ function [tip_speed, avg_speed] = migrationSpeed(model, states, schedule, snr)
 %   schedule - schedule used for simulation
 %   snr      - residual CO2 saturation
 % RETURNS:
-        %   tip_speed - migration speed of tip of mobile plume for each state
+%   tip_speed - migration speed of tip of mobile plume for each state
 %   avg_speed - migration speed of average position of mobile plume
 
 if isfield(model.G, 'parent')

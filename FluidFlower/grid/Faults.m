@@ -23,12 +23,15 @@ classdef Faults < PolygonGrid
 
     methods
         function obj = Faults(polys, poly_num, fac_scale, multiple_polys) % obj = poly_num
-            %POLYGONGRID Discretized geometry of polygon with id poly_num
+            %FAULTS Discretized geometry of fault with id poly_num
             % Input:
             %   polys: polygon data from spe11 case
             %   poly_num: id of polygon to discretize  
             %   fac_scale: scale fraction for resolution size (should have
-            %   value > 1 to give finer cells inside fault
+            %               value > 1 to give finer cells inside fault)
+            %   multiple_polys: if fault includes multiple polygons
+            % Returns:
+            %   obj: polygon instance of fault
             obj = obj@PolygonGrid(polys, poly_num);
             obj.fac_scale = fac_scale;
             obj.multiple = multiple_polys;
@@ -100,22 +103,22 @@ classdef Faults < PolygonGrid
                 for c=1:G_int.cells.num                    
                     cfaces = G_int.cells.faces(G_int.cells.facePos(c):G_int.cells.facePos(c+1)-1, :);
                     cfaces_areas = G_int.faces.areas(cfaces);
-                    %scale = 1 + std(cfaces_areas)/mean(cfaces_areas);
                     scale = node_density*max(cfaces_areas)/min(cfaces_areas); % distribute more points inside very elongated triangles to make them more regularly
                     num_nodes = round(scale*nodes_int*(G_int.cells.volumes(c)/A_int)); % num nodes assigned to this triangle
 
-                    cnodes = zeros(6, 1);
+                    cnodes = zeros(6, 1); % 3 pair-wise nodes for each triangle
                     for j=1:numel(cfaces)
                         cnodes(2*j-1:2*j) = G_int.faces.nodes(G_int.faces.nodePos(cfaces(j)):G_int.faces.nodePos(cfaces(j)+1)-1, :);
                     end
                     ccoords = unique(G_int.nodes.coords(cnodes, :), 'rows');
     
                     for k=1:num_nodes
+                        % Distribute random point on line segment between a
+                        % random triangle side and its opposite node.
                         rand2pts = randperm(3,2);
-                        %rand_pt = setdiff(randi(3,num_nodes,1)', repmat((1:3),num_nodes,1)', 'rows');
                         rand_ncoords = ccoords(rand2pts, :);
                         rand_fpt = UtilFunctionsFF.randomPointOnLine(rand_ncoords(1,:), rand_ncoords(2,:), 'uniform');
-                        % nonuniform random point between rand_pt and opposite node
+                        
                         other_node = setdiff(1:3, rand2pts);
                         other_coord = ccoords(other_node, :);
                         
@@ -133,10 +136,11 @@ classdef Faults < PolygonGrid
 
                 GBF_int = computeGeometry(GBF_int);
                 GBF_int.cells.indexMap = (1:GBF_int.cells.num)';
-                % Set face-orientation to undefined (NaN)
+                % Set face-orientation to undefined (NaN), not really
+                % necessary ...
                 GBF_int.cells.faces(:,2) = nan(size(GBF_int.cells.faces(:,1)));
                 poly.(p_idx).G = GBF_int;
-                % No logical indices for unstructured grid -> set to NaN
+                % No logical indices for triangulated grid -> set to NaN
                 poly.(p_idx).G.i = nan(GBF_int.cells.num, 1);
                 poly.(p_idx).G.j = nan(GBF_int.cells.num, 1);
             
@@ -151,14 +155,27 @@ classdef Faults < PolygonGrid
             end
         end
 
-        function poly = makeQuadrilaterals(all_polys, poly, poly_num, poly_neighbors, ...
+        function poly = makeUnstructuredGrid(all_polys, poly, poly_num, poly_neighbors, ...
                                             fac_scale, Lx_glob, Lz_glob, Nx_glob, Nz_glob)
           
+            % Create unstructured grid for polygon representing fault or
+            % pinch-out. Quadrilaterals are used in regular parts.
+            % Triangles are used in irregular parts (e.g., sharp angles)
+            % INPUTS:
+            %   all_polys: geometrical data for each polygon
+            %   poly: polygon instance to create grid for
+            %   poly_num: index of polygon instance
+            %   poly_neighbors: list of polygons transitioning to poly
+            %   fac_scale: factor to scale resolution of polygon
+            %   L*_glob: sizes of global background grid
+            %   N*_glob: dimensions of global background grid
+            % RETURNS:
+            %   poly: updates polygon instance
+
             poly_fault = Faults(all_polys, poly_num, fac_scale, false); 
             p_idx_pebi = strcat('p', string(poly_num), 'f');
             poly_fault.p_idx = p_idx_pebi;
-            poly.(p_idx_pebi) = poly_fault;            
-                        
+            poly.(p_idx_pebi) = poly_fault;                                    
 
             if poly_num == 25 % Only pinch-outs for poly25
                 p32 = poly_neighbors{1,1};
@@ -224,7 +241,6 @@ classdef Faults < PolygonGrid
 
                 partA_west = [polyFq.internal_east; ...
                                 p29B.G.nodes.coords(p29B.east_mask, :)];
-                %partA_west = unique(partA_west, 'rows', 'stable');
 
                 bottom_left_A = polyFq.internal_east(1,:);
                 p30_bottom = p30.G.nodes.coords(p30.bottom_mask, :);
@@ -232,6 +248,7 @@ classdef Faults < PolygonGrid
                 Lx_bottom_A = bottom_right_A(1) - bottom_left_A(1);
                 Nx_bottom_A = ceil(Lx_bottom_A/Lx_glob * Nx_glob);
                 bottom_A = [bottom_left_A; bottom_right_A];
+                % Interpolate bottom side of fault between polygonal points
                 [x_interp, z_interp] = Faults.interpFault(bottom_A, Nx_bottom_A);           
                 partA_bottom = [x_interp, z_interp];
 
@@ -292,11 +309,13 @@ classdef Faults < PolygonGrid
                 p14_east = p14.G.nodes.coords(p14.east_mask, :);
                 partC_west = [p14_east; ...
                               p19C.G.nodes.coords(p19C.east_mask, :)];
-
+               
                 bottom_left_C = p14_east(1,:);
                 p5_west = p5A.G.nodes.coords(p5A.west_mask, :);
+                % Right point of bottom side found by locating node on
+                % neighboring polygon closest to west point on bottom side
                 dist = Faults.euclideanDist(bottom_left_C, p5_west);
-                [~, min_idx] = min(dist);
+                [~, min_idx] = min(dist);                
                 bottom_right_C = p5_west(min_idx,:);
                 Lx_bottom_C = bottom_right_C(1) - bottom_left_C(1);
                 Nx_bottom_C = ceil(Lx_bottom_C/Lx_glob * Nx_glob);
@@ -453,8 +472,7 @@ classdef Faults < PolygonGrid
 
                 % Triangular bottom part
                 partA_top = flip(polyAq.internal_bottom);
-                partA_west = p11left_sub(p11left_sub(:,2) < z_tri, :); 
-                %partA_west = flip(partA_west);
+                partA_west = p11left_sub(p11left_sub(:,2) < z_tri, :);                
                 partA_east = p4_west(p4_west(:,2) < z_tri, :);
 
                 polyAt.bnodes = [partA_top; partA_west; partA_east];
@@ -470,29 +488,45 @@ classdef Faults < PolygonGrid
    
 
         function [linked_idx, linked_idx_main] = collapseSides(poly, nodes, nodes_main, side, use_buff)
-            % Set coordinate of collapsing nodes on given side
+            % For a pair of adjacent side (top/bottom or west/east), find
+            % indices of nodes on collapsed side linked to associated nodes
+            % on main side, and vice verca.
+            %
+            % INPUTS:
+            %   poly: polygon instance
+            %   nodes: original nodes on collapsed side
+            %   nodes_main: original nodes on main side
+            %   side: collapsed side
+            %   use_buff: boolean, whether to use buffer or not for
+            %             determining closest node (used for very skewed grids)
+            %
+            % RETURNS:
+            %   linked_idx: collapsed nodes linked to closest node in
+            %               main side
+            %   linked_idx_main: main nodes linked to closest node in
+            %                    collapsed side
+
             buff = 0;
             if strcmp(side, 'west') || strcmp(side, 'east')
                 x_or_z = 2;                
             elseif strcmp(side, 'top') || strcmp(side, 'bottom')
                 x_or_z = 1;
-                if use_buff % used for very skewed subgrids
+                if use_buff % very skewed grid
                     buff = mean([nodes(1,1)-nodes_main(1,1), ...
                                  nodes(end,1)-nodes_main(end,1)]);
                 end
             end
             
-            % First: connect all nodes_main with nodes
-            linked_idx = [1]; % top and bottom nodes already linked
+            % First: connect all nodes on main side with closest node
+            % in collapsed side
+            linked_idx = [1]; % bottom node already linked
             linked_idx_main = (1:size(nodes_main,1))';
-            %while ix >= 1 && ix <= Nx_sub
             for k=2:size(nodes_main,1)-1
                 nm = nodes_main(k,:);
-                [~, min_idx] = min(abs((nm(x_or_z)+buff) - nodes(:,x_or_z)));                                
-                %poly.G.nodes.coords(ix + (k-1)*Nx_sub, :) = nodes(min_zidx,:);                              
+                [~, min_idx] = min(abs((nm(x_or_z)+buff) - nodes(:,x_or_z)));                         
                 linked_idx = [linked_idx; min_idx];
             end
-            linked_idx = [linked_idx; size(nodes,1)];
+            linked_idx = [linked_idx; size(nodes,1)]; % top node already linked
 
             % Second: connect missed nodes to closest node in nodes_main
             diff_idx = diff(linked_idx);            
@@ -503,14 +537,13 @@ classdef Faults < PolygonGrid
                 m = missed_idx_adapt(k);
                 m_orig = missed_idx(k);
                 for i=1:diff_idx(m_orig)-1
-                    m_miss = linked_idx(m) + i; % 5, 6
+                    m_miss = linked_idx(m) + i;
                     [~, min_idx] = min(abs(nodes(m_miss,x_or_z) - nodes_main(:,x_or_z)));
                     m_idx = m + 1;
                     linked_idx(m_idx+1:end+1) = linked_idx(m_idx:end);
                     linked_idx(m_idx) = m_miss;
                     linked_idx_main(m_idx+1:end+1) = linked_idx_main(m_idx:end);
                     linked_idx_main(m_idx) = min_idx;
-                    %poly.G.nodes.coords(
                 end
                 missed_idx_adapt(k+1:end) = missed_idx_adapt(k+1:end) + i; % adjust missed index for added elements
             end                       
@@ -520,6 +553,23 @@ classdef Faults < PolygonGrid
         function poly = collapsedGrid(poly, cx, cz, Nx_sub, Nz_sub, ...
                                       part_west, part_east, part_top, part_bottom, ...
                                       Lx_glob, Lz_glob, Nx_glob, Nz_glob, varargin)                        
+            % For the subgrid of a given polygon, collapse faces in the
+            % grid to give consistent dimensions for
+            % west/east side and top/bottom sides.
+            %
+            % INPUTS:
+            %   poly: polygon instance
+            %   cx: collapsed vertical side ('west' or 'east')
+            %   cz: collapsed horizontal side ('top' or 'bottom')
+            %   Nx_sub: horizontal dimension of subgrid
+            %   Nz_sub: vertical dimension of subgrid
+            %   part_X: nodes on 'X' side of subgrid
+            %   L*_glob: sizes of global background grid
+            %   N*_glob: dimensions of global background grid
+            %
+            % RETURNS:
+            % poly: updated polygon instance
+
             use_buff = false;            
             % Determine what nodes should collapse
             if strcmp(cx, 'west')
@@ -580,18 +630,21 @@ classdef Faults < PolygonGrid
             end
                        
             if z_collapse             
-                % Fix main vertical side
+                % Fix main horizontal side, top or bottom (NB: new points
+                % may have been added!)
                 nodes_mz_new = zeros(Nx_new,2);
                 part_orig_idx = logical([1; diff(links_mz) == 1]); % if zero, we have a duplicate index indicating a collapsed node
-                nodes_mz_new(part_orig_idx,:) = nodes_mz;
-                ulinks_mz = unique(links_mz);                
-                counts = histc(links_mz, ulinks_mz)'; % use histc, I don't understand last element of histcounts
-                %counts = histcounts(links_mz)';
+                nodes_mz_new(part_orig_idx,:) = nodes_mz; % assign non-collapsed nodes (unchanged)
+                ulinks_mz = unique(links_mz);
+                % all unique links occuring more than once are collapsed
+                % nodes.
+                counts = histc(links_mz, ulinks_mz)'; % use histc, I don't understand last element of histcounts ...               
                 collapsed_idx = find(counts > 1);
                 nodes_mz_new(~part_orig_idx,:) = nodes_mz(collapsed_idx, :);
+                % Fix main horizontal side
                 poly.G.nodes.coords(mz_mask, :) = nodes_mz_new;
-                % Fix collapsed horizontal side -> extract collapsed points
-                % from links_cz
+                % Fix collapsed horizontal side (bottom or top)
+                % -> extract collapsed points from links_cz
                 nodes_cz_new = nodes_cz(links_cz, :);
                 poly.G.nodes.coords(cz_mask, :) = nodes_cz_new;
             else
@@ -600,7 +653,7 @@ classdef Faults < PolygonGrid
             end
                      
             if x_collapse
-                % Fix main horizontal side (NB: new points may have been added!)
+                % Fix main vertical side
                 nodes_mx_new = zeros(Nz_new,2);
                 part_orig_idx = logical([1; diff(links_mx) == 1]); % if zero, we have a duplicate index indicating a collapsed node
                 nodes_mx_new(part_orig_idx,:) = nodes_mx;
@@ -608,8 +661,9 @@ classdef Faults < PolygonGrid
                 counts = histc(links_mx, ulinks_mx)';                
                 collapsed_idx = find(counts > 1);
                 nodes_mx_new(~part_orig_idx,:) = nodes_mx(collapsed_idx, :);
+                % Fix main vertical side
                 poly.G.nodes.coords(mx_mask, :) = nodes_mx_new;
-                % Fix collapsed horizontal side -> extract collapsed points from links_cx
+                % Fix collapsed vertical side
                 nodes_cx_new = nodes_cx(links_cx, :);
                 poly.G.nodes.coords(cx_mask, :) = nodes_cx_new;
             else
@@ -620,7 +674,20 @@ classdef Faults < PolygonGrid
 
         function [poly_quad, poly_tri] = pinchOutGrid(poly_quad, poly_tri, upper_N, lower_N, x_tri, ...
                                      Lx_glob, Lz_glob, Nx_glob, Nz_glob)
-            % Make quadrilateral grid
+            % Make unstructured grid for pinch-out.
+            % INPUTS:
+            %   poly_quad: subpolygon of pinch-out to discretize with
+            %               quadrilaterals
+            %   poly_tri: subpolygon of pinch-out to discretize with
+            %               triangles
+            %   upper_N: upper neighboring polygon to pinch-out
+            %   lower_N: lower neighboring polygon to pinch-out
+            %   x_tri: x-coordinate in pinch-out grid that separates
+            %           poly_quad from poly_tri
+            %   L*_glob: sizes of global background grid
+            %   N*_glob: dimensions of global background grid
+
+            % 1. Make quadrilateral grid
             upper_bottom = upper_N.G.nodes.coords(upper_N.bottom_mask, :);                
             lower_top = lower_N.G.nodes.coords(lower_N.top_mask, :);
             % find line segment with x-coords closest to x_tri
@@ -681,7 +748,7 @@ classdef Faults < PolygonGrid
             poly_quad.G.i = nan(poly_quad.G.cells.num, 1); % unstructured -> set to nan
             poly_quad.G.j = nan(poly_quad.G.cells.num, 1);
 
-            % Make triangular grid
+            % 2. Make triangular grid
             part_top = upper_bottom(upper_bottom(:,1) < x_tri, :);
             part_top = flip(part_top);
             part_bottom = lower_top(lower_top(:,1) < x_tri, :);
@@ -700,6 +767,16 @@ classdef Faults < PolygonGrid
             % Make composite quadrilateral-triangulated grid of bottom
             % heteroegenous fault. 
             % Yep, it gets pretty nasty...
+            %
+            % INPUTS:
+            %   all_polys: geometrical data of each polygon
+            %   poly: current polygon instance
+            %   fac_scale: factor to scale resolution of subgrid
+            %   L*_glob: sizes of global background grid
+            %   N*_glob: dimensions of global background grid
+            %
+            % RETURNS:
+            % poly: updated polygon instance
             
             % --- Upper piece: poly24 ---
             poly24 = poly.p24f;
@@ -1012,6 +1089,19 @@ classdef Faults < PolygonGrid
 
         function poly = distributeAndCollapseNodes(poly, part_west, part_east, part_top, part_bottom, ...
                                                     Lx_glob, Lz_glob, Nx_glob, Nz_glob, varargin)
+            % Create subgrid of fault, distribute and collapse nodes on
+            % external sides, and interpolate internal nodes between
+            % top/bottom and west/east sides.
+            % 
+            % INPUTS:
+            %   poly: current polygon instance
+            %   part_X: nodes on 'X' side of subgrid
+            %   L*_glob: sizes of global background grid
+            %   N*_glob: dimensions of global background grid
+            %
+            % RETURNS:
+            % poly: updated polygon instance
+
             [~, unique_idx] = uniquetol(part_west, 'ByRows', true); % remove duplicating overlapping nodes
             part_west = part_west(sort(unique_idx), :);
             [~, unique_idx] = uniquetol(part_east, 'ByRows', true);
@@ -1045,8 +1135,7 @@ classdef Faults < PolygonGrid
         
             if Nx_sub > 2 % collapse internal stacks according to closest side
                 Nz_sub = poly.G.cartDims(2)+1; % vertical dim may have increased if collapsed nodes added
-                Nx_sub = poly.G.cartDims(1)+1; % horizontal dim may also have changed
-                Nx_int = Nx_sub - 2;
+                Nx_sub = poly.G.cartDims(1)+1; % horizontal dim may also have changed             
                 
                 G_dum = poly.G;
                 west_side = poly.G.nodes.coords(poly.west_mask, :);
@@ -1081,10 +1170,8 @@ classdef Faults < PolygonGrid
                     x = [x_min; x_max];
                     z = [z_min; z_max];
                     dz = (z_max - z_min)/(Nz_sub-1);
-                    %z_interp = poly.G.nodes.coords(vert_layer, 2);
                     z_interp = z_min + cumsum(repmat(dz, Nz_sub, 1)) - dz;
-                    x_interp = interp1(round(z,10),x,round(z_interp,10),'linear'); % to avoid weird round-off error
-                    %poly.G.nodes.coords(vert_layer, 1) = x_interp;
+                    x_interp = interp1(round(z,10),x,round(z_interp,10),'linear'); % to avoid weird round-off error             
                     %poly.G.nodes.coords(vert_layer(1:end-1), :) = [x_interp(1:end-1), z_interp(1:end-1)];
                     poly.G.nodes.coords(vert_layer(2:end-1), 2) = z_interp(2:end-1); % ONLY SET Z-COORD
                 end    
@@ -1094,6 +1181,13 @@ classdef Faults < PolygonGrid
         end
 
         function [x_interp, z_interp] = interpFault(interp_side, Nx_side)
+            % Interpolate nodes uniformly between endpoints of given side.
+            % INPUTS:
+            %   interp_side: original nodes on side to interpolate
+            %   Nx_side: dimension of side
+            % RETURNS:
+            %   x_interp: interpolated x-coordinates
+            %   z_interp: interpolated z-coordinates            
             left_pt = interp_side(1,:);
             right_pt = interp_side(end,:);
             x = [left_pt(1), right_pt(1)];
@@ -1104,6 +1198,7 @@ classdef Faults < PolygonGrid
         end
 
         function dist = euclideanDist(pt, line)
+            % Euclidean distance between a point 'pt' and line 'line'.
             dist = sqrt((pt(1) - line(:,1)).^2 + ...
                         (pt(2) - line(:,2)).^2);
         end

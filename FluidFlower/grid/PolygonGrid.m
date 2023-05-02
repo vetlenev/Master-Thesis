@@ -36,8 +36,7 @@ classdef PolygonGrid
             % Input:
             %   polys: polygon data from spe11 case
             %   poly_num: id of polygon to discretize                       
-
-            %obj.poly_num = poly_num;
+           
             obj.facies = polys{poly_num}{1};
             obj.p = polys{poly_num}{2}(:,1:2);
             obj.p_orig = obj.p;
@@ -48,7 +47,7 @@ classdef PolygonGrid
         
         function obj = cartesianSubgrid(obj, Lx_glob, Lz_glob, Nx_glob, Nz_glob, num_nodes_overlap, varargin)
             % Create cartesian subgrid of provided obj polygon.
-            % Input:
+            % INPUTS:
             %   obj: polygon instance
             %   Lx_glob: horizontal grid size of global grid
             %   Lz_glob: vertical --- | ---
@@ -56,6 +55,8 @@ classdef PolygonGrid
             %   Nz_glob vertical --- | ---
             %   num_nodes_overlap: number of overlapping nodes of intersecting
             %                       neighbor. If empty, assume topmost grid.            
+            % RETURNS:
+            %   obj: updated polygon instance
             poly = obj.p;
             Lx_min = min(poly(:,1));
             Lx_max = max(poly(:,1));
@@ -111,18 +112,20 @@ classdef PolygonGrid
         end
 
         function [obj, split_points] = reorderPts(obj, edge_case)
-            % Reorder points pts, starting from point with lowest x-value.
+            % Reorder polygonal points pts, starting from point with lowest x-value.
             % Returns separate arrays for monotonically increasing/decreasing
-            % connected cells.            
+            % x-values for connected cells.            
             pts = obj.p;
             mean_x = mean(pts, 1);
             mean_x = mean_x(1);
 
             switch edge_case
+                % remove points not compatible with generic algorithm for
+                % finding top/bottom sides of polygon
                 case 20
-                    rem_idx = 2:3; % remove points along fault                                        
+                    rem_idx = 2:3;                                       
                 case 6
-                    rem_idx = 3:5; % 4:5
+                    rem_idx = 3:5;
                 case 5
                     rem_idx = 25;
                 case 14
@@ -151,16 +154,16 @@ classdef PolygonGrid
             pts(rem_idx, :) = []; 
 
             obj.p_we = pts_we; % to store points along west and east sides
-            obj.we = rem_side;
+            obj.we = rem_side; % boolean for west/east points
             
             x_pts = pts(:,1);
             y_pts = pts(:,2);
-            % Special case if left and right boundaries are at global boundaries:
+    
             U = unique(x_pts);
             count = histc(x_pts, U);
             x_mode = U(count == max(count));    
         
-            bnd_idx = find(x_pts == min(x_mode));
+            bnd_idx = find(x_pts == min(x_mode)); % number of points at left boundary
            
             if numel(x_mode) > 1 && max(count) > 1    
                 bnd_idx = bnd_idx(2);    
@@ -181,12 +184,9 @@ classdef PolygonGrid
              pts_stop = pts_new(1:bnd_idx-1,:);
              pts_new(1:end-bnd_idx+1,:) = pts_start;
              pts_new(end-bnd_idx+2:end,:) = pts_stop;
-
-             %stop = size(pts_new, 1);
-             %pts_map = [[1:stop-bnd_idx+1, stop-bnd_idx+2:stop]; [bnd_idx:stop, 1:bnd_idx-1]]';             
-
-            if ismember(edge_case, [2,3,4,10,14]) % [4,6,14]
-                obj.p_bt = pts; % don't reorder for these edge-cases
+             
+            if ismember(edge_case, [2,3,4,10,14]) 
+                obj.p_bt = pts; % don't reorder for these edge-cases -> handled separately
             else
                 obj.p_bt = pts_new; % ordered points from top and bottom surface
             end
@@ -199,7 +199,7 @@ classdef PolygonGrid
             [~, max_ydiff_idx] = max(abs(diff(pts_new(:,2)))); % index of maximum y-difference between points in polygon
             split_points(sgn_diff(split_points) == 0) = []; % signed difference is zero => two points on same boundary => remove these from split-points
             
-            split_points = split_points + (max_ydiff_idx ~= split_points); % add 1 to split points if skewed comes BEFORE the split point
+            split_points = split_points + (max_ydiff_idx ~= split_points); % add 1 to split points if transition from top to bottom comes BEFORE the split point
 
             i = 1;
             while i <= numel(split_points)
@@ -215,7 +215,18 @@ classdef PolygonGrid
         end
 
         function [p_top, p_bottom] = topAndBottomSurfaces(obj, split_pts, edge_case, pts_overlap)           
-             
+                % Extract top and bottom surface of a given polygon.
+                % INPUTS:
+                %   obj: polygon object
+                %   split_pts: index of points separating top and bottom
+                %               surfaces
+                %   edge_case: index of polygon, used if it edge case
+                %   pts_overlap: struct with overlapping points for
+                %                   polygons of FluidFlower
+                % RETURNS:
+                %   p_top: points defining top surface of polygon
+                %   p_bottom: points defining bottom surface of polygon
+
                 num_splits = numel(split_pts) - 1; % -1 to get number of split intervals
                 %pts = obj.p;
                 pts = obj.p_bt;                
@@ -229,9 +240,6 @@ classdef PolygonGrid
                     case 4
                         p_top = [pts(end, :); pts(1, :)];
                         p_bottom = pts(2:4, :);
-%                     case 6
-%                         p_top = pts(17:end, :);
-%                         p_bottom = pts(4:16, :);
                     case 10
                         p_top = pts(1:5, :);
                         p_bottom = pts(6:end, :);
@@ -267,8 +275,8 @@ classdef PolygonGrid
         end
         
         function [obj, closest_mask] = correct_dx_poly(obj, G_glob, boundary_mask, face)
-            % Correct x-coords of subgrid closest to polygonal coordinates of
-            % surface.
+            % Correct x/z-coordinates of points in subgrid closest to 
+            % polygonal points of surface.
             % Input:
             %   obj: polygon instance
             %   G_glob: global cartesian grid            
@@ -278,6 +286,7 @@ classdef PolygonGrid
             % Output:
             %   obj: modified polygon instance
             %   closest_mask: logical array of x-coords closest to each poly-point
+
             G = obj.G;           
 
             if strcmp(face, 'bottom')
@@ -298,10 +307,7 @@ classdef PolygonGrid
 
             x_adapt = xs;                        
 
-            % If lateral size of subgrid equals lateral size of global grid,
-            % the remaining nodes are already conform with associated nodes of the
-            % global grid -> no need to modify nodes!
-            % But if xsize(subgrid) < xsize(global_grid) nodes must be modified.
+            % If xsize(subgrid) < xsize(global_grid) nodes must be modified.
             Nx = G.cartDims(1);
             if Nx < G_glob.cartDims(1)
                 x_min = min(xs);
@@ -318,52 +324,12 @@ classdef PolygonGrid
                 x_diff(~boundary_mask) = inf;
                 closest_mask(i) = find(x_diff == min(x_diff));
 
-                x_adapt(i) = x_sub(closest_mask(i)); % x-coords for new blue nodes                
+                x_adapt(i) = x_sub(closest_mask(i)); % new x-coords of polygonal points               
             end
         
             % ONLY UPDATE Z-VALUE OF NODE, X-VALUE SHOULD BE ORIGINAL VALUE FROM EVEN DISTRIBUTION!
             %G.nodes.coords(closest_mask, 1) = xs;
-            G.nodes.coords(closest_mask, 2) = zs;         
-        
-            % Modification of nodes needed if poly boundary pts are not on boundary
-            % of cartesian subgrid
-            if false && min(xs) > min(x_sub)+1e-10 % left poly-boundary point is INSIDE subgrid -> change boundary of subgrid to conform with this
-                [xs_sort, sort_idx] = sort(xs);
-                zs_sort = zs(sort_idx);
-        
-                x_stop_mod = xs_sort(2); % x-coordinate to STOP modifications
-                mod_idx = x_sub <= x_stop_mod & boundary_mask;
-                mod_num = nnz(mod_idx);
-                mod_dx = (xs_sort(2)-xs_sort(1))/(mod_num-1); % -1 to divide by correct number of intervals
-                x_mod = xs_sort(1) + cumsum(repmat(mod_dx, mod_num, 1)) - mod_dx;
-        
-                % Change coordinates and update closest mask for LEFTMOST point:
-                G.nodes.coords(mod_idx, 1) = x_mod;
-                x_sub = G.nodes.coords(:,1); % updated
-                %x_diff = abs(xs(1) - x_sub);
-                x_diff = abs(xs_sort(1) - x_sub);
-                closest_mask(sort_idx(1)) = find(x_diff == min(x_diff) & boundary_mask);
-                G.nodes.coords(closest_mask(sort_idx(1)), 2) = zs_sort(1); % conform z-value of end-node with depth of surface point
-            end
-        
-            if false && max(xs) < max(x_sub)-1e-10 % right poly-boundary point is INSIDE subgrid -> change boundary of subgrid to conform with this
-                [xs_sort, sort_idx] = sort(xs);
-                zs_sort = zs(sort_idx);
-        
-                x_start_mod = xs_sort(end-1); % x-coordinate to START modifications
-        
-                mod_idx = x_sub >= x_start_mod & boundary_mask;
-                mod_num = nnz(mod_idx);
-                mod_dx = (xs_sort(end)-xs_sort(end-1))/(mod_num-1); 
-                x_mod = xs_sort(end-1) + cumsum(repmat(mod_dx, mod_num, 1)) - mod_dx;
-        
-                % Change coordinates and update closest mask for RIGHTMOST point:
-                G.nodes.coords(mod_idx, 1) = x_mod;
-                x_sub = G.nodes.coords(:,1); % updated
-                x_diff = abs(xs_sort(end) - x_sub); % x_diff = abs(xs(end) - x_sub);
-                closest_mask(sort_idx(end)) = find(x_diff == min(x_diff) & boundary_mask);
-                G.nodes.coords(closest_mask(sort_idx(end)), 2) = zs_sort(end);
-            end
+            G.nodes.coords(closest_mask, 2) = zs;                 
         
             if strcmp(face, 'bottom')
                 obj.bottom_side_new(:,1) = x_adapt;
@@ -382,11 +348,13 @@ classdef PolygonGrid
             %   closest_idx: logical mask of nodes in G closest to poly pts
             %   face_idx: logical mask of face in polygon to be interpolated
             %   face: face of polygon to correct nodes for ('top' or 'bottom')
-            %   interp_method: interpolation method (e.g. linear, spline, ...)
+            %   interp_method: interpolation method (standard: 'linear')
             % Output:
             %   obj: modified polygon instance
+
+            % Extract *modified* polygonal points for top and bottom sides
             if strcmp(face, 'bottom')
-                poly_side = obj.bottom_side_new;
+                poly_side = obj.bottom_side_new; 
             elseif strcmp(face, 'top')
                 poly_side = obj.top_side_new;
             else
@@ -409,6 +377,14 @@ classdef PolygonGrid
         function obj = interpolateInternal(obj, top_mask, bottom_mask, pinch, varargin)                        
             % Linearly interpolate internal nodes for top-bottom node pairs.
             % Special treatment for pinch-outs.
+            % INPUTS:
+            %   obj: polygon instance
+            %   top_mask: boolean vector for top side
+            %   bottom_mask: boolean vector for bottom side
+            %   pinch: boolean, true if layer includes a pinch-out
+            % RETURNS:
+            %   obj: modified polygon instance
+
             Nx = obj.G.cartDims(1) + 1; % +1 to include both endpoints
             Nz = obj.G.cartDims(2) + 1;           
 
@@ -429,9 +405,9 @@ classdef PolygonGrid
                 zt_all = [pinch(:,2); z_top(ix)];
                 for i=1:size(pinch, 1) % linearly interpolate between pinch-points             
                     Nzb_m = Nzb_all(i); % previous Nzb
-                    Nzb = Nzb_all(i+1) - Nzb_all(i) + 1;
+                    Nzb = Nzb_all(i+1) - Nzb_all(i) + 1; % num nodes below pinch-out
                     Nzb_p = Nzb_all(i+2); % next Nzb
-                    Nzt = Nzb_all(i+2) - Nzb_all(i+1) + 1; % +1 to include pinch-point in upper interval as well
+                    Nzt = Nzb_all(i+2) - Nzb_all(i+1) + 1; % num nodes above pinch-out (+1 to include pinch-point in upper interval as well)
                     xb = xb_all(i); zb = zb_all(i);
                     xt = xt_all(i+1); zt = zt_all(i+1);
                     xp = pinch(i,1); zp = pinch(i,2);
@@ -471,10 +447,8 @@ classdef PolygonGrid
             Nz = obj.G.cartDims(2)+1;
 
             for i=2:Nz-1
-                %side_point = obj.G.nodes.coords(ix+Nx*(i-1), :); % (fix_idx - 1) -> (i-1)
                 west_point = obj.G.nodes.coords(1+Nx*(i-1), :);
-                x_west = west_point(1); z_west = west_point(2);
-                %east_point = obj.G.nodes.coords((Nx-ix+1)+Nx*(i-1), :); % point on other side with same z-index                 
+                x_west = west_point(1); z_west = west_point(2);             
                 east_point = obj.G.nodes.coords(Nx+Nx*(i-1), :);
                 x_east = east_point(1); z_east = east_point(2);
     
@@ -484,11 +458,13 @@ classdef PolygonGrid
                 z_interp = z_west + cumsum(repmat(dz, Nx, 1)) - dz;                    
                 
                 obj.G.nodes.coords(Nx*(i-1)+1:Nx*i, 1) = x_interp;
-                %obj.G.nodes.coords(Nx*(i-1)+1:Nx*i, 2) = z_interp;
+                %obj.G.nodes.coords(Nx*(i-1)+1:Nx*i, 2) = z_interp; % z already interpolated ...                
             end
         end
 
         function obj = interpolatePartlyHorizontal(obj, fac)
+            % DEPRECATED, not used I think ...
+
             % fac must be in range [0, 0.5]
             Nx = obj.G.cartDims(1)+1;
             Nz = obj.G.cartDims(2)+1;
@@ -526,12 +502,13 @@ classdef PolygonGrid
         end
 
         function obj = interpolateSide(obj)
-            % Interpolate west/east side between provided polygonal points
-            % p_we on these sides.
+            % Interpolate west/east side of polygon instance 'obj' 
+            % between provided polygonal points p_we on these sides. 
+            % Interpolation done separately for each
+            % pair of neighboring points along side.
             Nx = obj.G.cartDims(1)+1;
             Nz = obj.G.cartDims(2)+1;
-
-            % Interpolate points lying on x-plane of fix-point                        
+                                  
             west_points = obj.p_we.*obj.we;
             west_points = west_points(any(west_points, 2),:);
             fix_idxs = zeros(size(west_points,1), 1);
@@ -566,6 +543,15 @@ classdef PolygonGrid
         function [nodes, pts_overlap] = findOverlappingNodes(poly, poly_other, face)
             % Find overlapping nodes between current polygon (poly) and the
             % neighboring polygon (poly_other) intersecting at the side 'face'.
+            % INPUTS:
+            %   poly: instance of current polygon
+            %   poly_other: instance of neighboring polygon to find
+            %               overlapping points with
+            %   face: side/face of *current* polygon to find overlaps
+            % RETURNS:
+            %   nodes: list of overlapping nodes
+            %   pts_overlap: list of overlappping polygonal points
+
             pp = poly.p;           
             G_other = poly_other.G;          
             pp_other = [poly_other.p; poly_other.p_we; poly_other.p_added]; % include ALL poly points of neighbor
@@ -617,6 +603,13 @@ classdef PolygonGrid
             % Determine logical indices for current polygon based on
             % logical indices of upper neighboring polygon. Needed for
             % hybrid modeling.
+            % NB: Assumes logical indices already calculated for
+            % neighboring polygon.
+            % INPUTS:
+            %   poly: polygon instance
+            %   poly_upper: upper neighboring polygon instance
+            % RETURNS:
+            %   poly: updated polygon instance with logical indices
             poly.G = computeGeometry(poly.G);
             fc = poly.G.faces.centroids;   
 
@@ -627,7 +620,7 @@ classdef PolygonGrid
                 poly_upper = {poly_upper};
             end
 
-            for i=1:numel(poly_upper)
+            for i=1:numel(poly_upper) % may have multiple upper neighbors
                 Gi = poly_upper{i}.G;
                 fcui = Gi.faces.centroids;
                 Ni = Gi.faces.neighbors;
@@ -651,8 +644,15 @@ classdef PolygonGrid
 
         function poly = logicalIndicesWestOverlap(poly, poly_west)
             % Determine logical indices for current polygon based on
-            % logical indices of neighboring polygon in west. Needed for
-            % hybrid modeling.
+            % logical indices of neighboring polygon in west.
+            % NB: Assumes logical indices already calculated for
+            % neighboring polygon.
+            % INPUTS:
+            %   poly: polygon instance
+            %   poly_west: neighboring polygon instance in west
+            % RETURNS:
+            %   poly: updated polygon instance with logical indices
+
             poly.G = computeGeometry(poly.G);
             G_west = poly_west.G;
             G_west = computeGeometry(G_west);
@@ -677,7 +677,7 @@ classdef PolygonGrid
 
     methods (Static)
         function polys = polyPoints(pts, loops, facies)
-            % Return a cell array of all 32 polyons with associated points
+            % Return a cell array of all 32 polygons with associated points
             polys = cell(numel(loops),1);
             for f_ix = 1:numel(facies)
                 facie = facies{f_ix};
@@ -692,6 +692,16 @@ classdef PolygonGrid
         end
 
         function [G, x_global, z_global] = globalCartGrid(pts, nx, nz)
+            % Make a global Cartesian background grid for FluidFlower.
+            % Dictates dimensions of subgrids.
+            % INPUTS:
+            %   pts: all polygonal points of FluidFlower
+            %   nx: horizontal dimension
+            %   nz: vertical dimension
+            % RETURNS:
+            %   G: global grid
+            %   x_global: uniformly distributed x coordinates
+            %   z_global: uniformly distributed z coordinates
             x_min = min(pts(:,1)); z_min = min(pts(:,2));
             x_max = max(pts(:,1)); z_max = max(pts(:,2));
             Lx = x_max - x_min;
@@ -704,7 +714,7 @@ classdef PolygonGrid
             x_global = x_min + cumsum(repmat(dx, Nx+1, 1)) - dx;
             z_global = z_min + cumsum(repmat(dz, Nz+1, 1)) - dz;           
 
-            G = cartGrid([Nx, Nz], [Lx, Lz]); % global background grid -> basis for gluing
+            G = cartGrid([Nx, Nz], [Lx, Lz]);
             G = computeGeometry(G);
         end
     end
