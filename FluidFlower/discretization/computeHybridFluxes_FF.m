@@ -1,7 +1,7 @@
 function [vW, vG, mobW, mobG, upcw, upcg, ...
             h_global, h_max_global, h_T_global, h_B_global, ...
             cellsBH, cHorz_state, cBottomHorz_state] = computeHybridFluxes_FF(model, pW, sG, muW, muG, rhoW, rhoG, trans, ...
-                                                                            sgMax, vG, vG_smax, cB, veB, cH, veH, varargin)
+                                                                                    sgMax, vG, vG_smax, cB, veB, cH, veH, varargin)
 % Internal function - computes interior fluxes for the hybrid VE models,
 % with special treatment for relaxed VE columns.
 % 
@@ -66,22 +66,30 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 %}
     opt = struct('ve_model', 'sharp_interface', 'r', 0); % defaults: sharp interface, negligable horizontal flux for NVEHorz cells (r=0) 
     opt = merge_options(opt, varargin{:});
-    
-    cellsNVE = [];
-    cellsNVEMob = [];
-    
+
     op = model.operators;
     G = model.G;    
     f = model.fluid;
     g = -norm(model.gravity); % !!!
     pv = poreVolume(G, model.rock);
     
-    swr = model.fluid.krPts.w(3,2);
-    snr = model.fluid.krPts.g(3,2);
+    %swr = model.fluid.krPts.w(3,2);
+    %snr = model.fluid.krPts.g(3,2);
+    swr = sG.*0;
+    snr = sG.*0;
+
     isFine = G.cells.discretization == 1;  
     all_coarse_cells = (1:G.cells.num)';
     
-    sgMax_dummy = sgMax.*(snr > 0) + sG.*(snr == 0); % used to assign correct h_max to VE cells filled from bottom    
+    sgMax_dummy = sG.*0; % initialize as empty ADI    
+    facies = unique(G.facies);
+    for fac=facies'
+        fac_cells = G.facies == fac;
+        swr(fac_cells) = f.krPts.w(fac,2); 
+        snr(fac_cells) = f.krPts.g(fac,2);
+    end
+
+    sgMax_dummy = sgMax.*(snr > 0) + sG.*(value(snr) == 0); % used to assign correct h_max to RVE cells
             
     % --- upscaledSat2height ---
     if strcmp(opt.ve_model, 'sharp_interface')
@@ -106,7 +114,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
 
     % --------------------------   
-    h_T_global = h_max_global.*(snr > 0) + h_global.*(snr == 0);
+    h_T_global = h_max_global.*(snr > 0) + h_global.*(value(snr) == 0);
     h_B_global = H + 0*h_global; % last term to convert to AD-varible
                
     % --- Special treatment for RVE cells ---   
@@ -141,7 +149,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 
     [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h_global, h_max_global, H, rhoW, rhoG, muW, muG, ...
                                                 isFine, all_coarse_cells, h_global, h_max_global, {}, {}, ...
-                                                cellsNVE, 've_model', opt.ve_model, 'p_entry', p_entry);
+                                                've_model', opt.ve_model, 'p_entry', p_entry);
     if isa(model, 'ThreePhaseCompositionalModel')
         sW = 1-sG;
         rhoWf = op.faceAvg(rhoW.*sW)./max(op.faceAvg(sW), 1e-8);
@@ -177,7 +185,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if any(transition_ve)
         [vW(transition_ve), vG(transition_ve),...
          upcw(transition_ve), upcg(transition_ve)] = computeTransitionFluxVE(model, pW, h_global, h_max_global, h_T_global, h_B_global, rhoW, rhoG, muW, muG, ...
-                                                                              transition_ve, true, cellsNVE, cellsNVEMob, 'p_entry', p_entry, ...
+                                                                              transition_ve, true, swr, snr, 'p_entry', p_entry, ...
                                                                               'cHorz', cHorz, 'cBottomHorz', cBottomHorz, ...
                                                                               'hHi', cHorz_state{1}, 'hBHi', cBottomHorz_state{1}, ...
                                                                               'Hi', cHorz_state{2}, 'BHi', cBottomHorz_state{2});
@@ -190,7 +198,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if any(transition_vertical)        
         [vW(transition_vertical), vG(transition_vertical),...
          upcw(transition_vertical), upcg(transition_vertical)] = computeTransitionFluxVE(model, pW, h_global, h_max_global, h_T_global, h_B_global, rhoW, rhoG, muW, muG, ...
-                                                                                            transition_vertical, false, cellsNVE, cellsNVEMob, 'p_entry', p_entry, ...
+                                                                                            transition_vertical, false, swr, snr, 'p_entry', p_entry, ...
                                                                                             'cHorz', cHorz, 'cBottomHorz', cBottomHorz, ...
                                                                                             'hHi', cHorz_state{1}, 'hBHi', cBottomHorz_state{1}, ...
                                                                                             'Hi', cHorz_state{2}, 'BHi', cBottomHorz_state{2});
@@ -199,7 +207,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 end
 
 function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransitionValuesVE_coarse(model, pW, h_global, h_max_global, h_T_global, h_B_global, ...
-                                                                                                    index, subs, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, varargin)    
+                                                                                                    index, subs, rhoW, rhoG, muW, muG, swr, snr, varargin)    
     opt = struct('ve_model', 'sharp_interface', 'p_entry', 0, ...
                  'cHorz', [], 'cBottomHorz', [], 'hHi', [], 'hBHi', [], 'Hi', [], 'BHi', []);
     opt = merge_options(opt, varargin{:});
@@ -213,9 +221,11 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     b = model.G.cells.bottomDepth(c);
     B = model.operators.connections.faceBottomDepth(subs, index);
       
-    swr = model.fluid.krPts.w(3,2);
-    snr = model.fluid.krPts.g(3,2);
-    % 
+    %swr = model.fluid.krPts.w(3,2);
+    %snr = model.fluid.krPts.g(3,2);
+    swr = swr(c);
+    snr = snr(c);
+    
     [a_M, a_R, sG] = getGasSatFromHeightVirtual_FF(T, t, B, b, h_global(c), h_T_global(c), h_B_global(c), swr, snr);
 
     H = model.operators.connections.faceHeight(subs, index);
@@ -237,7 +247,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
 end
 
 function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransitionValuesVE_fine(model, pW, h_global, h_max_global, h_T_global, h_B_global, index, ...
-                                                                                                subs, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, varargin)    
+                                                                                                subs, rhoW, rhoG, muW, muG, swr, snr, varargin)    
     opt = struct('ve_model', 'sharp_interface', 'p_entry', 0, ...
                  'cHorz', [], 'cBottomHorz', [], 'hHi', [], 'hBHi', [], 'Hi', [], 'BHi', []);
     opt = merge_options(opt, varargin{:});
@@ -253,8 +263,8 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
     B = model.operators.connections.faceBottomDepth(subs, index);
     H = model.operators.connections.faceHeight(subs, index);
 
-    swr = model.fluid.krPts.w(3,2);
-    snr = model.fluid.krPts.g(3,2);           
+    swr = swr(c);
+    snr = snr(c);           
     
     [a_M, a_R, sG] = getGasSatFromHeightVirtual_FF(T, t, B, b, h_global(c), h_T_global(c), h_B_global(c), swr, snr);   
 
@@ -275,7 +285,7 @@ function [pW, pW_f, sG, h, h_max, H, rhow, rhog, muw, mug, isFine] = getTransiti
 end
 
 
-function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T, h_B, rhoW, rhoG, muW, muG, vtc, treatAsCoarse, cellsNVE, cellsNVEMob, varargin)
+function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T, h_B, rhoW, rhoG, muW, muG, vtc, treatAsCoarse, swr, snr, varargin)
     % INPUTS:
     %   h: global depth of mobile plume
     %   h_max: global height of residual part
@@ -320,11 +330,11 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T
             pW(isFine) = pW(isFine) - dpFine;
         end    
 
-        [pW_l, pW_bl, sG_l, h_l, h_max_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l] = getTransitionValuesVE_coarse(model, pW, h, h_max, h_T, h_B, 1, vtc, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, 'p_entry', opt.p_entry, ...
+        [pW_l, pW_bl, sG_l, h_l, h_max_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l] = getTransitionValuesVE_coarse(model, pW, h, h_max, h_T, h_B, 1, vtc, rhoW, rhoG, muW, muG, swr, snr, 'p_entry', opt.p_entry, ...
                                                                                                             'cHorz', opt.cHorz, 'cBottomHorz', opt.cBottomHorz, ...
                                                                                                             'hHi', opt.hHi, 'hBHi', opt.hBHi, ...
                                                                                                             'Hi', opt.Hi, 'BHi', opt.BHi);
-        [pW_r, pW_br, sG_r, h_r, h_max_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r] = getTransitionValuesVE_coarse(model, pW, h, h_max, h_T, h_B, 2, vtc, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, 'p_entry', opt.p_entry, ...
+        [pW_r, pW_br, sG_r, h_r, h_max_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r] = getTransitionValuesVE_coarse(model, pW, h, h_max, h_T, h_B, 2, vtc, rhoW, rhoG, muW, muG, swr, snr, 'p_entry', opt.p_entry, ...
                                                                                                             'cHorz', opt.cHorz, 'cBottomHorz', opt.cBottomHorz, ...
                                                                                                             'hHi', opt.hHi, 'hBHi', opt.hBHi, ...
                                                                                                             'Hi', opt.Hi, 'BHi', opt.BHi);
@@ -337,11 +347,11 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T
         % Treat coarse cells as fine cells
         % Original VE converted to fine cells => change h_max:
         
-        [pW_l, pW_bl, sG_l, h_l, h_max_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l] = getTransitionValuesVE_fine(model, pW, h, h_max, h_T, h_B, 1, vtc, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, 'p_entry', opt.p_entry, ...
+        [pW_l, pW_bl, sG_l, h_l, h_max_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l] = getTransitionValuesVE_fine(model, pW, h, h_max, h_T, h_B, 1, vtc, rhoW, rhoG, muW, muG, swr, snr, 'p_entry', opt.p_entry, ...
                                                                                                            'cHorz', opt.cHorz, 'cBottomHorz', opt.cBottomHorz, ...
                                                                                                             'hHi', opt.hHi, 'hBHi', opt.hBHi, ...
                                                                                                             'Hi', opt.Hi, 'BHi', opt.BHi);
-        [pW_r, pW_br, sG_r, h_r, h_max_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r] = getTransitionValuesVE_fine(model, pW, h, h_max, h_T, h_B, 2, vtc, rhoW, rhoG, muW, muG, cellsNVE, cellsNVEMob, 'p_entry', opt.p_entry, ...
+        [pW_r, pW_br, sG_r, h_r, h_max_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r] = getTransitionValuesVE_fine(model, pW, h, h_max, h_T, h_B, 2, vtc, rhoW, rhoG, muW, muG, swr, snr, 'p_entry', opt.p_entry, ...
                                                                                                             'cHorz', opt.cHorz, 'cBottomHorz', opt.cBottomHorz, ...
                                                                                                             'hHi', opt.hHi, 'hBHi', opt.hBHi, ...
                                                                                                             'Hi', opt.Hi, 'BHi', opt.BHi);
@@ -358,10 +368,10 @@ function [vW, vG, upcw, upcg] = computeTransitionFluxVE(model, pW, h, h_max, h_T
     n1 = nn(:,1); n2 = nn(:,2);     
 
     [pW_l, pG_l, mobW_l, mobG_l] = evaluatePropertiesVE(model, pW_l, sG_l, h_l, h_max_l, H_l, rhoW_l, rhoG_l, muW_l, muG_l, ...
-                                                         isFine_l, n1, h, h_max, vtc, 1, cellsNVE, ...
+                                                         isFine_l, n1, h, h_max, vtc, 1, ...
                                                          've_model', opt.ve_model, 'p_entry', opt.p_entry);
     [pW_r, pG_r, mobW_r, mobG_r] = evaluatePropertiesVE(model, pW_r, sG_r, h_r, h_max_r, H_r, rhoW_r, rhoG_r, muW_r, muG_r, ...
-                                                         isFine_r, n2, h, h_max, vtc, 2, cellsNVE, ...
+                                                         isFine_r, n2, h, h_max, vtc, 2, ...
                                                          've_model', opt.ve_model, 'p_entry', opt.p_entry);    
 
 
@@ -377,7 +387,7 @@ end
 
 
 function [pW, pG, mobW, mobG] = evaluatePropertiesVE(model, pW, sG, h, h_max, H, rhoW, rhoG, muW, muG, ...
-                                                      isFine, n_cells, h_global, h_max_global, vtc, index, cellsVENot, varargin)
+                                                      isFine, n_cells, h_global, h_max_global, vtc, index, varargin)
     % INPUTS:
     %   model: model of type WaterGasMultiVEModel
     %   pW: water pressure
@@ -501,21 +511,21 @@ function [h, h_max, h_T, h_B, cellsBH, ...
     vG_bottom_smax = abs(vG_bottom_smax(veB)); % local indexing
     
     S = sG(cB); % VE bottom cells cB used directly as index because sG is ordered by cell numbers by default (1:G.cells.num)
-    sMax = sgMax(cB).*(snr > 0) + S.*(snr == 0);
+    sMax = sgMax(cB).*(snr(cB) > 0) + S.*(value(snr(cB)) == 0);
     
     S_B = 1./pv(cB) .* vG_bottom; % CO2 sat originating from bottom flux
     S_B_smax = 1./pv(cB) .* vG_bottom_smax; % earlier CO2 sat from bottom flux at time where smax was reached --> gives correct max saturation for top co2 part
-    S_max_T = sMax - S_B_smax.*(snr > 0); % max saturation reached for top part (excluding part originating from bottom flux)
+    S_max_T = sMax - S_B_smax.*(snr(cB) > 0); % max saturation reached for top part (excluding part originating from bottom flux)
     
-    h_T.B = max(H(cB).*S_max_T./(1-swr), 0); % max to avoid negative discrepancies
+    h_T.B = max(H(cB).*S_max_T./(1-swr(cB)), 0); % max to avoid negative discrepancies
     % For h_B we use current saturation at bottom S_B, since
     % this is independent of smax
-    h_B.B = max(h_T.B, H(cB).*(1-(S_B./(snr+eps)).*(snr>0))); % h_B will become h_T before h_T becomes negative (S_B > sMax), then h_max_global = H and col is in VE                 
+    h_B.B = max(h_T.B, H(cB).*(1-(S_B./(snr(cB)+eps)).*(snr(cB)>0))); % h_B will become h_T before h_T becomes negative (S_B > sMax), then h_max_global = H and col is in VE                 
     
-    Snr_tot = (snr./H(cB)).*(h_T.B + (H(cB) - h_B.B)); % total residual saturation in column (NB: includes residual part in mobile zone!)
+    Snr_tot = (snr(cB)./H(cB)).*(h_T.B + (H(cB) - h_B.B)); % total residual saturation in column (NB: includes residual part in mobile zone!)
     S_mob = S - Snr_tot; % mobile saturation (at top of column)
        
-    h.B = H(cB).*(S_mob./(1-swr-snr)); % subtract snr since this was included in Snr_tot
+    h.B = H(cB).*(S_mob./(1-swr(cB)-snr(cB))); % subtract snr since this was included in Snr_tot
     h_max.B = H(cB) - h_B.B + h_T.B;    
     
     
@@ -543,25 +553,25 @@ function [h, h_max, h_T, h_B, cellsBH, ...
          
     % --- Bottom saturations for each virtual cell ---
     S = sG(cH); 
-    sMax = sgMax(cH).*(snr > 0) + S.*(snr == 0);   
+    sMax = sgMax(cH).*(snr(cH) > 0) + S.*(value(snr(cH)) == 0);   
     S_B = 1./pv(cH) .* vG_horz; % CO2 sat originating from bottom flux  
     S_B_smax = 1./pv(cH) .* vG_horz_smax; % earlier CO2 sat from bottom flux at time where smax was reached --> gives correct max saturation for top co2 part
     S_B_smax = accumarray(cH, S_B_smax);
     S_B_smax_acc = S_B_smax(cH); % choose all cells
     
-    S_max_T = sMax - S_B_smax_acc.*(snr > 0); % will be the same for same cells in cH_all
+    S_max_T = sMax - S_B_smax_acc.*(snr(cH) > 0); % will be the same for same cells in cH_all
     
-    S_Bi = S_B./((H_i./H(cH).*(snr+eps))); % scaled bottom saturation for VE virtual cells
-    h_Bi = min(H_i.*(1-S_Bi.*(snr>0)), H_i); % height from top of virtual cell to bottom plume
-    h_Ti = max(H(cH).*S_max_T./(1-swr), 0); % height from top of virtual cell to top plume
+    S_Bi = S_B./((H_i./H(cH).*(snr(cH)+eps))); % scaled bottom saturation for VE virtual cells
+    h_Bi = min(H_i.*(1-S_Bi.*(snr(cH)>0)), H_i); % height from top of virtual cell to bottom plume
+    h_Ti = max(H(cH).*S_max_T./(1-swr(cH)), 0); % height from top of virtual cell to top plume
     
     % Accumulate bottom saturations for virtual cells of same VE col       
     S = sG(cH_u);
-    sMax = sgMax(cH_u).*(snr > 0) + S.*(snr == 0); 
+    sMax = sgMax(cH_u).*(snr(cH_u) > 0) + S.*(value(snr(cH_u)) == 0); 
     S_B_smax_acc = S_B_smax(cH_u); % only choose unique cells
-    S_max_T = sMax - S_B_smax_acc.*(snr > 0); % max saturation reached for top part (excluding part originating from bottom flux)
+    S_max_T = sMax - S_B_smax_acc.*(snr(cH_u) > 0); % max saturation reached for top part (excluding part originating from bottom flux)
     
-    h_T.H = max(H(cH_u).*S_max_T./(1-swr), 0); % max to avoid negative discrepancies
+    h_T.H = max(H(cH_u).*S_max_T./(1-swr(cH_u)), 0); % max to avoid negative discrepancies
     h_Bi = max(h_Ti, h_Bi); % h_Ti or h_T.H ???
     
     h_Hi_state = {h_Bi, H_i};
@@ -571,11 +581,11 @@ function [h, h_max, h_T, h_B, cellsBH, ...
     h_B.H = max(h_T.H, H(cH_u) - dh_Bi(cH_u)); % h_B will become h_T before h_T becomes negative (S_B > sMax), then h_max_global = H and col is in VE                 
     % -------------------------------------
     
-    Snr_tot = (snr./H(cH_u)).*(h_T.H + (H(cH_u) - h_B.H)); % total residual saturation in column (NB: includes residual part in mobile zone!)
+    Snr_tot = (snr(cH_u)./H(cH_u)).*(h_T.H + (H(cH_u) - h_B.H)); % total residual saturation in column (NB: includes residual part in mobile zone!)
     S_mob = S - Snr_tot; % mobile saturation (at top of column)
        
     % mobile and max height function of accumulated bottom sat
-    h.H = H(cH_u).*(S_mob./(1-swr-snr)); % subtract snr since this was included in Snr_tot
+    h.H = H(cH_u).*(S_mob./(1-swr(cH_u)-snr(cH_u))); % subtract snr since this was included in Snr_tot
     h_max.H = H(cH_u) - h_B.H + h_T.H;
          
     
@@ -606,7 +616,7 @@ function [h, h_max, h_T, h_B, cellsBH, ...
 
     % --- Bottom saturations for horizontal VE flux ---    
     S = sG(cBH_h); 
-    sMax = sgMax(cBH_h).*(snr > 0) + S.*(snr == 0);
+    sMax = sgMax(cBH_h).*(snr(cBH_h) > 0) + S.*(value(snr(cBH_h)) == 0);
     
     t = model.G.cells.topDepth(cBH_h);
     T = [model.operators.connections.faceTopDepth(veHorz, 1);
@@ -618,38 +628,38 @@ function [h, h_max, h_T, h_B, cellsBH, ...
     S_Bh_smax = 1./pv(cBH_h) .* vG_horz_smax; % earlier CO2 sat from bottom flux at time where smax was reached --> gives correct max saturation for top co2 part
     S_Bh_smax = accumarray(cBH_h, S_Bh_smax);
     S_Bh_smax_acc = S_Bh_smax(cBH_h); % choose all cells (duplicates allowed)
-    S_max_Th = sMax - S_Bh_smax_acc.*(snr > 0);
+    S_max_Th = sMax - S_Bh_smax_acc.*(snr(cBH_h) > 0);
     
-    S_Bh = S_B./(H_i./H(cBH_h).*(snr+eps)); % scaled bottom saturation for VE virtual cells
-    h_Th = max(H(cBH_h).*S_max_Th./(1-swr), 0); % depth of top plume for each virtual VE cell
-    h_Bh = min(H_i.*(1-S_Bh.*(snr>0)), H_i); % depth of bottom plume for each virtual VE cell   
+    S_Bh = S_B./(H_i./H(cBH_h).*(snr(cBH_h)+eps)); % scaled bottom saturation for VE virtual cells
+    h_Th = max(H(cBH_h).*S_max_Th./(1-swr(cBH_h)), 0); % depth of top plume for each virtual VE cell
+    h_Bh = min(H_i.*(1-S_Bh.*(snr(cBH_h)>0)), H_i); % depth of bottom plume for each virtual VE cell   
     %h_Bh = max(h_Th, h_Bh);    
     
     % --- Bottom saturation from bottom flux --- 
     S = sG(cBH);
-    sMax = sgMax(cBH).*(snr > 0) + S.*(snr == 0); 
+    sMax = sgMax(cBH).*(snr(cBH) > 0) + S.*(value(snr(cBH)) == 0); 
     
     S_B = 1./pv(cBH) .* vG_bottom; % CO2 sat originating from bottom flux
     S_Bb_smax = 1./pv(cBH) .* vG_bottom_smax; % earlier CO2 sat from bottom flux at time where smax was reached --> gives correct max saturation for top co2 part
     % No need to accumulate for bottom fluxes - only one connection per cell anyway! 
-    S_max_Tb = sMax - S_Bb_smax.*(snr > 0); % max saturation reached for top part (excluding part originating from bottom flux)
+    S_max_Tb = sMax - S_Bb_smax.*(snr(cBH) > 0); % max saturation reached for top part (excluding part originating from bottom flux)
     
-    h_Tb = max(H(cBH).*S_max_Tb./(1-swr), 0); % max to avoid negative discrepancies
+    h_Tb = max(H(cBH).*S_max_Tb./(1-swr(cBH)), 0); % max to avoid negative discrepancies
     % For h_B we use current saturation at bottom S_B, since
     % this is independent of smax
-    h_Bb = min(H(cBH).*(1-(S_B./(snr+eps)).*(snr>0)), H(cBH));    
+    h_Bb = min(H(cBH).*(1-(S_B./(snr(cBH)+eps)).*(snr(cBH)>0)), H(cBH));    
     %h_Bb = max(h_Tb, h_Bb); % h_B will become h_T before h_T becomes negative (S_B > sMax), then h_max_global = H and col is in VE                                
     % -----------------------------------------------
         
     % --- Accumulate bottom saturations for virtual cells of same VE col,
     % from BOTH horizontal and bottom transitions ---
     S = sG(cBH); % indexing by cBH chooses unique cells satisfying bottom and horz fluxes
-    sMax = sgMax(cBH).*(snr > 0) + S.*(snr == 0); 
+    sMax = sgMax(cBH).*(snr(cBH) > 0) + S.*(value(snr(cBH)) == 0); 
     
     S_B_smax_acc = S_Bh_smax(cBH) + S_Bb_smax; % add residual plumes from horizontal and bottom transitions 
     
-    S_max_T = sMax - S_B_smax_acc.*(snr > 0); % max saturation reached for top part (excluding part originating from bottom flux)    
-    h_T.BH = max(H(cBH).*S_max_T./(1-swr), 0); % max to avoid negative discrepancies
+    S_max_T = sMax - S_B_smax_acc.*(snr(cBH) > 0); % max saturation reached for top part (excluding part originating from bottom flux)    
+    h_T.BH = max(H(cBH).*S_max_T./(1-swr(cBH)), 0); % max to avoid negative discrepancies
     
     % Cap h_Bh and h_Bb to not exceed global depth of top residual plume
     h_Bh = max(h_Bh, h_T.BH(cBH_h_idx)); % duplicate height for repeated cells
@@ -665,10 +675,10 @@ function [h, h_max, h_T, h_B, cellsBH, ...
     h_B.BH = max(h_T.BH, H(cBH) - dh_B); % h_B will become h_T before h_T becomes negative (S_B > sMax), then h_max_global = H and col is in VE                 
     % -------------------------------------
      
-    Snr_tot = (snr./H(cBH)).*(h_T.BH + (H(cBH) - h_B.BH)); % total residual saturation in column (NB: includes residual part in mobile zone!)
+    Snr_tot = (snr(cBH)./H(cBH)).*(h_T.BH + (H(cBH) - h_B.BH)); % total residual saturation in column (NB: includes residual part in mobile zone!)
     S_mob = S - Snr_tot; % mobile saturation (at top of column)
        
     % mobile and max height function of accumulated bottom sat
-    h.BH = H(cBH).*(S_mob./(1-swr-snr)); % subtract snr since this was included in Snr_tot
+    h.BH = H(cBH).*(S_mob./(1-swr(cBH)-snr(cBH))); % subtract snr since this was included in Snr_tot
     h_max.BH = H(cBH) - h_B.BH + h_T.BH;
 end

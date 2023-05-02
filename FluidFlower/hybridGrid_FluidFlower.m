@@ -656,7 +656,7 @@ allSealingBottom = {}; % bottom faces of sealing layer (needed for trap analysis
 %allLayersBottom = {}; % bottom faces for each layer --> for trap analysis
 
 % --- SET FACIES TO BE MODELED AS FULL-DIM CELLS (not satisfying VE) ---
-lowperm_facie = [1,2,3]; 
+lowperm_facie = [1,2]; % [1,2,3]
 % ----------------------------------------------------------------------
 
 lowperm_cells = find(ismember(Gg.facies, lowperm_facie));
@@ -688,7 +688,7 @@ isFine.sealingCells = false(Gg.cells.num, 1);
 isFine.sealingCells(vertcat(allSealingCells{:})) = true;
 
 allSealingBFaces = UtilFunctionsFF.removeOverlappingElements(vertcat(allSealingBFaces{:}));
-allLayersBottom_rem = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayersBottom{:}));
+%allLayersBottom_rem = UtilFunctionsFF.removeOverlappingElements(vertcat(allLayersBottom{:}));
 
 isFine.sealingBFaces = false(Gg.faces.num, 1);
 isFine.sealingBFaces(allSealingBFaces) = true; % bounding faces of sealing cells
@@ -718,8 +718,8 @@ dt3 = rampupTimesteps(tot_time-t_control3, (tot_time-t_control3)/100, 12); % (to
 dt = [dt1; dt2; dt3];
 t = cumsum(dt);
 
-inj_rate_W1 = 3.5*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
-inj_rate_W2 = 3.5*10^(-7) * kilogram/second; % 1.6*10^(-7) * kilogram/second
+inj_rate_W1 = 1.6*10^(-7) * kilogram/second; % 3.5*10^(-7) * kilogram/second
+inj_rate_W2 = 1.6*10^(-7) * kilogram/second; % 3.5*10^(-7) * kilogram/second
 
 xc = Gg.cells.centroids(:,1);
 zc = Gg.cells.centroids(:,2);
