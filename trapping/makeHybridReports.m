@@ -99,11 +99,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
          if isfield(rock,'ntg')
             ntg = rock.ntg;
          end
-         % Set initial total "injected" volume to be the initial saturation
-         % distribution in domain (necessary to get correct leakage)
-         %tot_inj = Gh.cells.volumes .* rock.poro .* ntg .* (1-sw) .* h .* fluid.rhoGS; % (1-sw) to account for residual water
-         %tot_inj = Gt.cells.volumes .* rock.poro .* ntg .* (1-sw) .* h .* fluid.rhoGS;         
-         % --- Think this is OK: ---
+         % NB: to get correct leakage we assume no initial CO2 saturation
+         % in domain.
          tot_inj = Gh.cells.volumes .* rock.poro .* ntg .* S .* fluid.rhoGS;              
          % -------------------------
          tot_inj = sum(tot_inj); %
@@ -194,11 +191,11 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
           leaked_i = max_massVE(s) - sum(mass_i); % leaked out of each subgrid separately
           reports(i).(Gts).masses = [reports(i).(Gts).masses, leaked_i]; % 0 -> leaked_i
       end
-           
-      %cfh_rem = ph(fine_rem);
+             
       fine_rem_hybrid = ph(fine_rem);
       ve_rem_hybrid = ph(ve_rem);  
 
+      % THIRD: Compute masses for remaining fine regions
       if ~isempty(fine_rem_hybrid)
             mass_fine = massTrappingFine_Other(Gh, fine_rem_hybrid, reports(i).sol.pressure, ...
                                                         reports(i).sol.s(:,2), ...
@@ -207,11 +204,8 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       else
           mass_fine = 0;
       end
-
-      if i == 500
-          test = 0;
-      end
-    
+     
+      % FOURTH: Compute masses for remaining VE regions
       if ~isempty(ve_rem_hybrid)
             mass_ve = massTrappingVE_Other(Gh, ve_rem, ve_rem_hybrid, reports(i).sol.pressure, ...
                                                         reports(i).sol.s(:,2), ...
@@ -227,10 +221,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                                                         cHorz                    , ...
                                                         cBottomHorz              , ...
                                                         rock, fluid, 'rs', rs); 
-%             mass_ve = massTrappingVE_OtherNew(Gh, ve_rem_hybrid, reports(i).sol.pressure, ...
-%                                                             reports(i).sol.s(:,2), ...
-%                                                             reports(i).sol.s(:,1), ...
-%                                                             rock, fluid, 'rs', rs);
+
       else
           mass_ve = 0;
       end     
@@ -238,6 +229,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       % Sum up masses BEFORE adding leaked mass
       reports(i).masses =  mass_sub + mass_fine + mass_ve;
           
+      % FIFTH: Compute exited volumes
       leaked = tot_inj - sum(reports(i).Gh.masses);
       reports(i).masses = [reports(i).masses, leaked]; % 0 -> leaked
       % ---------------------------------------------------

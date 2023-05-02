@@ -61,23 +61,24 @@ classdef Capillary
       end
                 
       function pc = runHybridPcSharp(S, dummy_S, swr, snr, pe_regions, n_cells, model)
+          % Assign capillary pressure for sharp interface hybrid model 
+          % with region support. NB: Regions of different permeability 
+          % assumed to have unique entry pressure.
           perm = model.rock.perm;
-          G = model.G;
-          %n_cells = unique(n_cells);
+          G = model.G;        
           if isempty(n_cells)
               n_cells = (1:G.cells.num)';
           end
-          % pe_regions = [pe_sealing, pe_rest]
           num_regions = numel(pe_regions);
           pc_table = cell(1, num_regions);
           region_idx = cell(1, num_regions);
           uperm = uniquetol(perm);
+          assert(num_regions == numel(uperm));
+
           for i=1:num_regions
-            pc_i = Capillary.PcSharp(dummy_S, swr, snr, pe_regions(i), 4);
-            %isVE = isVE(~n_sealing);                 
+            pc_i = Capillary.PcSharp(dummy_S, swr, snr, pe_regions(i), 4);                          
             pc_table{i} = [dummy_S, pc_i];
-            region_idx{i} = find(perm == uperm(i));
-            %local_idx = ismember(n_cells, region_idx{i});           
+            region_idx{i} = find(perm == uperm(i));           
           end
           
           if isfield(G.cells, 'indexMap') % fine grid           
@@ -102,11 +103,6 @@ classdef Capillary
               pc = interpReg(pc_table, sG, region_idx);
               pc = pc(n_cells);           
           end
-
-
-
-          %pc = interpReg(pc_table, S, region_idx);
-          %pc(~n_sealing) = Capillary.PcSharp(S(~n_sealing), swr, snr, pe_rest, 4);
       end 
             
       function [pc] = SharpHysteresis(Sn, Sn_max, swr, snr, pe_sealing, pe_rest, n_sealing, isVE)

@@ -116,8 +116,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     else
         for i=1:Gt.cells.num
             tr   = traps.trap_regions(i); % trap region for given cell of top-surface grid
-            %tr_u = setdiff(unique(tr), 0);
-            %tr_z = [min(fine_z_all); traps.trap_z(tr_u)]; % trap region zero -> spills out of domain -> can't become structurally trapped -> set spill region to minimum possible (min(all_fine_z)) to avoid assigning the cells as structurally trapped
             tr_z = [min(fine_z_all); traps.trap_z];
             tr   = 1 + tr; % shift so trap region 0 (no trap) extracts min(fine_z_all) as spill-point (which gives no leakage)
             %tr(tr>numel(tr_z)) = 1; % to ensure all trap regions with no calculated heights are assigned zero spill region height
@@ -144,15 +142,12 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         res_buff = 1.5; % buffer factor for CO2 to be residually trapped (necessary since CO2 sat will converge towards sr at infinite time due to relperm going to zero)
         % -----
         freePlume_i = zi >= zt{i} & SG_i > res_buff*sr; % cells in mobile plume
-        resPlume_i = zi >= zt{i} & SG_i <= res_buff*sr; % cells in immobilized plume   
-        free = zi >= zt{i};
+        resPlume_i = zi >= zt{i} & SG_i <= res_buff*sr; % cells in immobilized plume           
         
         freeStruc = freeStruc + sum((max(SG_i, sr) - sr).*rho_pv.* strucTrapped_i); % structural plume
         resStruc = resStruc + sum(min(SG_i, sr).*rho_pv .* strucTrapped_i); % structural residual
         freeRes = freeRes + sum(sr.*rho_pv .* freePlume_i); % residual in plume (we know SG_i > sr, so residual value can be fixed at sr)
-        %freeRes = freeRes + sum(min(SG_i, sr).*rho_pv .* free);
-        freeMov = freeMov + sum((SG_i - sr).*rho_pv .* freePlume_i); % free plume
-        %freeMov = freeMov + sum(max(SG_i-sr,0).*rho_pv .* free);
+        freeMov = freeMov + sum((SG_i - sr).*rho_pv .* freePlume_i); % free plume   
         resTrap = resTrap + sum(SG_i.*rho_pv .* resPlume_i); % we know that SG_i <= sr, so no need to compute min(SG_i, sr)
         resDis = resDis + sum(rho_pv.* (rs .* fluidADI.bW(p_i) .* SW_i));        
     end

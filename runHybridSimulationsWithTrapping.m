@@ -10,12 +10,12 @@ mrstModule add mrst-gui test-suite
 rootdir = strrep(ROOTDIR, '\', '/');
 %data_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid3D/test/data');
 n_rel = 1.5;
-n_layers = 20;
+n_layers = 60;
 %data_dir = strcat(rootdir, '../Master-Thesis/hybrid2D/caseStochastic/data/layers', string(n_layers));
 data_dir = strcat(rootdir, '../Master-Thesis/stochastic/data/layers', string(n_layers));
 mkdir(data_dir);
 
-my_seed = 5004;
+my_seed = 8775;
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
@@ -39,7 +39,7 @@ run3D = false;
 sloped = true;
 standard = true;
 
-stochastic = true;
+stochastic = false;
 output_filename =  strcat('layers', string(n_layers), '_rel', strrep(string(n_rel),'.','p'));
 
 if sloped && standard && stochastic
@@ -247,7 +247,7 @@ simulatePackedProblem(problem);
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
 %pe_all_hybrid = accumarray(ph, pe_all, [], @mode);
-[model_hybrid, model_coarse] = convertToMultiVEModel_test(model, fineCells, 'remFineFaces', find(wellFaces), ...                                                    
+[model_hybrid, model_coarse] = convertToHybridModel(model, fineCells, 'remFineFaces', find(wellFaces), ...                                                    
                                             'sealingFaces', find(sealingFaces), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
                                             'sealingCells_faces', sealingCells_faces, ...
@@ -260,7 +260,8 @@ model_hybrid.fluid.pcWG = @(s, subcells) Capillary.runHybridPcSharp(s, dummy_s, 
                                                                     pe_regions, subcells, model_hybrid);
                                         
 schedule_hybrid = upscaleSchedule(model_hybrid, schedule);
-state0_hybrid = upscaleStateHybrid(model_hybrid, model, state0);
+%state0_hybrid = upscaleState(model_hybrid, model, schedule); % gas components dissolve in OLEIC phase
+state0_hybrid = upscaleStateHybrid(model_hybrid, model, state0); % gas components dissolve in AQEOUS phase
 
 Gh = model_hybrid.G;
 disc = Gh.cells.discretization;
@@ -298,8 +299,8 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 [ws_hybrid, states_hybrid, report_hybrid] = getPackedSimulatorOutput(problem_hybrid);
 
 %% FINE: Store nonlinear iteration count and walltime
-dirpath_iter = strcat(mrstOutputDirectory,'\stochastic\finescale\iter_counts.mat');
-dirpath_time = strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times.mat');
+dirpath_iter = strcat(mrstOutputDirectory,'\stochastic\finescale\iter_counts3.mat');
+dirpath_time = strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times3.mat');
 
 iter_fine = struct;
 time_fine = struct;
@@ -332,8 +333,8 @@ save(dirpath_iter, 'iter_fine');
 save(dirpath_time, 'time_fine');
 
 %% HYBRID: Store nonlinear iterations count and walltime
-dirpath_iter = strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts.mat');
-dirpath_time = strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times.mat');
+dirpath_iter = strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts3.mat');
+dirpath_time = strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times3.mat');
 
 iter_hybrid = struct;
 time_hybrid = struct;
@@ -366,16 +367,15 @@ save(dirpath_iter, 'iter_hybrid');
 save(dirpath_time, 'time_hybrid');
 
 %% Read iters and walltime from files
-fine_iters = load(strcat(mrstOutputDirectory,'\stochastic\finescale\iter_counts.mat'), 'iter_fine').iter_fine;
-fine_time = load(strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times.mat'), 'time_fine').time_fine;
-hybrid_iters = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts.mat'), 'iter_hybrid').iter_hybrid;
-hybrid_time = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times.mat'), 'time_hybrid').time_hybrid;
+fine_iters = load(strcat(mrstOutputDirectory,'\stochastic\finescale\iter_counts3.mat'), 'iter_fine').iter_fine;
+fine_time = load(strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times3.mat'), 'time_fine').time_fine;
+hybrid_iters = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts3.mat'), 'iter_hybrid').iter_hybrid;
+hybrid_time = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times3.mat'), 'time_hybrid').time_hybrid;
 
 
 
 %% Reconstruct fine states
-%states_hybrid_fs = convertMultiVEStates_res(model_hybrid, model_fine, states_hybrid, states);
-states_hybrid_fs = convertMultiVEStates_test(model_hybrid, model_fine, states_hybrid, 'schedule', schedule, 'convert_flux', true); % send in fine schedule to extract fine boundary faces
+states_hybrid_fs = convertHybridStates(model_hybrid, model_fine, states_hybrid, 'schedule', schedule, 'convert_flux', true); % send in fine schedule to extract fine boundary faces
 
 mh = model_hybrid;
 oph = mh.operators;
@@ -477,24 +477,24 @@ for i=1:numel(Gs_all)
     else
         alpha = 1;
     end
-    plotGrid(Gs_all{i}, 'facecolor', cm(numel(Gs_all)-i+1,:), 'facealpha', alpha)
+    plotGrid(Gs_all{i}, 'facecolor', cm(numel(Gs_all)-i+1,:), 'facealpha', alpha, 'edgealpha', 0.3)
 end
 
 view(vx, vz)
 axis equal tight
-title({'Top-surface subgrids under', 'semi-permeable layers'})
+%title({'Top-surface subgrids under', 'semi-permeable layers'})
 setDaspect(run3D, standard);
 
 % Plot remaining fine-perm regions
 subplot(1,2,2)
-plotGrid(G, 'facecolor', 'none')
+plotGrid(G, 'facecolor', 'none', 'edgealpha', 0.3)
 hold on
-plotGrid(G, fine_rem, 'facecolor', 'green')
+plotGrid(G, fine_rem, 'facecolor','blue', 'edgealpha', 0.3)
 hold on
-plotGrid(G, ve_rem, 'facecolor', 'red')
+plotGrid(G, ve_rem, 'facecolor', 'red', 'edgealpha', 0.3)
 view(vx, vz)
 axis equal tight
-title({'Remaining regions.', 'Green: fine cells.', 'Red: ve cells.'})
+%title({'Remaining regions.', 'Green: fine cells.', 'Red: ve cells.'})
 setDaspect(run3D, standard);
 
 %saveas(fig_topsurf, strcat(plot_dir, 'top_surface_subgrids'), 'png');
@@ -526,7 +526,7 @@ title('Trapping inventory for full-dimensional model')
 ff = 20;
 fig_ff = figure(ff); plot(1); ax_ff = get(fig_ff, 'currentaxes');
 [max_diff, max_diff_year, max_CO2, ...
-    sum_diff, sum_CO2] = plotTrappingDifferenceResMerged(ax_ff, hybrid_reports, fine_reports, 'legend_location', 'northwest', 'logScale', true);
+    sum_diff, sum_CO2] = computeTrappingDifference(ax_ff, hybrid_reports, fine_reports, 'legend_location', 'northwest', 'logScale', true);
 max_trap_diff = round(max_diff.tot/max_CO2.tot*100, 2);
 title({'Normalized absolute difference in trapping inventory', ...
         sprintf('Max difference: %.2d MT, at year: %.1f,', max_diff.tot, max_diff_year.tot), ...
@@ -653,7 +653,7 @@ UtilFunctions.storeProblemSettings(data, time_hybrid_tot, time_hybrid_median, ..
 
 %% Store trapping data
 %dirpath_trap = strcat(mrstOutputDirectory,'\trapping\layers',string(n_layers));
-dirpath_trap = strcat(mrstOutputDirectory,'stochastic\trapping\layers',string(n_layers));
+dirpath_trap = strcat(mrstOutputDirectory,'\stochastic\trapping\layers',string(n_layers));
 mkdir(dirpath_trap);
 
 fullfile_trap = strcat(dirpath_trap, '\trap_diff_max.txt');
@@ -814,7 +814,7 @@ zl_max = max(G.cells.centroids(:,3))*(1+1/50);
 fign = 12;
 for i = 1:numel(substeps)
     ss = substeps(i);    
-    for j = 1:4
+    for j = 1:2
         ff = UtilFunctions.fullsizeFig(fign);
         fign = fign + 1;
         if j == 1
@@ -849,7 +849,9 @@ for i = 1:numel(substeps)
         
         if ~mod(j,1)
             set(gcf, 'Name', names{i});            
-            saveas(ff, strcat(plot_dir, names{i}, '_', model_names{j}), 'png');            
+            saveas(ff, strcat(plot_dir2, names{i}, '_', model_names{j}));
+            saveas(ff, strcat(plot_dir2, names{i}, '_', model_names{j}), 'png');
+            saveas(ff, strcat(plot_dir2, names{i}, '_', model_names{j}), 'pdf');            
             %fign = fign + 1;
         end
     end   
@@ -1063,9 +1065,9 @@ xlim([0.01, max(plume_data.t)])
 legend('Location','northwest')
 xlabel('Years since simulation start')
 ylabel('Depth (m)')
-title('Standard deviation in plume tip depth')
-saveas(fig_tip_var, strcat(plot_dir, 'avg_depth_var')); % fig file
-saveas(fig_tip_var, strcat(plot_dir, 'avg_depth_var'), 'pdf'); % pdf file
+title('Standard deviation in average depth of plume')
+saveas(fig_avg_var, strcat(plot_dir, 'avg_depth_var')); % fig file
+saveas(fig_avg_var, strcat(plot_dir, 'avg_depth_var'), 'pdf'); % pdf file
 
 %% Computing time
 fine_sim_file = strcat(mrstOutputDirectory,'\stochastic\finescale\caseMultilayered\simulation_settings.txt');

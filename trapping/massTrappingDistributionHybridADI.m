@@ -270,24 +270,24 @@ function [masses, masses_0] = massTrappingDistributionFine(Gt, Gh, c_fine, p, sG
     
     for i=1:numel(cols_u)
         cols_i = cols_u(i);
-        col_idx = cols == cols_i; % all cell connected to cols_i
+        col_idx = cols == cols_i; % all cells connected to cols_i
         zi = z(col_idx); % extract depths for all fine cells in this ve column
         SG_i = SG(col_idx);
         SW_i = SW(col_idx);
         p_i = p(col_idx);
         pv_i = pv(col_idx);
         rho_pv = fluidADI.rhoGS.*pv_i;
-        
-        % Is this correct !??       
+                     
         strucTrapped_i = zi < zt(i);
+        % --- RESIDUAL BUFFER --- (to separate residual and mobile CO2)
         res_buff = 1.5; 
+        % -----------------------
         freePlume_i = zi >= zt(i) & SG_i > res_buff*sr; % cells in mobile plume
         resPlume_i = zi >= zt(i) & SG_i <= res_buff*sr; % cells in immobilized plume
          
         freeStruc = freeStruc + sum((max(SG_i, sr) - sr).*rho_pv.* strucTrapped_i); % sum over all fine cells in column that ae structurally trapped
         resStruc = resStruc + sum(min(SG_i, sr).*rho_pv .* strucTrapped_i);
         freeRes = freeRes + sum(sr.*rho_pv .* freePlume_i); % we know SG_i > sr, so residual value can be fixed at sr
-        %freeMov = freeMov + sum((max(SG_i, sr) - sr).*rho_pv .* freePlume_i);
         freeMov = freeMov + sum((SG_i - sr).*rho_pv .* freePlume_i);
         resTrap = resTrap + sum(SG_i.*rho_pv .* resPlume_i); % we know that SG_i <= sr, so no need to compute min(SG_i, sr)
         resDis = resDis + sum(rho_pv.* (rs .* fluidADI.bW(p_i) .* SW_i));        

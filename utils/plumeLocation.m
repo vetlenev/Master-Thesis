@@ -8,7 +8,7 @@ function [tip_depth, avg_depth, z_well] = plumeLocation(model, states, schedule,
 %   schedule - schedule used for simulation
 %   snr      - residual CO2 saturation
 % RETURNS:
-        %   tip_speed - migration speed of tip of mobile plume for each state
+%   tip_speed - migration speed of tip of mobile plume for each state
 %   avg_speed - migration speed of average position of mobile plume
 
 if isfield(model.G, 'parent')
@@ -41,11 +41,9 @@ reached_top = false;
 for i=1:num_states
     sn = states{i}.s(:,2);    
 
-    plume_mask = sn > snr; % 1e-5 to avoid round-off errors % sn > snr doesn't work if open top boundary since hybrid model will never reach sn > snr for topmost VE layer
+    plume_mask = sn > snr; % 1e-5 to avoid round-off errors ?? 
     z_plume = G.cells.centroids(plume_mask, 3);
 
-    plume_vol = sn(plume_mask) .* G.cells.volumes(plume_mask); % DOES NOT WORK ?
-      
     if isempty(z_plume)
         z_tip = z_well;
         k_tip = k_well;
@@ -67,15 +65,10 @@ for i=1:num_states
         reached_top = true;
         tip_depth(i+1) = z_min;     
     elseif t(i) > 0.01*year
-        %tip_depth(i+1) = abs(z_tip - z_well)/t;
         tip_depth(i+1) = min(z_tip, tip_depth(i)); % tip depth can't suddenly increase
     else
         tip_depth(i+1) = z_tip;
-    end
-        
-    if i == 200
-        test = 0;
-    end  
+    end            
     
     if k_avg <= k_min
         avg_depth(i+1) = z_min;

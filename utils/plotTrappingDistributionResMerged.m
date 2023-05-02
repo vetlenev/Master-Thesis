@@ -2,7 +2,8 @@ function plotTrappingDistributionResMerged(ax, report, varargin)
 % Generate a trapping inventory plot from a simulation result.  
 % 
 % The simulation result (set of states) first needs to be repackaged using the
-% 'makeReports' function.
+% 'makeFineReports' or 'makeHybridReports' function.
+% Residual categories 'Residual' and 'Residual in plume' are merged!
 %
 % SYNOPSIS:
 %   function plotTrappingDistribution(ax, report, varargin)
