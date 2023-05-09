@@ -9,18 +9,18 @@ mrstModule add mrst-gui test-suite
     
 rootdir = strrep(ROOTDIR, '\', '/');
 %data_dir = strcat(rootdir, '../Master-Thesis/book_illustrations/hybrid3D/test/data');
-n_rel = 1.5;
-n_layers = 60;
+n_rel = 1; % 1.5
+n_layers = 10;
 %data_dir = strcat(rootdir, '../Master-Thesis/hybrid2D/caseStochastic/data/layers', string(n_layers));
 data_dir = strcat(rootdir, '../Master-Thesis/stochastic/data/layers', string(n_layers));
 mkdir(data_dir);
 
-my_seed = 8775;
+my_seed = 1349; % 6690 % 3330
 seed = UtilFunctions.setSeed(data_dir, my_seed);
 rng(seed)
 
 %pe_sealing = 7*10^4*Pascal; 
-pe_sealing = [1.5*10^5, 6*10^4]*Pascal; % 4*10^4]*Pascal
+pe_sealing = [1.5*10^5, 6*10^4]*Pascal;
 pe_rest = 5*10^3*Pascal;%5*10^3*Pascal;
 % -----------------
 pe_regions = [pe_sealing, pe_rest];
@@ -40,10 +40,13 @@ sloped = true;
 standard = true;
 
 stochastic = false;
+test_run = true;
 output_filename =  strcat('layers', string(n_layers), '_rel', strrep(string(n_rel),'.','p'));
 
-if sloped && standard && stochastic
+if sloped && standard && stochastic && ~test_run
     geometry_folder = 'caseStochastic';
+elseif sloped && standard && test_run
+    geometry_folder = 'caseTest';
 elseif sloped && standard
     geometry_folder = 'caseMultilayered';
 elseif sloped && ~standard
@@ -75,21 +78,27 @@ if run3D
     hybrid_folder = 'hybrid3D';
 else   
     output_filename = strcat(output_filename, '_2D');    
-    nx = 60; ny = 1; nz = 130; % nx = 70, nz = 130
-    lx = 300; ly = 10; lz = 1000; % lx = 500, lz = 1200   
 
     if sloped
+        nx = 60; ny = 1; nz = 130; % nx = 70, nz = 130
+        lx = 300; ly = 10; lz = 1000; % lx = 500, lz = 1200 
+        extra_fine = true;
+        if extra_fine
+            extra_str = '_extra';
+        else
+            extra_str = '';
+        end
         [state0, models, schedule, ...
          isFineCells, sealingFaces, allSealingFaces] = setupStochasticGrid(useFaceConstraint, useAdaptive, ...
-                                                                    [nx,ny,nz], [lx,ly,lz], trans_mult, standard, n_layers, n_rel);
+                                                                    [nx,ny,nz], [lx,ly,lz], trans_mult, standard, ...
+                                                                    n_layers, n_rel, extra_fine);
+        hybrid_folder = 'stochastic';
     else
         [state0, models, schedule, ...
-         isFineCells, sealingFaces] = setupHorizontalGrid(useFaceConstraint, useAdaptive, ...
-                                                    [nx,ny,nz], [lx,ly,lz], trans_mult);
+         isFineCells, sealingFaces] = setupHorizontalGrid(useFaceConstraint, useAdaptive);
+        hybrid_folder = 'hybrid2D';
     end
-    vx = 0; vz = 0;
-    %hybrid_folder = 'hybrid2D';
-    hybrid_folder = 'stochastic';
+    vx = 0; vz = 0;      
 end
 
 %output_filename = strcat(output_filename, '_layers', string(n_layers), '_rel', strrep(string(n_rel),'.','p'));
@@ -99,8 +108,8 @@ if useAdaptive
     plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/adaptive_%s/'), hybrid_folder, geometry_folder, output_filename);   
 elseif useFaceConstraint
     plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/face_%s/'), hybrid_folder, geometry_folder, output_filename);       
-else    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/cell_%s/'), hybrid_folder, geometry_folder, output_filename);   
+else
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/cell_%s/'), hybrid_folder, geometry_folder, output_filename);
 end
 mkdir(plot_dir);
 
@@ -114,12 +123,17 @@ rock = model_fine.rock;
 
 [ii, jj, kk] = gridLogicalIndices(G);
 
-sealingCells = isFineCells.sealingCells;
-sealingCells = any(cell2mat(sealingCells), 2);
+sealingCells_orig = any(cell2mat(isFineCells.sealingCells), 2);
+extraCells = isFineCells.extraSealingCells;
+extraCells = any(cell2mat(extraCells), 2);
+sealingCells = extraCells | sealingCells_orig;
 % -----
+extraCells_faces = false(size(sealingFaces));
 sealingCells_faces = false(size(sealingFaces));
-sealingCells_facesAll = vertcat(isFineCells.sealingCells_faces{:});
-sealingCells_faces(sealingCells_facesAll) = true;
+all_extra_cells = vertcat(isFineCells.extraSealingCells_faces{:});
+all_sealing_faces = [all_extra_cells; vertcat(isFineCells.sealingCells_faces{:})];
+extraCells_faces(all_extra_cells) = true;
+sealingCells_faces(all_sealing_faces) = true;
 % -----
 wellCells = isFineCells.well;
 openBCCells = isFineCells.bc;
@@ -160,20 +174,22 @@ end
 %% Plot fine grid
 f30 = figure(30);
 %plotOutlinedGrid(G, W, bc, model.operators.T_all);
-plotWell(G, W, 'color', 'r')
 plotGrid(G, 'edgealpha', 0.2, 'facecolor', 'none')
-%plotFaceData(G, model.operators.T_all);
 
 fineCellsIdx = G.cells.indexMap(fineCells); % for plotting
-
+fineCellsOrigIdx = G.cells.indexMap(sealingCells_orig);
 plotCellData(G, double(fineCells), fineCellsIdx, 'facecolor', 'green'); % requires numeric input, not logical
+plotCellData(G, double(sealingCells_orig), fineCellsOrigIdx, 'facecolor', 'red')
+%plotWell(G, W, 'color', 'r')
 view(vx, vz)
 axis equal tight
 setDaspect(run3D, standard);
 xlabel('Lateral position [m]');
 zlabel('Depth [m]');
-title({'Fine scale grid', 'Imposed fine cells highlighted in green'})
-%saveas(f30, strcat(plot_dir, '/fine_regions'), 'png');
+title({'Fine scale grid'})
+saveas(f30, strcat(plot_dir, '/fine_regions'));
+saveas(f30, strcat(plot_dir, '/fine_regions'), 'png');
+saveas(f30, strcat(plot_dir, '/fine_regions'), 'pdf');
 
 %% More plots
 f31 = figure(31);
@@ -184,7 +200,14 @@ plotGrid(G, 'edgealpha', 0.2, 'facecolor', 'none')
 fineCellsIdx = G.cells.indexMap(fineCells); % for plotting
 log10perm = log10(convertTo(rock.perm, milli*darcy));
 
-plotCellData(G, log10perm); % requires numeric input, not logical
+if ~run3D && ~sloped % horizontal domain
+    plotCellData(G, double(fineCells), fineCellsIdx, 'facecolor', 'green'); % requires numeric input, not logical
+else
+    plotCellData(G, log10perm); % requires numeric input, not logical
+    title('Permeability field')
+    colormap(flipud(jet))
+    colorbar('east')
+end
 if ~useFaceConstraint
     caxis([min(log10perm)-0.1*min(log10perm), ...
             max(log10perm)+0.1*max(log10perm)])
@@ -194,9 +217,6 @@ axis equal tight
 setDaspect(run3D, standard);
 xlabel('Lateral position [m]');
 zlabel('Depth [m]');
-title('Permeability field')
-colormap(flipud(jet))
-colorbar('east')
 %saveas(f31, strcat(plot_dir, '/perm_field'), 'png');
 
 % Plot van Genuchten capillary pressure
@@ -221,7 +241,7 @@ nls = NonLinearSolver('maxIterations', 70);
 
 %% Pack and simulate problem
 problem = packSimulationProblem(state0, model_fine, schedule, ...
-            strcat('stochastic/finescale/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename); 
+            strcat('ve/fine/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename); % stochastic/finescale/
 
 % Simulate and get the output
 simulatePackedProblem(problem);
@@ -247,7 +267,8 @@ simulatePackedProblem(problem);
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
 %pe_all_hybrid = accumarray(ph, pe_all, [], @mode);
-[model_hybrid, model_coarse] = convertToHybridModel(model, fineCells, 'remFineFaces', find(wellFaces), ...                                                    
+[model_hybrid, model_coarse] = convertToHybridModel(model, fineCells, ...
+                                            'remFineFaces', find(wellFaces), ...                                                    
                                             'sealingFaces', find(sealingFaces), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
                                             'sealingCells_faces', sealingCells_faces, ...
@@ -289,10 +310,11 @@ nls.useRelaxation = true;
 
 model_hybrid = model_hybrid.validateModel;
 model_hybrid.FlowPropertyFunctions.CapillaryPressure = HybridCapillaryPressure(model_hybrid);
+%model_hybrid.dsMaxAbs = 0.1;
 
 %% Simulate Hybrid model
 problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hybrid, ...
-                strcat('stochastic/hybrid/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename);
+                strcat('ve/hybrid/',geometry_folder), 'NonLinearSolver', nls, 'Name', output_filename); % stochastic/hybrid/
 
 [ok, status] = simulatePackedProblem(problem_hybrid);
 
@@ -372,7 +394,66 @@ fine_time = load(strcat(mrstOutputDirectory,'\stochastic\finescale\wall_times3.m
 hybrid_iters = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\iter_counts3.mat'), 'iter_hybrid').iter_hybrid;
 hybrid_time = load(strcat(mrstOutputDirectory,'\stochastic\hybrid\wall_times3.mat'), 'time_hybrid').time_hybrid;
 
+%% Get runtime info of current simulation
+[fine_iters, fine_time] = runtimeInfo(report);
+[hybrid_iters, hybrid_time] = runtimeInfo(report_hybrid);
 
+tot_time_fine = cumsum(fine_time);
+tot_time_hybrid = cumsum(hybrid_time);
+
+med_time_fine = median(fine_time);
+med_time_hybrid = median(hybrid_time);
+
+tot_iters_fine = cumsum(fine_iters);
+tot_iters_hybrid = cumsum(hybrid_iters);
+
+med_iters_fine = median(fine_iters);
+med_iters_hybrid = median(hybrid_iters);
+
+%% Cumulative runtime and iterations
+ftime = figure(17);
+tt = (1:numel(fine_time))';
+plot(tt, tot_time_fine, 'b-')
+hold on
+plot(tt, tot_time_hybrid, 'r-')
+xlabel('Time steps')
+ylabel('Seconds')
+title('Cumulative runtime')
+legend('fine', 'hybrid', 'location', 'northwest')
+saveas(ftime, strcat(plot_dir, 'cum_time', extra_str))
+saveas(ftime, strcat(plot_dir, 'cum_time', extra_str), 'pdf')
+saveas(ftime, strcat(plot_dir, 'cum_time', extra_str), 'png')
+
+fiters = figure(18);
+tt = (1:numel(fine_time))';
+plot(tt, tot_iters_fine, 'b-')
+hold on
+plot(tt, tot_iters_hybrid, 'r-')
+xlabel('Time steps')
+title('Cumulative number of iterations')
+legend('fine', 'hybrid', 'location', 'northwest')
+saveas(fiters, strcat(plot_dir, 'cum_iters', extra_str))
+saveas(fiters, strcat(plot_dir, 'cum_iters', extra_str), 'pdf')
+saveas(fiters, strcat(plot_dir, 'cum_iters', extra_str), 'png')
+
+%% Store hybrid results
+dirpath_iter = strcat(mrstOutputDirectory,'\ve\fine\iter_counts_fine_layers', string(n_layers), '_seed', ...
+                                                                                        string(my_seed), '_rel', ...
+                                                                                         strrep(string(n_rel),'.','p'), '.mat');
+dirpath_time = strcat(mrstOutputDirectory,'\ve\fine\wall_times_fine_layers', string(n_layers), '_seed', ...
+                                                                                        string(my_seed), '_rel', ...
+                                                                                         strrep(string(n_rel),'.','p'), '.mat');
+save(dirpath_iter, 'tot_iters_fine')
+save(dirpath_time, 'tot_time_fine')
+
+dirpath_iter = strcat(mrstOutputDirectory,'\ve\hybrid\iter_counts_hybrid_layers', string(n_layers), '_seed', ...
+                                                                                        string(my_seed), '_rel', ...
+                                                                                         strrep(string(n_rel),'.','p'), '.mat');
+dirpath_time = strcat(mrstOutputDirectory,'\ve\hybrid\wall_times_hybrid_layers', string(n_layers), '_seed', ...
+                                                                                        string(my_seed), '_rel', ...
+                                                                                         strrep(string(n_rel),'.','p'), '.mat');
+save(dirpath_iter, 'tot_iters_hybrid')
+save(dirpath_time, 'tot_time_hybrid')
 
 %% Reconstruct fine states
 states_hybrid_fs = convertHybridStates(model_hybrid, model_fine, states_hybrid, 'schedule', schedule, 'convert_flux', true); % send in fine schedule to extract fine boundary faces
@@ -400,7 +481,8 @@ top_faces_closed = top_faces(~ismember(top_faces, bf_bc)); % only extract global
 
 if ~isempty(top_faces_closed)
     [Gs_glob, cmap_glob, fmap_glob, ~] = ExtractLayerSubgrid(G, Gh, top_faces_closed, ...
-                                                        isFineCells.sealingCells, allSealingFaces); % cell constraints, face constraints
+                                                        isFineCells.sealingCells, allSealingFaces, ...
+                                                        isFineCells.extraSealingCells); % cell constraints, face constraints
 else
     Gs_glob = [];
     cmap_glob = [];
@@ -421,7 +503,8 @@ sealingLayers = [isFineCells.sealingBottom, allSealingFaces]; % merge all faces 
 for i=1:numel(sealingLayers)
     subfaces = sealingLayers{i}; % bottom faces of sealing layer    
     [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid(G, Gh, subfaces, ...
-                                                isFineCells.sealingCells, allSealingFaces); 
+                                                isFineCells.sealingCells, allSealingFaces, ...
+                                                isFineCells.extraSealingCells); 
     
     if any(Gs.cells.num) % only append non-zero subgrids
         Gsi = cat(1, Gsi, Gs); % subgrid for VE regions
@@ -515,12 +598,12 @@ fine_reports = makeFineReports(Gts, Gs_all, cmaps_all, fmaps_all, ... % top surf
 fig10 = figure(10); plot(1); ax10 = get(fig10, 'currentaxes');
 plotTrappingDistributionResMerged(ax10, hybrid_reports, 'legend_location', 'northwest', 'logScale', true)
 title('Trapping inventory for hybrid model')
-%saveas(fig10, strcat(plot_dir, 'trapping_inventory_hybrid'), 'pdf');
+saveas(fig10, strcat(plot_dir, 'trapping_inventory_hybrid', extra_str), 'pdf');
 
 fig11 = figure(11); plot(1); ax11 = get(fig11, 'currentaxes');
 plotTrappingDistributionResMerged(ax11, fine_reports, 'legend_location', 'northwest', 'logScale', true)
 title('Trapping inventory for full-dimensional model')
-%saveas(fig11, strcat(plot_dir, 'trapping_inventory_fine'), 'pdf');
+saveas(fig11, strcat(plot_dir, 'trapping_inventory_fine'), 'pdf');
 
 %% Differences in trapping inventory
 ff = 20;
@@ -531,7 +614,7 @@ max_trap_diff = round(max_diff.tot/max_CO2.tot*100, 2);
 title({'Normalized absolute difference in trapping inventory', ...
         sprintf('Max difference: %.2d MT, at year: %.1f,', max_diff.tot, max_diff_year.tot), ...
         sprintf('which equals %.1f %% of injected CO2.', max_trap_diff)})
-%saveas(fig_ff, strcat(plot_dir, 'trapping_diff'), 'pdf');
+saveas(fig_ff, strcat(plot_dir, 'trapping_diff', extra_str), 'pdf');
 
 %% Compute difference in CO2 vol between fine and hybrid models
 control1 = schedule.step.control == 1;
@@ -670,14 +753,19 @@ fafa = find(sealingFaces | sealingCells_faces);
 c1 = [255, 255, 255]/255;
 c2 = [48, 37, 255]/255;
 c3 = [0, 255, 0]/255;
-cc = interp1([0; 1e-6; 1], [c1; c2; c3], (0:1e-6:1)');
+cc = interp1([0; 1e-6; 1], [c1; c2; c3], (0:1e-6:1)'); %(0:1e-6:1)'
 % c1 = [48, 37, 255]/255;
 % c2 = [0, 255, 0]/255;
 % cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
 
 t = cumsum(schedule.step.val)/year();
-% 
-for i = 1:20:numel(states)
+nstep = numel(schedule.step.val);
+end_inj = find(schedule.step.control == 1, 1, 'last');
+end_mig = nstep;
+
+bad_seq = find(t > 60 & t < 100);
+
+for i = bad_seq'%[end_inj, end_mig]
     f1 = UtilFunctions.fullsizeFig(1); clf
     %f1 = figure(1); clf
     plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
@@ -688,10 +776,12 @@ for i = 1:20:numel(states)
     axis tight off
     title({'Fine-scale saturation', sprintf('year: %.1f',t(i))})   
     setDaspect(run3D, standard);
-    %saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png');       
+    %saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d', extra_str), i));
+    %saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d', extra_str), i), 'png');
+    %saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d', extra_str), i), 'pdf');       
 end
 
-for i = 1:20:numel(states_hybrid)
+for i = bad_seq'%[end_inj, end_mig]
     %f2 = figure(2); clf
     f2 = UtilFunctions.fullsizeFig(2); clf    
     plotCellData(model.G, states_hybrid_fs{i}.s(:, 2), 'edgec', 'none');
@@ -703,7 +793,9 @@ for i = 1:20:numel(states_hybrid)
     title({'Hybrid reconstructed saturation', sprintf('year: %.1f',t(i))})   
     %pause(0.5);
     setDaspect(run3D, standard);
-    %saveas(f2, sprintf(strcat(plot_dir, 'hybrid_sat_%d'), i), 'png');         
+    %saveas(f2, sprintf(strcat(plot_dir, 'hybrid_sat_%d', extra_str), i)); 
+    %saveas(f2, sprintf(strcat(plot_dir, 'hybrid_sat_%d', extra_str), i), 'png'); 
+    %saveas(f2, sprintf(strcat(plot_dir, 'hybrid_sat_%d', extra_str), i), 'pdf');         
 end
 
 %% Compute migration speed (m/year)
@@ -797,10 +889,6 @@ if run3D
 end
 
 %% Plot result at injection stop and end of simulation
-nstep = numel(schedule.step.val);
-end_inj = find(schedule.step.control == 1, 1, 'last');
-end_mig = nstep;
-
 substeps = [end_inj, end_mig];
 %substeps = [nstep/10, nstep/5];
 names = {'injected', 'migrated'};
@@ -920,6 +1008,12 @@ for i=1:numel(fn)
                                 std(plume_data.(layers).avg_fine, [], 2), ...
                                 std(plume_data.(layers).avg_hybrid, [], 2)];
 end
+
+dirpath_stochastic = strcat(mrstOutputDirectory,'\stochastic\');
+save(strcat(dirpath_stochastic, 'trap_data.mat'), 'trap_data');
+save(strcat(dirpath_stochastic, 'trap_stats.mat'), 'trap_stats');
+save(strcat(dirpath_stochastic, 'plume_data.mat'), 'plume_data');
+save(strcat(dirpath_stochastic, 'plume_stats.mat'), 'plume_stats');
 
 %% Plot stochastic results
 W = schedule.control(1).W;
@@ -1112,6 +1206,16 @@ end
 
 
 %% Functions:
+function [iters, wtime] = runtimeInfo(report)
+    num_states = numel(report);
+    iters = zeros(num_states, 1);
+    wtime = zeros(num_states, 1);
+    for i=1:num_states
+        iters(i) = report{i}.Iterations;
+        wtime(i) = report{i}.WallTime;
+    end
+end
+
 function [v_hybrid, v_fine] = discrCO2Vol(d, model_hybrid,  model_fine, state_hybrid_fs, state_fine)
     discr = model_hybrid.G.cells.discretization == d;
     p = model_hybrid.G.partition;
@@ -1147,9 +1251,32 @@ function setDaspect(run3D, standard, varargin)
     end
 end
 
-function [x_new, shaded_area] = filledVariance(x, y, var)
-    c1 = y + var;
-    c2 = y - var;
-    x_new = [x, fliplr(x)];
-    shaded_area = [c1, fliplr(c2)];    
+function extra_fine = distributeFineRegions(G, sealing_barriers)
+    extra_fine = {};
+    [ii, ~, kk] = gridLogicalIndices(G);
+    for i=1:numel(sealing_barriers)
+        sb = sealing_barriers{i};
+        if isempty(find(sb,1))
+            continue;
+        end
+        diff_i = max(ii(sb)) - min(ii(sb));
+        diff_k = max(kk(sb)) - min(kk(sb));
+        i_stop = min(ii(sb)) + ceil(0.1*diff_i);
+        i_start = min(ii(sb)) - ceil(0.2*diff_i);%(i_stop - min(ii(sb)));
+        k_stop = max(kk(sb)) + diff_k + (diff_k == 0);
+        k_start = min(kk(sb)) - diff_k - (diff_k == 0);
+
+        fine_reg_left = G.cells.indexMap(ii >= i_start & ii <= i_stop & ...
+                                    kk >= k_start & kk <= k_stop);
+
+        i_stop = max(ii(sb)) + ceil(0.2*diff_i);
+        i_start = max(ii(sb)) - ceil(0.1*diff_i);%(i_stop - min(ii(sb)));
+
+        fine_reg_right = G.cells.indexMap(ii >= i_start & ii <= i_stop & ...
+                                    kk >= k_start & kk <= k_stop);
+
+        fine_reg = [fine_reg_left; fine_reg_right];
+        extra_fine = cat(1, extra_fine, fine_reg);        
+    end
+    extra_fine = unique(vertcat(extra_fine{:}));
 end

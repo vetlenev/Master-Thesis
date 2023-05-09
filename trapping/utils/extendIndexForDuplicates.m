@@ -5,6 +5,8 @@ function [c_sub] = extendIndexForDuplicates(c, c_u, c_sub)
     %   c     - cell indices from hybrid grid, includes duplicates
     %   c_u   - unique cell indices from hybrid grid
     %   c_sub - associated cell indices for c from subgrid
+    % RETURNS:
+    %   c_sub - cell indices from subgrid extended with duplicates
     c_ctf = [c_u, c_sub]; % make matrix mapping from hybrid cell indices to associated local index of subgrid    
     c_ctf1 = c_ctf(:,1);
     c_ctf2 = c_ctf(:,2);

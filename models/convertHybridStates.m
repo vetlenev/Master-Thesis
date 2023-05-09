@@ -1,5 +1,6 @@
 function states = convertHybridStates(model, model_fine, states_c, varargin)
-%Undocumented Utility Function
+% Converts hybrid states to states representative for the fine scale.
+% Based on analytical reconstruction operators for pressure and saturation.
 
 %{
 Copyright 2009-2022 SINTEF Digital, Mathematics & Cybernetics.
@@ -24,8 +25,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     states = cell(ns, 1);    
     states0_sGmax = states_c{1}.sGmax;   
     sgMax = states0_sGmax(model.G.partition);
-    snMaxVE_bottom = 0;
-    vG_any = 0; % only CO2 flux at initial state is at well
     
     cellsBH = {states_c{1}.cBottom, states_c{1}.cHorz, states_c{1}.cBottomHorz};
     
@@ -35,14 +34,25 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         else
             states0_c = states_c{i};
         end
-        [states{i}, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine, states_c{i}, states0_c, sgMax, snMaxVE_bottom, vG_any, i, cellsBH, varargin{:});        
-        %states0_sGmax = states{i}.sGmax; % update historically max fine-scale sat
+        [states{i}, sgMax] = convertState(model, model_fine, states_c{i}, states0_c, sgMax, cellsBH, varargin{:});        
         % what about converting flux?
     end
 end
 
-function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine, state_c, state0_c, sgMax_fine, ...
-                                                                snMaxVE_bottom, vG_any, i, cellsBH, varargin)
+function [state, sgMax] = convertState(model, model_fine, state_c, state0_c, sgMax_fine, ...
+                                                               cellsBH, varargin)
+    % Convert a hybrid state to a fine state.
+    % INPUTS:
+    %   model: hybrid model to convert state for
+    %   model_fune: full-dimensional model
+    %   state_c: current hybrid state
+    %   state0_c: previous hybrid state
+    %   sgMax_fine: max saturation reached in fine-partitioned hybrid cells
+    %   cellsBH: cell array of RVE cells in hybrid grid
+    % RETURNS:
+    %   state: reconstructed fine state
+    %   sgMax: max gas saturation reached up to current state
+    
     opt = struct('convert_flux', false, 'schedule', []);
     opt = merge_options(opt, varargin{:});
     
@@ -65,34 +75,20 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
     % --- RESIDUAL SATURATION ---         
     swr = model.fluid.krPts.w(1);
     snr = model.fluid.krPts.g(1);
-
-    sgMax = state_c.sGmax;
-    sgMax_c = sgMax(p); % max saturation from hybrid - not updated since coarse states already solved for
-    sG = state_c.s(:,2);
-    sG_c = sG(p);
-      
-    vG = state_c.vGsum; % get max absolute co2 flux for each coarse connection
-    %sG0 = state0_c.s(:,2);
-    %sgNVE0 = state0_c.sGnve;
-       
-    h_max = @(sgMax, H) H.*(sgMax./(1-swr));   
-    %h = @(sg, sgMax, H) H.*((sg.*(1-swr) - sgMax.*snr) ./ ((1-swr).*(1-swr-snr)));  
-    
+   
+    %h_max = @(sgMax, H) H.*(sgMax./(1-swr));
     h = state_c.h;
     h_T = state_c.h_T;
     h_B = state_c.h_B;        
     
-    cHorz = cellsBH{2}; % VE cells with only horizontal fluxes from semi-perm layers
+    cHorz = cellsBH{2}; % RVE cells with only horizontal fluxes from semi-perm layers
     hHi = state_c.hHi; % top depth of plume originaing from horizontal flux of semi-permeable layer
     Hi = state_c.Hi; % height from top of parent cell to semi-perm layer
     
-    cBottomHorz = cellsBH{3}; % VE cells with both horizontal and diffuse leakage up from semi-perm layers
+    cBottomHorz = cellsBH{3}; % RVE cells with both horizontal and diffuse leakage up from semi-perm layers
     hBHi = state_c.hBHi; % top depth of plume originating from horizontal OR upward flux from semi-perm layer
     BHi = state_c.BHi;
-    
-    if i == 700
-       test = 0; 
-    end
+      
     
     [a_M, a_R, sg] = getGasSatFromHeightFine(model, T, t, B, b, h(p), h_T(p), h_B(p), swr, snr, ...
                                              cHorz, cBottomHorz, hHi, hBHi, Hi, BHi);
@@ -121,29 +117,20 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
     cz = (T + B)/2;
     pressure = state_c.pressure(p); % fine-sclae pressures initially defined at bottom   
     rhow = rhow(p);
-    rhog = rhog(p);
-    %p_c = getPwFromHeight(cz, t, b, h(sG_c, sgMax_c, H), h_max(sgMax_c, H), pressure, g, rhow, rhog, swr, snr);   
+    rhog = rhog(p); 
     pW = getPwFromHeight(cz, t, b, h(p), h_T(p), pressure, g, rhow, rhog, swr, snr);
     % use original pressure from internal fine cells
     pW(isFine(p)) = pressure(isFine(p));
-    % use Dupuit approx in internal ve conn (WHAT ABOUT HORIZONTAL VE
-    % CONN?)
-%     vIc_cells = zeros(CG.cells.num, 1); % veInternalConn cells
-%     vIc_n1 = op.N(op.connections.veInternalConn, 1);    
-%     vIc_n2 = op.N(op.connections.veInternalConn, 2);
-%     vIc_cells(vIc_n1 | vIc_n2) = 1;
-%     dupuit = logical(vIc_cells(p));   
-%     p_c(dupuit) = pressure(dupuit) - rhow(dupuit).*g.*cz(dupuit); % pressure from bottom back to center
-%     
+    
     state.pressure = pW;
     state.s = [1-sg, sg]; 
-    % choose max among current calculated fine scale sat and fine scale sat
-    % from all previous states
     state.sGmax = max(sg, sgMax_fine); % max of new sG and current max sG
     sgMax = state.sGmax;
     
     
     if opt.convert_flux
+        % --- Probably not complete yet! ---
+
         vW = zeros(CG.parent.faces.num, 1);
         vG = zeros(CG.parent.faces.num, 1);
         % apply relperm function on reconstructed saturations
@@ -180,10 +167,7 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
         mupW = opf.faceUpstr(upcw, mobW); % water mobility upwinding
         mupG = opf.faceUpstr(upcg, mobG);  % co2 mobility upwinding
                
-        % map from faces to cells
-        if2c = CG.parent.faces.neighbors(ifaces, :);
-        bf2c = CG.parent.faces.neighbors(bf, :);
-        bf2c = bf2c(bf2c ~= 0); % choose cell at boundary but inside grid    
+        % map from faces to cells   
         obf2c = CG.parent.faces.neighbors(open_bf, :);
         obf2c = obf2c(obf2c ~= 0);
         % assign fluxes for interior faces
@@ -193,16 +177,10 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
         % Reconstruct for exterior faces       
         trans_ext = trans_p(open_bf); % transmissibility for boundary faces (uniform values by partitioning of fine grid)
         
-        open_pW = opt.schedule.control(1).bc.value;       
-        %dpw = op.Grad(pW);
+        open_pW = opt.schedule.control(1).bc.value;             
         dpw = open_pW - pW(obf2c);
-        %dpw(open_bf) = open_pW - pW(obf2c); % boundary face water pressure - boundary cell water pressure
-        %dpw(closed_bf) = 0;
         open_pG = open_pW + pcap(obf2c); % add capillary pressure at open boundary
-%         dpg = op.Grad(pG);
         dpg = open_pG - pG(obf2c);
-%         dpg(open_bf) = open_pG - pG(obf2c); % boundary face gas pressure - boundary cell gas pressure
-%         dpg(closed_bf) = 0; 
         
         z_cell = (CG.parent.cells.bottomDepth + CG.parent.cells.topDepth)/2;        
         z_face = CG.parent.faces.centroids(:,3);    
@@ -221,9 +199,7 @@ function [state, sgMax, snMaxVE_bottom, vG_any] = convertState(model, model_fine
         vG(closed_bf) = 0;
         vW(open_bf) = -mupW.*trans_ext.*dpW;
         vW(closed_bf) = 0;
-                
-        %cts = rldecode((1:CG.faces.num)', diff(CG.faces.connPos));
-        %Tc = accumarray(cts, model_f.operators.T_all(CG.faces.fconn));
+ 
         state.flux = zeros(CG.parent.faces.num, 2);
         state.flux(:,1) = vW;
         state.flux(:,2) = vG;

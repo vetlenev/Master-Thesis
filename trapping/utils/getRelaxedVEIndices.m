@@ -4,6 +4,12 @@ function [cB_idx, cB_sub, ...
 % Extract indices from all relazed VE columns, where _idx has one
 % element per relaxed VE cell and _sub has one element per cell in
 % subgrid.
+% PARAMETERS:
+%   c_ve - RVE cells (from global grid) to get indices from
+%   cB   - bottom sealing layers
+%   cH   - horizontal sealing layers
+%   cBH  - bottom + horizontal sealing layers
+
     cB_idx = ismember(cB, c_ve); % index for arrays with one element per bottom cell cB (from hybrid indexes for full grid)
     cB_subidx = ismember(c_ve, cB); % index for arrays with one element per cell in subgrid (from hybrid indexes for full grid)    
     cB_sub = find(cB_subidx); % global cell index

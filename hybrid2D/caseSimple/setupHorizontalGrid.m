@@ -4,12 +4,12 @@ function [state0, models, schedule, isFine, setZeroTrans] = setupHorizontalGrid(
 %   Impermeable layer either to be represented as face constraint or as
 %   cell constraint.
    
-if nargin == 2
+if nargin == 3
     nx = dims(1); ny = dims(2); nz = dims(3);
     sizes = [10*nx, 1*ny, 10*nz];       
-elseif nargin < 2
+elseif nargin < 3
     dims = [200, 1, 50];
-    sizes = [800, 1, 250];
+    sizes = [750, 1, 250]; % [800, 1, 250]
     if nargin == 0
         faceConstraint = true;
     end

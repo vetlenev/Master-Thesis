@@ -3,13 +3,10 @@ function reports = makeFineReports(Gt_all, Gs_all, cmaps, fmaps, ...
                                     rock, fluid, schedule, ...
                                     residual, trap_s, dh)
 % This function does intermediate processing of simulation data in order to
-% generate inventory plots using 'plotTrappingDistribution'.
+% generate mass categories for a full-dimensional model.
 % 
 % Currently, only rate controlled wells are supported (not pressure-controlled).
 % 
-% SYNOPSIS:
-%   function reports = makeFineReports(Gt, states, rock, fluid, schedule, residual, traps, dh)
-%
 % DESCRIPTION:
 %
 % PARAMETERS:
@@ -26,14 +23,12 @@ function reports = makeFineReports(Gt_all, Gs_all, cmaps, fmaps, ...
 %   schedule - schedule used in the simulation (NB: only rate controlled
 %              wells supported at present)
 %   residual - residual saturations, on the form [s_water, s_co2]
-%   traps    - trapping structure (from trapAnalysis of Gt)
-%   trapsi    - cell array of trapping structures (from trapAnalysis of Gti)
+%   trap_s    - cell array of trapping structures (from trapAnalysis of Gti)
 %   dh       - subscale trapping capacity (empty, or one value per grid cell
 %              of Gt)
 %
 % RETURNS:
-%   reports - a structure array of 'reports', that can be provided to the
-%   'plotTrappingDistribution' function.
+%   reports - a structure array of 'reports' with mass categories
 %
 % SEE ALSO:
 %   `plotTrappingDistribution`.
@@ -80,10 +75,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
          % handle initial state manually
          S = state.s(:,2);
          S_max = S; % at first step, max sat is just current sat
-         %h     = G.cells.height .* ((S .* (1-sw) - (S_max .* sn)) ./  ...
-         %                          ((1-sw) .* (1 - sw - sn)));
-         %h_max = G.cells.height .* (S_max ./(1-sw));                  
-         
+
          ntg = ones(G.cells.num,1);
          if isfield(rock,'ntg')
             ntg = rock.ntg;
@@ -95,10 +87,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
          tot_inj = sum(tot_inj); %
          reports(i).t         = 0; %#ok
          reports(i).W         = []; %#ok
-      else          
-         %h = state.h;
-         %h_max = state.h_T; % only top residual plume, remaining residual plumes handled separately                                        
-          
+      else                   
          reports(i).t = sum(schedule.step.val(1:i-1)); %#ok
          reports(i).W = schedule.control(schedule.step.control(i-1)).W; %#ok
          
@@ -108,9 +97,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       end
       
       reports(i).sol       = state; % fine states
-      %reports(i).sol.h     = h; % hybrid mobile heights
-      %reports(i).sol.h_max = h_max; % hybrid residual heights
-      
+
       rs = 0;
       if isfield(state, 'rs')
          rs = state.rs;
@@ -146,7 +133,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
                                                     
           mass_i = reports(i).(Gts).masses; % individual masses for this subgrid
           max_massVE(s) = max(max_massVE(s), sum(mass_i)); % keep track of max mass reached in this subgrid
-          if s == 1
+          if s == 1trap_s
               mass_sub = zeros(size(mass_i)); % separate masses to be summed over subgrids
           end
           mass_sub = mass_sub + mass_i; % individual masses summed over subgrids
@@ -176,13 +163,3 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
    
 end
 % ----------------------------------------------------------------------------
-
-function [h, h_max] = compute_plume_height(Gt, state, sw, sr)
-    
-    if isfield(state, 'sGmax')
-       smax = state.sGmax; % we operate with dissolution
-    else
-       smax = state.smax(:,2); % no dissolution.  Current max = historical max
-    end
-    [h, h_max] = upscaledSat2height(state.s(:,2), smax, Gt, 'resSat', [sw, sr]);
-end

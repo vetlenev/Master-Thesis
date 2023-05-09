@@ -3,29 +3,19 @@ function [masses, masses0] = massTrappingDistributionFineADI(Gt, Gs, G, c_fine, 
 % Compute the trapping status distribution of CO2 in full-dimensional
 % model.
 %
-% SYNOPSIS:
-%   masses = massTrappingDistributionVEADI(Gt, p, sW, sG, h, h_max, ...
-%                              rock, fluidADI, sr, sw, trapstruct)
-%   masses = massTrappingDistributionVEADI(Gt, p, sW, sG, h, h_max, ...
-%                              rock, fluidADI, sr, sw, trapstruct, 'rs',rs)
-%
 % DESCRIPTION:
 %
 % PARAMETERS:
-%   Gt         - Extracted top-surface grid
-%   ?Gti?        - cell array of semi-permeable top surface grids
+%   Gt         - Extracted top-surface grid 
+%   Gs         - subgrid under top surface
 %   G          - fine grid
-%   cmap       - cell array of local-to-global cell mapping for 3D grid corresponding to each Gti
+%   c_fine     - local-to-global cell mapping for grid Gs
 %   p          - pressure, one value per cell of grid
-%   sW         - water saturation, one value per cell of HYBRID grid
 %   sG         - gas saturation, one value per cell of grid
-%   h          - gas height below top surface, one value per cell of grid
-%   h_max      - maximum historical gas height, one value per cell of grid
+%   sW         - water saturation, one value per cell of grid
 %   rock       - rock parameters corresponding to 'Gt'
 %   fluidADI   - ADI fluid object (used to get densities and compressibilities)
-%   sr         - gas residual saturation (scalar)
-%   sw         - liquid residual saturation (scalar)
-%   trapstruct - trapping structure
+%   traps      - traps under Gt
 %   dh         - subtrapping capacity (empty, or one value per grid cell of Gt)
 %   varargin   - optional parameters/value pairs.  This currently only
 %                includes the option 'rs', which specifies the amount of
@@ -66,8 +56,6 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     opt    = merge_options(opt, varargin{:});        
        
     [ii, jj, kk] = gridLogicalIndices(G);
-    % --- Collect all cells with similar ii and jj indices ---
-    %accumarray([ii;jj], traps.z_spill_loc, [], @mode);
     fine_cells_sub = cell(Gt.cells.num,1);    
     fine_z = cell(Gt.cells.num,1);
     %z_spill_loc = cell(Gt.cells.num,1);
@@ -80,20 +68,13 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         % OR USE TOP OF CELL AND NOT CENTROID, AS IN MAKE_HYBRID ?!?
     end
     fine_z_all = vertcat(fine_z{:});
-    % --------------------------------------------------------
-   
-    %z = G.cells.centroids(:,3);
-    %z = z(c_fine);           
+    % --------------------------------------------------------          
     
     % Extracting relevant information from 'sol'
     sw=fluidADI.krPts.w(1);%liquid residual saturation (scalar)
-    sr=fluidADI.krPts.g(1);%gas residual saturation (scalar)
-    %SW = sW(c_fine);   
-    %SG = sG(c_fine);
+    sr=fluidADI.krPts.g(1);%gas residual saturation (scalar)   
     
     rs = opt.rs;
-    %p = p(c_fine);
-    
     pvMult = 1; 
     if isfield(fluidADI, 'pvMultR')
         pvMult =  fluidADI.pvMultR(p);

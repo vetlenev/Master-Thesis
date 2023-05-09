@@ -16,9 +16,9 @@ elseif nargin < 3
     end
 end
 
-standard = true; % true
+standard = false; % true
 n_layers = 25; % 25
-n_rel = 1; % 1
+n_rel = 2; % 1
 
 if isempty(varargin)
     trans_multiplier = 1;
@@ -94,7 +94,7 @@ end
                                 
 % shift all nodes to have positive values (required for trap analysis)
 G.nodes.coords(:,3) = G.nodes.coords(:,3) - min(min(G.nodes.coords(:,3)), 0);                                
-G.nodes.coords(:,3) = G.nodes.coords(:,3) + 1000;
+%G.nodes.coords(:,3) = G.nodes.coords(:,3) + 1000;
 % ----------------------------------------
 
 G = computeGeometry(G);
@@ -219,7 +219,7 @@ krn_PI = @(s) fluid.krG(s); % primary imbibition
                        
 tot_time = 400*year;
 inj_stop = 0.1; % 0.1
-pv_rate = 0.08; % 0.1
+pv_rate = 0.1; % 0.1
 
 pv = poreVolume(G, rock);
 inj_rate = pv_rate*sum(pv)/(inj_stop*tot_time); % inject pv_rate of total pore volume over injection time
@@ -255,15 +255,15 @@ end
 bc = pside(bc, G, pressure_side, 100*barsa, 'sat', [1, 0]);
 bc.value = bc.value + fluid.rhoWS.*G.faces.centroids(bc.face, 3)*norm(gravity);
 
-horzWellDistRate = 0.1; % ratio of total horizontal length considered "close" to well
+horzWellDistRate = 0.08; % ratio of total horizontal length considered "close" to well
 vertWellDistRate = 0.1;
 for i = 1:numel(W)
     c = W(i).cells(1);
-    hdist = abs(ii - ii(c)); %hdist = abs(x - x(c));
-    vdist = abs(kk - kk(c)); %vdist = abs(z - z(c));
+    hdist = abs(x - x(c)); % hdist = abs(ii - ii(c));
+    vdist = abs(z - z(c)); % vdist = abs(kk - kk(c));
     % store cells close to well, if fine-scale needed
-    nearWell(hdist < fix(horzWellDistRate*max(ii)) & ... % max(ii)
-              vdist < fix(vertWellDistRate*max(kk))) = true; % max(kk)
+    nearWell(hdist < fix(horzWellDistRate*max(x)) & ... % max(ii)
+              vdist < fix(vertWellDistRate*max(z))) = true; % max(kk)
 end
 if ~isempty(bc)
     openBC(sum(G.faces.neighbors(bc.face, :), 2)) = true;

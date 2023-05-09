@@ -1,5 +1,5 @@
 classdef WaterGasHybridModel < TwoPhaseWaterGasModel
-    % Multi-VE version of the gas-water model from the co2lab module
+    % Extended hybrid version of the gas-water model from the co2lab module
     properties
         
     end
@@ -9,12 +9,7 @@ classdef WaterGasHybridModel < TwoPhaseWaterGasModel
         function model = WaterGasHybridModel(G, rock, fluid, varargin)
             opt = struct('sealingFaces', [], 'sealingCells', [], 'pe_rest', 0);
             opt = merge_options(opt, varargin{:});
-                       
-            % Update to be dependent on TwoPhaseWaterGasModelHys instead,
-            % since this is tailored for dissolution.
-            % Modify getEquations to use
-            % equationsWaterGasMultiVE_dissolution.
-            % Then modify some of the functions to be applicable for VE cells
+                               
             model = model@TwoPhaseWaterGasModel(G, rock, fluid, nan, nan, varargin{:});                      
                       
             model.G.parent.sealingCells = opt.sealingCells; 
@@ -26,7 +21,7 @@ classdef WaterGasHybridModel < TwoPhaseWaterGasModel
             model = model.setupOperators(); % recompute operators in case assignment to sealing cells did modify some operators 
             
             model.useCNVConvergence = true;                                  
-            model = addCoarseOperatorsMultiVE(model);
+            model = addCoarseOperatorsMultiVE(model); % to compute height and transitions of virtual cells
         end
         
         function [problem, state] = getEquations(model, state0, state, dt, ...

@@ -1,4 +1,4 @@
-function [h_res_struct, h_res_free] = computeTrappedHeightsRVE(zt, h, hmax, ve_height, ...
+function [h_res_struct, h_res_free] = computeTrappedHeightsRVE(zt, h, hmax, rve_height, ...
                                                            h_B, h_H, h_BH, ...
                                                            Hh, Hbh, ...
                                                            cB, cB_idx, cB_sub, ...
@@ -11,6 +11,7 @@ function [h_res_struct, h_res_free] = computeTrappedHeightsRVE(zt, h, hmax, ve_h
 %   zt      - spill point depth of the trap a cell is associated with
 %   h       - height of top mobile plume
 %   hmax    - max reached height of top mobile plume
+%   rve_height - height of RVE column
 %   h_X     - depth from top of VE column to top of plume rising from
 %               relaxed VE cell X.
 %   Hx      - height of virtual cell associated with relaxed VE cell x.
@@ -18,11 +19,15 @@ function [h_res_struct, h_res_free] = computeTrappedHeightsRVE(zt, h, hmax, ve_h
 %   cX_idx  - hybrid indices of relaxed VE columns of type X from a subset
 %               of cells from full grid 
 %   cX_sub  - (local) subgrid indices of relaxed VE columns of type X.
+% RETURNS:
+%   h_res_struct - net height of residual CO2 structurally trapped
+%   h_res_free - net height of residual CO2 below traps
+
     h_B_struct = zeros(size(zt));
     h_B_free = zeros(size(zt));
     % hB = ct_hybrid_height (i.e. height of VE cell in subgrid)   
-    h_B_struct(cB_sub) = zt(cB_sub) - min(zt(cB_sub), h_B(cB_idx)) - max(zt(cB_sub) - ve_height(cB_sub), 0);   
-    h_B_free(cB_sub) = max(ve_height(cB_sub), zt(cB_sub)) - max(h_B(cB_idx), zt(cB_sub));
+    h_B_struct(cB_sub) = zt(cB_sub) - min(zt(cB_sub), h_B(cB_idx)) - max(zt(cB_sub) - rve_height(cB_sub), 0);   
+    h_B_free(cB_sub) = max(rve_height(cB_sub), zt(cB_sub)) - max(h_B(cB_idx), zt(cB_sub));
     
     % horizontal:
     h_H_struct = zeros(size(zt)); % heights of residual plume (for cHorz) inside structural traps

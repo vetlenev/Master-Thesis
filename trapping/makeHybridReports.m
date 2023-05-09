@@ -14,12 +14,13 @@ function reports = makeHybridReports(Gts_all, Gs_all, cmaps, fmaps, ...
 % DESCRIPTION:
 %
 % PARAMETERS:
-%   Gt       - top surface grid of full formation (i.e. confining caprock)
-%   Gti      - cell array of top surface grids of interior lowperm layers
-%   Gh       - hybrid grid with all semi-perm layers in Gti
-%   cmaps     - cell array of mappings from subgrid cells to global cells
+%   Gts_all  - all top surfaces of hybrid grid (under each sealing layer)
+%   Gs_all   - subgrids under top surfaces Gts_all
+%   cmaps    - cell array of mappings from subgrid cells to global cells
 %   fmap     - cell array of mappings from subgrid faces to global faces
-%   nmap     - cell array of mappings from subgrid nodes to global nodes
+%   fine_rem - fine cells of global grid not part of a subgrid in Gs_all
+%   ve_rem   - VE cells of global grid not part of a subgrid in Gs_all
+%   Gh       - hybrid grid
 %   states   - result from a simulation (cell array of states, including
 %              initial state)
 %   rock     - rock object used in the simulation
@@ -27,14 +28,12 @@ function reports = makeHybridReports(Gts_all, Gs_all, cmaps, fmaps, ...
 %   schedule - schedule used in the simulation (NB: only rate controlled
 %              wells supported at present)
 %   residual - residual saturations, on the form [s_water, s_co2]
-%   traps    - trapping structure (from trapAnalysis of Gt)
-%   trapsi    - cell array of trapping structures (from trapAnalysis of Gti)
+%   trap_s   - cell array of trapping structures (from trapAnalysis of Gts_all)
 %   dh       - subscale trapping capacity (empty, or one value per grid cell
 %              of Gt)
 %
 % RETURNS:
-%   reports - a structure array of 'reports', that can be provided to the
-%   'plotTrappingDistribution' function.
+%   reports - a structure array of 'reports' with CO2 mass categories
 %
 % SEE ALSO:
 %   `plotTrappingDistribution`.
@@ -75,9 +74,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
   
     max_massVE = zeros(numel(Gts_all), 1); % max mass obtained in each VE top-surface subgrid    
     
-   for i = 1:numel(states)
-
-      %[h, h_max] = compute_plume_height(Gt, states{i}, residual(1), residual(2));      
+   for i = 1:numel(states) 
       state = states{i};
       
       if i == 1          
@@ -130,28 +127,25 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       end
       
       reports(i).sol       = states{i}; % hybrid states
-      reports(i).sol.h     = h; % hybrid mobile heights
-      reports(i).sol.h_max = h_max; % hybrid residual heights
-      reports(i).sol.h_B   = h_B;
-      reports(i).sol.h_H   = h_H;
-      reports(i).sol.h_BH  = h_BH;
-      reports(i).sol.Hh    = Hh;
-      reports(i).sol.Hbh   = Hbh;
+      reports(i).sol.h     = h; % mobile heights
+      reports(i).sol.h_max = h_max; % net residual heights
+      reports(i).sol.h_B   = h_B; % residual height from bottom sealing layers
+      reports(i).sol.h_H   = h_H; % net residual heigths from horiontal sealing layers
+      reports(i).sol.h_BH  = h_BH; % net residual heigths from bottom+horz sealng layers
+      reports(i).sol.Hh    = Hh; % height from top of parent cell to horizontal sealing layer
+      reports(i).sol.Hbh   = Hbh; % height from top of parent cell to bottom+horizontal sealing layer
       
       rs = 0;
       if isfield(states{i}, 'rs')
          rs = states{i}.rs;
       end
       
-      % Masses for hybrid gid computed in 5 steps:
+      % Masses for hybrid grid computed in 5 steps:
       
       % FIRST, we compute CO2 mass for entire hybrid grid (no removal of
       % cells). No categorization, just sum up net mass.     
       reports(i).Gh.masses = states{i}.s(:,2) .* Gh.cells.volumes .* rock.poro .* fluid.rhoGS;
-                    
-      if i == numel(states)
-         test = 0; 
-      end
+                         
       % SECOND, compute masses for VE subgrids under top surface
       for s=1:numel(Gts_all)
           Gs = Gts_all{s}; % top surface grid for semi-perm layer s
@@ -193,7 +187,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
       end
              
       fine_rem_hybrid = ph(fine_rem);
-      ve_rem_hybrid = ph(ve_rem);  
+      ve_rem_hybrid = ph(ve_rem); % hybrid -> fine mapping
 
       % THIRD: Compute masses for remaining fine regions
       if ~isempty(fine_rem_hybrid)
@@ -207,7 +201,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
      
       % FOURTH: Compute masses for remaining VE regions
       if ~isempty(ve_rem_hybrid)
-            mass_ve = massTrappingVE_Other(Gh, ve_rem, ve_rem_hybrid, reports(i).sol.pressure, ...
+            mass_ve = massTrappingVE_Other(Gh, ve_rem_hybrid, reports(i).sol.pressure, ...
                                                         reports(i).sol.s(:,2), ...
                                                         reports(i).sol.s(:,1), ...
                                                         reports(i).sol.h, ...
@@ -238,12 +232,3 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 end
 % ----------------------------------------------------------------------------
 
-function [h, h_max] = compute_plume_height(Gt, state, sw, sr)
-    
-    if isfield(state, 'sGmax')
-       smax = state.sGmax; % we operate with dissolution
-    else
-       smax = state.smax(:,2); % no dissolution.  Current max = historical max
-    end
-    [h, h_max] = upscaledSat2height(state.s(:,2), smax, Gt, 'resSat', [sw, sr]);
-end

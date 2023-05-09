@@ -1,25 +1,20 @@
-function [model_ve, model_coarse] = convertToHybridModel(model, varargin)
-%Convert a regular model to a hybrid/multilayer VE model
-%
-% SYNOPSIS:
-%   [model_ve, model_coarse] = convertToMultiVEModel(model)
-%   [model_ve, model_coarse] = convertToMultiVEModel(model, isFineCells)
+function [model_hybrid, model_coarse] = convertToHybridModel(model, varargin)
+%Convert a two-phase water gas model to a hybrid model.
 %
 % REQUIRED PARAMETERS:
 %   model  - Fine-scale description in the form of typically a water gas
 %            model from the co2lab module.
-%   isFine - Optionally an indicator that is true for cells to be retained
-%            with a fine discretization in the new model
 %
 % OPTIONAL PARAMETERS:
-%   sealingFaces - List of sealing faces impermeable to flow. These divide
-%                  VE regions. If your model has multiple layers you really
-%                  should specify this to get good results.
+%   isFine - Optionally an indicator that is true for cells to be retained
+%            with a fine discretization in the new model
+%   remFineFaces - Faces of cells to be retained with fine discretization
+%   sealingFaces - List of semi-permeable faces. These divide VE regions,  
+%                   and ARE assigned transmissibility multiplier.
 %   
-%   sealingCells - List of sealing cells, the (almost) impermeable layer
-%                  delimited by sealing faces.
+%   sealingCells - Vector of imposed semi-permeable cells.
 %
-%   sealingCells_faces - List of sealing faces delimiting sealing cells.
+%   sealingCells_faces - Vector of sealing faces delimiting sealing cells.
 %                           Are NOT assigned transmissibility multipler,
 %                           only used for categorization of hybrid grid.
 %
@@ -27,8 +22,8 @@ function [model_ve, model_coarse] = convertToHybridModel(model, varargin)
 %                           subcolumns of imposed fine cells to fine
 %                           (true) or only the imposed fine cells (false).
 %
-%   multiplier   - Weighting applied to sealing faces (default: zero)
-%
+%   multiplier   - Weighting applied to transmissibility of sealing faces
+%                   (default: zero)
 %   
 %   sumTrans     - Upscale coarse transmissibility by summing up values
 %                  over each face. Default: true. Otherwse, will use
@@ -37,18 +32,18 @@ function [model_ve, model_coarse] = convertToHybridModel(model, varargin)
 %   transThreshold - Threshold to consider transmissibilities as "sealing"
 %                    if sealingFaces is defaulted.
 %   
-%   pe_all - Entry pressure in high-permeable region (where VE columns)
+%   pe_all - Entry pressure for each cell in domain
 %
 % RETURNS:
-%   model_ve     - A VE model on the coarse scale
+%   model_hybrid     - A hybrid model with VE-fine representations
 % 
 %   model_coarse - The same fine-scale discretization, on the coarse scale.
 %                  Mostly useful for comparison to the VE version.
 % EXAMPLE:
-%   introHybridVE
+%   runHybridSimulationsWithTrapping
 %
 % SEE ALSO:
-%   convertMultiVEStates
+%   convertHybridStates
 
 %{
 Copyright 2009-2022 SINTEF Digital, Mathematics & Cybernetics.
@@ -150,31 +145,31 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
      
     % Copy operators over and create a new VE model
     if isa(model, 'TwoPhaseWaterGasModel') %|| isa(model, 'TwoPhaseWaterGasModelHys')
-        model_ve = WaterGasHybridModel(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
+        model_hybrid = WaterGasHybridModel(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
                                             'sealingCells', opt.sealingCells, 'pe_rest', pe_hybrid); % 'pe_rest', opt.pe_rest
     elseif isa(model, 'OverallCompositionCompositionalModel')
-        model_ve = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
+        model_hybrid = OverallCompositionMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'NaturalVariablesCompositionalModel')
-        model_ve = NaturalVariablesMultiVEModel(CG, rock_c, fluid, model.EOSModel);
+        model_hybrid = NaturalVariablesMultiVEModel(CG, rock_c, fluid, model.EOSModel);
     elseif isa(model, 'TwoPhaseWaterGasModelDissolution')
-        model_ve = WaterGasMultiVEModel_dissolution(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
+        model_hybrid = WaterGasMultiVEModel_dissolution(CG, rock_c, fluid, 'sealingFaces', opt.sealingFaces, ...
                                                     'sealingCells', opt.sealingCells, 'pe_rest', pe_hybrid);
     else
         error(['VE not implemented for class ', class(model)]);
     end
-    badc = model_ve.G.cells.height <= 0;
-    mv = max(1e-4*mean(model_ve.G.cells.height), 1e-10);
+    badc = model_hybrid.G.cells.height <= 0;
+    mv = max(1e-4*mean(model_hybrid.G.cells.height), 1e-10);
     if any(badc)
         warning(['Found ', num2str(nnz(badc)), ' cells with zero height. Fixing...']);
-        model_ve.G.cells.height(badc) = mv;
-        model_ve.G.cells.bottomDepth(badc) = model_ve.G.cells.bottomDepth(badc) + mv;
+        model_hybrid.G.cells.height(badc) = mv;
+        model_hybrid.G.cells.bottomDepth(badc) = model_hybrid.G.cells.bottomDepth(badc) + mv;
     end
-    delta = model_ve.operators.connections.faceBottomDepth - model_ve.operators.connections.faceTopDepth;
-    badf = model_ve.operators.connections.faceHeight(:) <= 0 | delta(:) <= 0;
+    delta = model_hybrid.operators.connections.faceBottomDepth - model_hybrid.operators.connections.faceTopDepth;
+    badf = model_hybrid.operators.connections.faceHeight(:) <= 0 | delta(:) <= 0;
     if any(badf)
         warning(['Found ', num2str(nnz(badf)), ' faces with zero height. Fixing...']);
-        model_ve.operators.connections.faceHeight(badf) = mv;
-        model_ve.operators.connections.faceBottomDepth(badf) = model_ve.operators.connections.faceBottomDepth(badf) + mv;
+        model_hybrid.operators.connections.faceHeight(badf) = mv;
+        model_hybrid.operators.connections.faceBottomDepth(badf) = model_hybrid.operators.connections.faceBottomDepth(badf) + mv;
     end
        
     
@@ -193,21 +188,19 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         model_coarse.operators.T = model_coarse.operators.T_all(model_coarse.operators.internalConn);
     end     
 
-    model_ve.nonlinearTolerance = model.nonlinearTolerance;
-    model_ve.minimumPressure = model.minimumPressure;
-    model_ve.extraStateOutput = model.extraStateOutput;
+    model_hybrid.nonlinearTolerance = model.nonlinearTolerance;
+    model_hybrid.minimumPressure = model.minimumPressure;
+    model_hybrid.extraStateOutput = model.extraStateOutput;
 
-    model_ve.operators.T = model_coarse.operators.T;
-    model_ve.operators.T_all = model_coarse.operators.T_all;
+    model_hybrid.operators.T = model_coarse.operators.T;
+    model_hybrid.operators.T_all = model_coarse.operators.T_all;
     
     % --- Add veBottom cells and connections ---
-    op = model_ve.operators;
-    isVE = model_ve.G.cells.discretization > 1;
+    op = model_hybrid.operators;
+    isVE = model_hybrid.G.cells.discretization > 1;
     veTransition = op.connections.veToFineVertical | ...
-                    op.connections.veTransitionVerticalConn & op.T > 0;        
-    veAll = op.connections.veInternalConn | op.connections.veTransitionHorizontalConn;
+                    op.connections.veTransitionVerticalConn & op.T > 0;       
     cn = op.N(veTransition, :);
-    c_vic = op.N(veAll, :);  
    
     cB = [];
     veB = [];
@@ -215,22 +208,18 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
         c = cn(:,idx);
         isVE_c = isVE(c);
         if any(isVE_c)
-            t = model_ve.G.cells.topDepth(c);
+            t = model_hybrid.G.cells.topDepth(c);
             T = op.connections.faceTopDepth(veTransition, idx);
-            b = model_ve.G.cells.bottomDepth(c);
+            b = model_hybrid.G.cells.bottomDepth(c);
             B = op.connections.faceBottomDepth(veTransition, idx);
-            Hb = model_ve.G.cells.height(c); % to not overwrite global H
+            Hb = model_hybrid.G.cells.height(c); % to not overwrite global H
             
             veB = B == b & T ~= t;
             cB = c(veB); % select correct bottom cells
-%             cb = c_vic(ismember(c_vic, cb));
-%             if ~isempty(cb)
-%                 cB = cat(2, cB, cb);
-%             end
         end
     end    
     
-    model_ve.G.cells.bottomVE = cB;
-    model_ve.operators.connections.bottomVE = veB;
+    model_hybrid.G.cells.bottomVE = cB;
+    model_hybrid.operators.connections.bottomVE = veB;
     % ------------------------------------------
 end

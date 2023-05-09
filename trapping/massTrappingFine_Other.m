@@ -1,31 +1,17 @@
 function [masses, masses_0] = massTrappingFine_Other(Gh, cFine, p, sG, sW, rock, fluidADI, varargin)
-% Compute the trapping status distribution of CO2 in each cell of global
-% top-surface grid, removing cells part of top surface of semi-perm layers
-%
-% SYNOPSIS:
-%   masses = massTrappingDistributionVEADI(Gt, p, sW, sG, h, h_max, ...
-%                              rock, fluidADI, sr, sw, trapstruct)
-%   masses = massTrappingDistributionVEADI(Gt, p, sW, sG, h, h_max, ...
-%                              rock, fluidADI, sr, sw, trapstruct, 'rs',rs)
+% Compute the trapping status distribution of CO2 in FINE cells not part of
+% a subgrid for a sealing layer.
 %
 % DESCRIPTION:
 %
 % PARAMETERS:
-%   Gt         - Top surface grid
-%   ?Gti?        - cell array of semi-permeable top surface grids
 %   Gh         - hybrid grid
-%   cmap       - cell array of local-to-global cell mapping for 3D grid corresponding to each Gti
+%   cFine      - remaining fine cells
 %   p          - pressure, one value per cell of grid
 %   sW         - water saturation, one value per cell of HYBRID grid
 %   sG         - gas saturation, one value per cell of grid
-%   h          - gas height below top surface, one value per cell of grid
-%   h_max      - maximum historical gas height, one value per cell of grid
 %   rock       - rock parameters corresponding to 'Gt'
 %   fluidADI   - ADI fluid object (used to get densities and compressibilities)
-%   sr         - gas residual saturation (scalar)
-%   sw         - liquid residual saturation (scalar)
-%   trapstruct - trapping structure
-%   dh         - subtrapping capacity (empty, or one value per grid cell of Gt)
 %   varargin   - optional parameters/value pairs.  This currently only
 %                includes the option 'rs', which specifies the amount of
 %                dissolved CO2 (in its absence, dissolution is ignored).
@@ -62,10 +48,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 %}
 
     opt.rs = 0;
-    opt    = merge_options(opt, varargin{:});
-
-    %ct_hybrid_height = Gh.cells.height(cFine);
-    %ct_hybrid_z = Gh.cells.topDepth(cFine);        
+    opt    = merge_options(opt, varargin{:});       
     
     % Extracting relevant information from 'sol'
     sw=fluidADI.krPts.w(1);%liquid residual saturation (scalar)
@@ -87,8 +70,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     rhoCO2   = fluidADI.rhoGS .* fluidADI.bG(p);
     gasPhase = sum(pv .* (rhoCO2 .* SG));                   
                       
+    % No structural trapping for remaining cells!
     resStruc  = 0;      % trapped, res
-    freeStruc = 0;                          % trapped, non-res
+    freeStruc = 0;      % trapped, non-res 
         
     plumeSG = SG(SG > sr); % part of mobile plume
     freeRes   = sum(pv(SG > sr).*rhoCO2(SG > sr).*sr);                                     % non-trapped, flowing, rrrrres

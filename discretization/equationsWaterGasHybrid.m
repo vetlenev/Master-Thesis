@@ -1,5 +1,8 @@
 function [problem, state] = equationsWaterGasHybrid(model, state0, state, dt, drivingForces, varargin)
 %{
+Set up coarse and fine equations in a fully-implicit monolithic system for
+a hybrid model.
+
 Copyright 2009-2022 SINTEF Digital, Mathematics & Cybernetics.
 
 This file is part of The MATLAB Reservoir Simulation Toolbox (MRST).
@@ -73,7 +76,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     
     isVE = G.cells.discretization > 1;  
 
-    % ----- Find relevant RVEcells
+    % ----- Find RVE candidates -----
     veTransition = op.connections.veToFineVertical | ...
                     op.connections.veTransitionVerticalConn & op.T > 0;        
     veHorz = op.connections.veTransitionHorizontalConn;
@@ -114,8 +117,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     end
     [cB, cB_idx, ~] = unique(cell2mat(cB));
     veB = cell2mat(veB);
-    veB = veB(cB_idx); % <----- shuffle connections in same order as unique cells
-    % ----- 
+    veB = veB(cB_idx); % shuffle connections in same order as unique cells
+    
+    % -------------------------
       
     % Modify the fluxes to account for VE transitions
     [rhoW, rhoG] = deal(rho{:});
@@ -127,9 +131,7 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     if ~isfield(state0, 'vGsum')
         state0.vGsum = zeros(size(model.operators.N, 1), 1); % initially zero fluxes by default        
     end
-    %if ~isfield(state0, 'sGnve')
-    %   state0.sGnve = cell2mat(state0.s(:,2)); % initial saturation
-    %end
+   
     if ~isfield(state0, 'vGsum_sMax') % to store accumulated flux up to point where current sMax
        state0.vGsum_sMax = zeros(size(model.operators.N, 1), 1);
        state.vGsum_sMax = state0.vGsum_sMax; 

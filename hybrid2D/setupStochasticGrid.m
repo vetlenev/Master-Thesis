@@ -19,6 +19,7 @@ end
 standard = true; % true
 n_layers = 25; % 25
 n_rel = 1; % 1
+extra_fine = false; % if including additonal fine cells at end-points to reduce errors from RVE assumption
 
 if isempty(varargin)
     trans_multiplier = 1;
@@ -31,11 +32,17 @@ elseif numel(varargin) == 3
     trans_multiplier = varargin{1};
     standard = varargin{2};
     n_layers = varargin{3};
+elseif numel(varargin) == 4
+    trans_multiplier = varargin{1};
+    standard = varargin{2};
+    n_layers = varargin{3};
+    n_rel = varargin{4};
 else
     trans_multiplier = varargin{1};
     standard = varargin{2};
     n_layers = varargin{3};
     n_rel = varargin{4};
+    extra_fine = varargin{5};
 end
 
 G = cartGrid(dims, sizes);
@@ -50,18 +57,28 @@ lz = max(G0.faces.centroids(:,3));
 vertWellDistRate = 0.07;
 
 % Define positions of layers BEFORE skewing grid
-%rz = 0.95*lz.*rand(n_layers,1);
-rz = linspace(0, (1-1.5*vertWellDistRate)*lz, n_layers)';
-%rh = (0.02-0.005).*rand(n_layers,1) + 0.005;
-rh = 0.001;
-rzh = rz + rh.*lz;    
-%rx = 0.9*nx.*rand(n_layers,1);
-%rxh = max(nx-1.3*rx, 0).*rand(n_layers,1) + 1.3*rx;
-max_start_x = 0.85; % 0.80
-rx = linspace(0, max_start_x*nx, n_layers)';
-rx = rx(randperm(length(rx)));
-rxh = rx + (1-max_start_x)*nx + 0.1*rand(n_layers,1)*nx;
-rxh = min(rxh, nx); % to avoid going out of bounds
+if true
+% OLD:
+    %rz = 0.95*lz.*rand(n_layers,1);
+    rz = linspace(0, (1-1.5*vertWellDistRate)*lz, n_layers)';
+    rh = (0.02-0.005).*rand(n_layers,1) + 0.005;
+    %rx = 0.9*nx.*rand(n_layers,1);
+    rx = linspace(0, 0.85*nx, n_layers)';
+    rx = rx(randperm(length(rx)));
+    rxh = max(nx-1.3*rx, 0).*rand(n_layers,1) + 1.3*rx;
+else
+% NEW:
+    rz = linspace(0, (1-1.5*vertWellDistRate)*lz, n_layers)';
+    rh = 0.001;   
+    max_start_x = 0.85; % 0.80
+    rx = linspace(0, max_start_x*nx, n_layers)';
+    rx = rx(randperm(length(rx)));
+    rxh = rx + (1-max_start_x)*nx + 0.1*rand(n_layers,1)*nx; % 0.1*rand(n_layers,1)*nx
+    rxh = min(rxh, nx); % to avoid going out of bounds
+end
+
+% BOTH
+rzh = rz + rh.*lz; 
 
 z_pos = [rz, rzh];
 i_range = [rx, rxh];
@@ -96,6 +113,7 @@ perm = repmat(100*milli*darcy, G.cells.num, 1);
 
 setZeroTrans = zeros(G.faces.num, 1);
 sealingCellsPerm = [0.01, 0.1]*milli*darcy; 
+%sealingCellsPerm = 0.01*milli*darcy;
 
 allSealingFaces = {}; % append for face constraints
 allSealingCells = {}; % append for cell constraints 
@@ -168,6 +186,13 @@ else % Manually assign faces or cells
             end
         end           
     end
+end
+
+if extra_fine
+    [extraSealingCells, extraSealingCells_faces] = distributeFineRegions(G, allSealingCells, allSealingCells_faces);
+else
+    extraSealingCells = allSealingCells;
+    extraSealingCells_faces = allSealingCells_faces;
 end
 
 sealingFaces = vertcat(allSealingFaces{:});
@@ -264,6 +289,8 @@ T = getFaceTransmissibility(G, rock);
 isFine = struct;
 isFine.sealingCells = allSealingCells; % no sealing cells if only face constraint
 isFine.sealingCells_faces = allSealingCells_faces; % bounding faces of sealing cells
+isFine.extraSealingCells = extraSealingCells;
+isFine.extraSealingCells_faces = extraSealingCells_faces;
 isFine.sealingBottom = allSealingBottom;
 isFine.well = nearWell;
 isFine.bc = openBC;

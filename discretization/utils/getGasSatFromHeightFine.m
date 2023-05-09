@@ -1,4 +1,22 @@
 function [a_Mob, a_R, sG] = getGasSatFromHeightFine(model, T, t, B, b, h, h_T, h_B, swr, snr, varargin)
+    % Reconstruct fine-scale gas saturation for hybrid model, with specific
+    % treatment for RVE columns.
+    % INPUTS:
+    %   model: hybrid model
+    %   T: top depth of virtual cell
+    %   t: top depth of parent cell
+    %   B: bottom depth of virtual cell
+    %   b: bottom depth of parent cell
+    %   h: height of mobile plume from parent cell
+    %   h_T: max height reached for top segregated plume
+    %   h_B: net height reached for plumes from sealing layers
+    %   swr: residual water saturation
+    %   snr: residual gas saturation
+    % RETURNS:
+    %   a_Mob: ratio of cell height consisting of mobile CO2
+    %   a_R: ratio of cell height consisting of residual CO2 (NOT
+    %        including residual part in mobile plume)
+    %   sG: gas saturation
     p = model.G.partition;
     
     z_RT = t + h_T; % bottom of residual part on TOP of col

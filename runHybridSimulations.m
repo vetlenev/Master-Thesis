@@ -1,7 +1,13 @@
-%% Hybrid model for diffuse leakage through thin horizontal shale
+%% Hybrid model for domains with sealing layers
 % Thin shale layers either represented as face constraint or cell
 % constraint. For face constraint, transmissibility is set to zero. For
 % cell constraint, thin layers are refined to fine-scale cells.
+
+% 2D:
+% - horizontal, rectilinear grid
+% - long sloped, curvilinear grid
+% 3D:
+% - standard grid
 
 gravity reset on;
 mrstModule add ad-core ad-blackoil ad-props co2lab matlab_bgl coarsegrid;
@@ -26,7 +32,7 @@ warning('off', 'Future:Deprecation');
 % Using face constraints, fine cells only constitute the well
 % Using cell constraints, fine cells also include sealing layer
 useFaceConstraint = false;
-useAdaptive = false; % overrides useFaceConstraint in setupSlopedGrid
+useAdaptive = true; % overrides useFaceConstraint in setupSlopedGrid
 run3D = false;
 sloped = true;
 
@@ -43,7 +49,7 @@ if run3D
     vx = 30; vz = 20; % view angles
     hybrid_folder = 'hybrid3D';
 else
-    nx = 75; ny = 1; nz = 100; % nz = 50
+    nx = 75; ny = 1; nz = 50; % nz = 50
     lx = 750; ly = 1; lz = 250;
     if sloped
         [state0, models, schedule, ...
@@ -65,7 +71,7 @@ else
 end
 
 if useAdaptive    
-    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_sealing_nz%d/'), hybrid_folder, geometry_folder, nz);   
+    plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/book_illustrations/%s/test/%s/adaptive_sealing_nz%d_quadratic/'), hybrid_folder, geometry_folder, nz);   
 elseif useFaceConstraint
     plot_dir = sprintf(strcat(rootdir, '../Master-Thesis/%s/%s/figs/face_lowperm_nz%d/'), hybrid_folder, geometry_folder, nz);       
 else    
@@ -81,7 +87,8 @@ sealingCells_facesAll = vertcat(isFineCells.sealingCells_faces{:});
 sealingCells_faces(sealingCells_facesAll) = true;
 % -----
 wellCells = isFineCells.well;
-fineCells = sealingCells | wellCells;
+bcCells = isFineCells.bc;
+fineCells = sealingCells | wellCells | bcCells;
 
 % Split into two models: only fine model has transmissibility multiplier
 % applied
@@ -164,8 +171,8 @@ pc_scan = Hysteresis.Genuchten(dummy_s, swMin, snr_pc, swr_pc, pc_func, sw_func,
 nls = NonLinearSolver('maxIterations', 70);
 
 %% Pack and simulate problem
-problem = packSimulationProblem(state0, model_fine, schedule, ...
-    'horz_finescale', 'NonLinearSolver', nls);
+% problem = packSimulationProblem(state0, model_fine, schedule, ...
+%     'horz_finescale', 'NonLinearSolver', nls);
 
 % Simulate and get the output
 %simulatePackedProblem(problem);
@@ -174,7 +181,7 @@ problem = packSimulationProblem(state0, model_fine, schedule, ...
 
 %% Simple VE.
 % Simulate standard VE model, not accounting for sealing faces.
-model_ve = convertToMultiVEModel_test(model);
+model_ve = convertToHybridModel(model);
 schedule_ve = upscaleSchedule(model_ve, schedule);
 state0_ve = upscaleState(model_ve, model, state0);
 
@@ -186,14 +193,15 @@ problem_ve = packSimulationProblem(state0_ve, model_ve, schedule_ve, ...
 
 %[ws_ve, states_ve] = simulateScheduleAD(state0_ve, model_ve, schedule_ve, 'NonLinearSolver', nls);
 
-states_ve_fs = convertMultiVEStates_test(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
+states_ve_fs = convertHybridStates(model_ve, model_fine, states_ve, 'schedule', schedule, 'convert_flux', true); % retrieve fine-scale states
 
 %% Setup Hybrid model
 % Simulate hybrid VE model, accounting for diffuse leakage at sealing face
-[model_hybrid, model_coarse] = convertToMultiVEModel_test(model, fineCells, ...
+[model_hybrid, model_coarse] = convertToHybridModel(model, fineCells, ...
                                             'sealingFaces', find(sealingFaces), ... % same as find(model.operators.T_all == 0)
                                             'sealingCells', sealingCells, ...
                                             'sealingCells_faces', sealingCells_faces, ...
+                                            'setSubColumnsFine', false, ...
                                             'multiplier', trans_mult, ...
                                             'sumTrans', true, ...
                                             'pe_rest', pe_rest);
@@ -203,7 +211,7 @@ model_hybrid.fluid.pcWG = @(s, n_sealing) ...
                                                 pe_rest, n_sealing, model_hybrid.G);                                                                                                      
                                         
 schedule_hybrid = upscaleSchedule(model_hybrid, schedule);
-state0_hybrid = upscaleState(model_hybrid, model, state0);
+state0_hybrid = upscaleStateHybrid(model_hybrid, model, state0);
 
 % Plot coarse grid
 figure(2);
@@ -281,7 +289,7 @@ problem_hybrid = packSimulationProblem(state0_hybrid, model_hybrid, schedule_hyb
 
 %% Reconstruct fine states
 %states_hybrid_fs = convertMultiVEStates_res(model_hybrid, model_fine, states_hybrid, states);
-states_hybrid_fs = convertMultiVEStates_test(model_hybrid, model_fine, states_hybrid, 'schedule', schedule, 'convert_flux', true); % send in fine schedule to extract fine boundary faces
+states_hybrid_fs = convertHybridStates(model_hybrid, model_fine, states_hybrid, 'schedule', schedule, 'convert_flux', true); % send in fine schedule to extract fine boundary faces
 
 mh = model_hybrid;
 oph = mh.operators;
@@ -334,31 +342,35 @@ sn_hf = states_hybrid_fs{end}.s(:,2);
 %% Plot CO2 saturation for each model
 fafa = find(sealingFaces | sealingCells_faces);
 
-c1 = [48, 37, 255]/255;
-c2 = [0, 255, 0]/255;
-cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
+% c1 = [48, 37, 255]/255;
+% c2 = [0, 255, 0]/255;
+% cc = interp1([0; 1], [c1; c2], (0:0.01:1)');
+c1 = [255, 255, 255]/255;
+c2 = [48, 37, 255]/255;
+c3 = [0, 255, 0]/255;
+cc = interp1([0; 1e-6; 1], [c1; c2; c3], (0:1e-6:1)');
 
-% for i = 1:20:numel(states)
-%     f1 = figure(1); clf
-%     plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
-%     plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
-%     view(vx, vz); colormap(cc); caxis([0, 1-swr]);
-%     axis tight off
-%     title(['Fine-scale saturation, step:', num2str(i)])   
-%     
-%     saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
-%     
-%     if 0
-%         f2 = figure(2); clf    
-%         plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
-%         plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
-%         view(0, 0); colormap(cc);
-%         axis tight off
-%         title(['Fine-scale capillary pressure, step:', num2str(i)])   
-% 
-%         saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
-%     end
-% end
+for i = 1:20:numel(states)
+    f1 = figure(1); clf
+    plotCellData(model.G, states{i}.s(:,2), 'edgec', 'none');
+    plotFaces(G, fafa, 'facec', 'w', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.3)
+    view(vx, vz); colormap(cc); caxis([0, 1-swr]);
+    axis tight off
+    title(['Fine-scale saturation, step:', num2str(i)])   
+    
+    saveas(f1, sprintf(strcat(plot_dir, 'fine_sat_%d'), i), 'png'); 
+    
+    if 0
+        f2 = figure(2); clf    
+        plotCellData(model.G, model_fine.fluid.pcWG(states{i}.s(:,2)), 'edgec', 'none');
+        plotFaces(G, fafa, 'facec', 'w', 'linewidth', 2)
+        view(0, 0); colormap(cc);
+        axis tight off
+        title(['Fine-scale capillary pressure, step:', num2str(i)])   
+
+        saveas(f2, sprintf(strcat(plot_dir, 'fine_pc_%d'), i), 'png');
+    end
+end
 
 for i = 1:20:numel(states_hybrid)
     f2 = figure(2); clf    
@@ -425,6 +437,19 @@ if run3D
 end
 
 %% Plot result at injection stop and end of simulation
+cells_top = G.cells.indexMap(kk == min(kk));
+cells_bottom = G.cells.indexMap(kk == max(kk)); 
+faces_top = [];
+for c=cells_top'
+    f_top = G.cells.faces(G.cells.facePos(c):G.cells.facePos(c+1)-1, :);
+    f_top = f_top(f_top(:,2) == 5, 1);
+    faces_top = cat(1, faces_top, f_top);
+end
+
+sort_f = sort(unique(G.cells.faces(:,1)));
+%faces_top = sort_f(1:numel(cells_top));
+faces_bottom = sort_f(end-numel(cells_bottom)+1:end);
+
 nstep = numel(schedule.step.val);
 end_inj = find(schedule.step.control == 1, 1, 'last');
 end_mig = nstep;
@@ -432,7 +457,7 @@ end_mig = nstep;
 substeps = [end_inj, end_mig];
 %substeps = [nstep/10, nstep/5];
 names = {'injected', 'migrated'};
-model_names = {'fine_hybrid', 'coarse_ve'};
+model_names = {'fine', 'hybrid', 'coarse', 've'};
 
 xl_min = -max(G.cells.centroids(:,1))/50;
 xl_max = max(G.cells.centroids(:,1))*(1+1/50);
@@ -441,10 +466,10 @@ zl_max = max(G.cells.centroids(:,3))*(1+1/50);
 
 fign = 13;
 for i = 1:numel(substeps)
-    ss = substeps(i);
-    ff = UtilFunctions.fullsizeFig(fign);
-    fign = fign + 1;
-    for j = 1:4
+    ss = substeps(i);    
+    for j = 1:2
+        ff = UtilFunctions.fullsizeFig(fign);
+        fign = fign + 1;
         if j == 1
             g = G;
             s = states{ss}.s(:, 2);
@@ -462,11 +487,18 @@ for i = 1:numel(substeps)
             s = states_ve_fs{ss}.s(:, 2);
             nm = 'VE reconstructed (no layers)';
         end
-        subplot(1, 2, 2-mod(j,2));
+        %subplot(1, 2, 2-mod(j,2));
+        %plotOutlinedGrid(g, W, bc, bcfaces | sealingCells_faces, 'lw', 0.8); 
         plotCellData(g, s, 'EdgeColor', 'none')
-        %plotOutlinedGrid(G, W, bc, sealingCells_faces, 'facecolor', 'none');
-        if ~isfield(g, 'parent')
-            plotFaces(g, fafa, 'facec', 'w', 'facealpha', 0, 'linewidth', 0.3);
+        if ~isfield(g, 'parent')                   
+            plotFaces(g, fafa, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.8)                       
+            hold on
+            plotFaces(g, faces_top, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.1) 
+            hold on
+            plotFaces(g, faces_bottom, 'edgec', 'k', 'facealpha', 0, 'edgealpha', 1, 'linewidth', 0.1) 
+            %plotFaces(g, boundaryFaces(g), 'edgec', 'k', 'facealpha', 0, 'edgealpha', 0.1, 'linewidth', 0.7)
+        else
+            plotOutlinedGrid(g.parent, W, bc, bcfaces | sealingCells_faces, 'lw', 0.8);
         end
 
         view(vx, vz)
@@ -474,19 +506,21 @@ for i = 1:numel(substeps)
         if run3D
             daspect([1, 0.1, 1]) 
         else
-            daspect([1, 0.1, 0.5])
+            %daspect([1, 0.1, 0.5])
         end
         %xlim([xl_min, xl_max]);
         %zlim([zl_min, zl_max]);
-        colormap(cc); caxis([0,1-swr]);
+        colormap(cc); caxis([0,1-swr]); colorbar('off')
         title(nm);
         
-        if ~mod(j,2)
+        if ~mod(j,1) % 2
             set(gcf, 'Name', names{i});            
-            saveas(ff, strcat(plot_dir, names{i}, '_', model_names{j/2}), 'png');
-            ff = UtilFunctions.fullsizeFig(fign);
-            fign = fign + 1;
+            saveas(ff, strcat(plot_dir, names{i}, '_', model_names{j}));
+            saveas(ff, strcat(plot_dir, names{i}, '_', model_names{j}), 'png');
+            saveas(ff, strcat(plot_dir, names{i}, '_', model_names{j}), 'pdf');
+            %ff = UtilFunctions.fullsizeFig(fign);
+            %fign = fign + 1;
         end
     end
-    clf;
+    %clf;
 end
