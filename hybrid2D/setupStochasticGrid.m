@@ -57,7 +57,7 @@ lz = max(G0.faces.centroids(:,3));
 vertWellDistRate = 0.07;
 
 % Define positions of layers BEFORE skewing grid
-if true
+if standard
 % OLD:
     %rz = 0.95*lz.*rand(n_layers,1);
     rz = linspace(0, (1-1.5*vertWellDistRate)*lz, n_layers)';
@@ -65,7 +65,8 @@ if true
     %rx = 0.9*nx.*rand(n_layers,1);
     rx = linspace(0, 0.85*nx, n_layers)';
     rx = rx(randperm(length(rx)));
-    rxh = max(nx-1.3*rx, 0).*rand(n_layers,1) + 1.3*rx;
+    rxh = max(nx-1.1*rx, 0).*rand(n_layers,1) + 1.1*rx; % 1.3
+    %rxh = rx + 0.15*nx + 0.2*rand(n_layers,1)*nx;
 else
 % NEW:
     rz = linspace(0, (1-1.5*vertWellDistRate)*lz, n_layers)';
@@ -191,8 +192,8 @@ end
 if extra_fine
     [extraSealingCells, extraSealingCells_faces] = distributeFineRegions(G, allSealingCells, allSealingCells_faces);
 else
-    extraSealingCells = allSealingCells;
-    extraSealingCells_faces = allSealingCells_faces;
+    extraSealingCells = [];
+    extraSealingCells_faces = [];
 end
 
 sealingFaces = vertcat(allSealingFaces{:});

@@ -48,12 +48,14 @@ function [Gs, cmap, fmap, nmap] = ExtractLayerSubgrid(G, Gh, bottom_faces, seali
         extra_cells = cell2mat(extraFineCells);
         extra_cells = any(extra_cells, 2);
         extra_cells = G.cells.indexMap(extra_cells);
+        % NB: Not implemented yet for extra fine cells around sealing
+        % barriers!
 
         remove_cells = {};
         for i=1:numel(sealingCells) % loop through semi-perm layers and find overlaps and "subsubgrids" to remove from subgrid
             sealingC = G.cells.indexMap(sealingCells{i});
             % ---
-            sealingC = sealingC(~ismember(sealingC, extra_cells));
+            %sealingC = sealingC(~ismember(sealingC, extra_cells));
             % ---
             sealing_overlap = sealingC(ismember(sealingC, subcells));
             sealing_top = min(kk(sealing_overlap));

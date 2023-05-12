@@ -209,6 +209,8 @@ isFine = struct;
 isFine.sealingCells = allSealingCells; % no sealing cells if only face constraint
 isFine.sealingCells_faces = allSealingCells_faces;
 isFine.sealingBottom = allSealingBottom;
+isFine.extraSealingCells = [];
+isFine.extraSealingCells_faces = [];
 isFine.well = nearWell;
 isFine.bc = openBC;
 
